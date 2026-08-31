@@ -38,3 +38,22 @@ export type DispatchOrder = {
   notes: string | null;
   createdAt: string;
 };
+
+/** Estados de un pallet, espejo del enum `pallet_status` de Postgres. */
+export type PalletStatus =
+  | "in_warehouse"
+  | "assigned"
+  | "in_transit"
+  | "received"
+  | "discrepancy";
+
+/** Pallet con la info de producto/lote necesaria para identificarlo en pantalla. */
+export type Pallet = {
+  id: string;
+  qrCode: string;
+  status: PalletStatus;
+  currentLocation: string | null;
+  productName: string;
+  productSku: string;
+  batchNumber: string;
+};

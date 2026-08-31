@@ -3,20 +3,11 @@ import Link from "next/link";
 
 import { getUserProfile, hasRole } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
-import type { DispatchOrder, OrderStatus } from "@/lib/types";
+import { ORDER_STATUS_LABELS } from "@/lib/orders/labels";
+import type { DispatchOrder } from "@/lib/types";
 
 export const metadata: Metadata = {
   title: "Dashboard | TrazFlow",
-};
-
-// Etiquetas legibles para cada valor del enum `order_status`.
-const STATUS_LABELS: Record<OrderStatus, string> = {
-  draft: "Pendiente",
-  validating: "Validando",
-  has_discrepancy: "Con discrepancia",
-  confirmed: "Confirmada",
-  received: "Recibida",
-  received_with_discrepancy: "Recibida con discrepancia",
 };
 
 export default async function DashboardPage({
@@ -104,6 +95,7 @@ export default async function DashboardPage({
                 <th className="py-2 font-medium">Fecha estimada</th>
                 <th className="py-2 font-medium">Estado</th>
                 <th className="py-2 font-medium">Creada el</th>
+                <th className="py-2 font-medium">Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -114,10 +106,18 @@ export default async function DashboardPage({
                     {order.estimatedDispatchDate}
                   </td>
                   <td className="py-2 text-gray-900">
-                    {STATUS_LABELS[order.status]}
+                    {ORDER_STATUS_LABELS[order.status]}
                   </td>
                   <td className="py-2 text-gray-500">
                     {new Date(order.createdAt).toLocaleDateString("es-AR")}
+                  </td>
+                  <td className="py-2">
+                    <Link
+                      href={`/dashboard/orders/${order.id}`}
+                      className="text-sm font-medium text-gray-900 underline hover:text-gray-700"
+                    >
+                      Ver detalle
+                    </Link>
                   </td>
                 </tr>
               ))}
