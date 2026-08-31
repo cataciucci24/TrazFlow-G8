@@ -48,6 +48,15 @@ export async function proxy(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
+  // Ruta raíz: no tiene contenido propio, solo decide a dónde mandar
+  // según haya o no sesión activa.
+  if (pathname === "/") {
+    const redirectUrl = request.nextUrl.clone();
+    redirectUrl.pathname = user ? "/dashboard" : "/login";
+    redirectUrl.search = "";
+    return NextResponse.redirect(redirectUrl);
+  }
+
   // Sin sesión y pidiendo una ruta privada -> al login.
   if (!user && pathname.startsWith("/dashboard")) {
     const loginUrl = request.nextUrl.clone();
