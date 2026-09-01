@@ -1,5 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
-import type { OrderPalletValidation } from "@/lib/pallet-validation/types";
+import type {
+  OrderDispatchDiscrepancy,
+  OrderPalletValidation,
+} from "@/lib/pallet-validation/types";
 
 type RawOrderPallet = {
   validated_at: string | null;
@@ -76,4 +79,40 @@ export async function getOrderPalletValidations(
       validatedBy: row.validated_by,
     }];
   });
+}
+
+type RawDispatchDiscrepancy = {
+  pallet_id: string | null;
+  details: {
+    type?: string;
+    qr_code?: string;
+  } | null;
+  created_at: string;
+};
+
+export async function getOrderDispatchDiscrepancies(
+  orderId: string,
+): Promise<OrderDispatchDiscrepancy[]> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("traceability_events")
+    .select("pallet_id, details, created_at")
+    .eq("order_id", orderId)
+    .eq("event_type", "dispatch_discrepancy")
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    throw new Error(
+      `No se pudieron leer las inconsistencias del despacho (${error.code}: ${error.message}).`,
+      { cause: error },
+    );
+  }
+
+  return ((data ?? []) as RawDispatchDiscrepancy[]).map((row) => ({
+    palletId: row.pallet_id,
+    qrCode: row.details?.qr_code ?? "—",
+    type: row.details?.type ?? "unknown",
+    createdAt: row.created_at,
+  }));
 }

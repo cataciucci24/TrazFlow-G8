@@ -8,7 +8,10 @@ import { ORDER_STATUS_LABELS } from "@/lib/orders/labels";
 import { PALLET_STATUS_LABELS } from "@/lib/pallets/labels";
 import { AssociatePalletsForm } from "@/components/orders/associate-pallets-form";
 import { PalletValidationPanel } from "@/components/pallet-validation/pallet-validation-panel";
-import { getOrderPalletValidations } from "@/lib/pallet-validation/queries";
+import {
+  getOrderDispatchDiscrepancies,
+  getOrderPalletValidations,
+} from "@/lib/pallet-validation/queries";
 
 export const metadata: Metadata = {
   title: "Detalle de orden | TrazFlow",
@@ -32,12 +35,20 @@ export default async function DispatchOrderDetailPage({
   // RLS ya filtra por empresa; si no vino nada, o no existe o es de otra empresa.
   if (!order) notFound();
 
-  const [associatedPallets, availablePallets, palletValidations] = await Promise.all([
+  const [
+    associatedPallets,
+    availablePallets,
+    palletValidations,
+    dispatchDiscrepancies,
+  ] = await Promise.all([
     getPalletsForOrder(id),
     isLogisticsManager && order.status === "draft"
       ? getAvailablePallets(profile.companyId)
       : Promise.resolve([]),
     isWarehouseOperator ? getOrderPalletValidations(id) : Promise.resolve([]),
+    isWarehouseOperator
+      ? getOrderDispatchDiscrepancies(id)
+      : Promise.resolve([]),
   ]);
 
   const canAssociate = isLogisticsManager && order.status === "draft";
@@ -83,7 +94,11 @@ export default async function DispatchOrderDetailPage({
       </div>
 
       {isWarehouseOperator && (
-        <PalletValidationPanel orderId={order.id} pallets={palletValidations} />
+        <PalletValidationPanel
+          orderId={order.id}
+          pallets={palletValidations}
+          dispatchDiscrepancies={dispatchDiscrepancies}
+        />
       )}
 
       <div className="rounded-lg border border-gray-200 bg-white p-6">

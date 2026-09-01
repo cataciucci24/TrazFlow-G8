@@ -5,6 +5,7 @@ import { useCallback, useState, useTransition } from "react";
 import { QrScanner } from "@/components/pallet-validation/qr-scanner";
 import { validatePallet } from "@/lib/pallet-validation/actions";
 import type {
+  OrderDispatchDiscrepancy,
   OrderPalletValidation,
   PalletValidationResult,
 } from "@/lib/pallet-validation/types";
@@ -12,17 +13,29 @@ import type {
 type PalletValidationPanelProps = {
   orderId: string;
   pallets: OrderPalletValidation[];
+  dispatchDiscrepancies: OrderDispatchDiscrepancy[];
 };
 
 export function PalletValidationPanel({
   orderId,
   pallets,
+  dispatchDiscrepancies,
 }: PalletValidationPanelProps) {
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [result, setResult] = useState<PalletValidationResult | null>(null);
-  const [incorrectPallets, setIncorrectPallets] = useState<string[]>([]);
+
+  const [incorrectPallets, setIncorrectPallets] = useState<string[]>(
+    Array.from(
+      new Set(
+        dispatchDiscrepancies
+          .filter((discrepancy) => discrepancy.type === "wrong_order")
+          .map((discrepancy) => discrepancy.qrCode),
+      ),
+    ),
+  );
+
   const [isPending, startTransition] = useTransition();
-  
+
   const validatedCount = pallets.filter((pallet) => pallet.validatedAt).length;
   const missingPallets = pallets.filter((pallet) => !pallet.validatedAt);
 
@@ -30,7 +43,7 @@ export function PalletValidationPanel({
     (qrCode: string) => {
       startTransition(async () => {
         const validationResult = await validatePallet(orderId, qrCode);
-        
+
         setResult(validationResult);
 
         if (validationResult.outcome === "wrong_order") {
