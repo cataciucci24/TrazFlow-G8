@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { hasRole, requireUserProfile } from "@/lib/auth/session";
@@ -7,6 +8,8 @@ import { getAvailablePallets, getPalletsForOrder } from "@/lib/pallets/queries";
 import { ORDER_STATUS_LABELS } from "@/lib/orders/labels";
 import { PALLET_STATUS_LABELS } from "@/lib/pallets/labels";
 import { AssociatePalletsForm } from "@/components/orders/associate-pallets-form";
+import { ConfirmDispatchButton } from "@/components/orders/confirm-dispatch-button";
+import { DissociatePalletButton } from "@/components/orders/dissociate-pallet-button";
 import { PalletValidationPanel } from "@/components/pallet-validation/pallet-validation-panel";
 import {
   getOrderDispatchDiscrepancies,
@@ -35,6 +38,11 @@ export default async function DispatchOrderDetailPage({
   // RLS ya filtra por empresa; si no vino nada, o no existe o es de otra empresa.
   if (!order) notFound();
 
+  const canAssociate = isLogisticsManager && order.status === "draft";
+  // El logistics_manager también necesita saber qué pallets ya fueron
+  // validados por US3: no se puede desasociar uno que ya se escaneó.
+  const needsPalletValidations = isWarehouseOperator || canAssociate;
+
   const [
     associatedPallets,
     availablePallets,
@@ -42,24 +50,41 @@ export default async function DispatchOrderDetailPage({
     dispatchDiscrepancies,
   ] = await Promise.all([
     getPalletsForOrder(id),
-    isLogisticsManager && order.status === "draft"
-      ? getAvailablePallets(profile.companyId)
-      : Promise.resolve([]),
-    isWarehouseOperator ? getOrderPalletValidations(id) : Promise.resolve([]),
+    canAssociate ? getAvailablePallets(profile.companyId) : Promise.resolve([]),
+    needsPalletValidations ? getOrderPalletValidations(id) : Promise.resolve([]),
     isWarehouseOperator
       ? getOrderDispatchDiscrepancies(id)
       : Promise.resolve([]),
   ]);
 
-  const canAssociate = isLogisticsManager && order.status === "draft";
+  const validatedAtByPalletId = new Map(
+    palletValidations.map((pallet) => [pallet.id, pallet.validatedAt]),
+  );
+
+  const missingPalletsCount = palletValidations.filter(
+    (pallet) => !pallet.validatedAt,
+  ).length;
+  const canConfirm =
+    isWarehouseOperator &&
+    order.status === "draft" &&
+    palletValidations.length > 0;
 
   return (
     <section className="mx-auto max-w-3xl space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-gray-900">
-          Orden de despacho
-        </h1>
-        <p className="text-sm text-gray-500">{order.id}</p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-semibold text-gray-900">
+            Orden de despacho
+          </h1>
+          <p className="text-sm text-gray-500">{order.id}</p>
+        </div>
+
+        <Link
+          href="/dashboard"
+          className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100"
+        >
+          Volver
+        </Link>
       </div>
 
       <div className="grid grid-cols-2 gap-4 rounded-lg border border-gray-200 bg-white p-6 text-sm">
@@ -101,6 +126,13 @@ export default async function DispatchOrderDetailPage({
         />
       )}
 
+      {canConfirm && (
+        <ConfirmDispatchButton
+          orderId={order.id}
+          missingPalletsCount={missingPalletsCount}
+        />
+      )}
+
       <div className="rounded-lg border border-gray-200 bg-white p-6">
         <h2 className="mb-4 text-sm font-medium text-gray-700">
           Pallets asociados
@@ -118,6 +150,9 @@ export default async function DispatchOrderDetailPage({
                 <th className="py-2 font-medium">Producto</th>
                 <th className="py-2 font-medium">Lote</th>
                 <th className="py-2 font-medium">Estado</th>
+                {canAssociate && (
+                  <th className="py-2 font-medium text-right">Acciones</th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -131,6 +166,15 @@ export default async function DispatchOrderDetailPage({
                   <td className="py-2 text-gray-900">
                     {PALLET_STATUS_LABELS[pallet.status]}
                   </td>
+                  {canAssociate && (
+                    <td className="py-2 text-right">
+                      <DissociatePalletButton
+                        orderId={order.id}
+                        palletId={pallet.id}
+                        disabled={validatedAtByPalletId.get(pallet.id) != null}
+                      />
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
