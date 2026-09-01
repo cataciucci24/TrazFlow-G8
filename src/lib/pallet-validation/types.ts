@@ -30,3 +30,10 @@ export type OrderPalletValidation = {
   validatedAt: string | null;
   validatedBy: string | null;
 };
+
+export type OrderDispatchDiscrepancy = {
+  palletId: string | null;
+  qrCode: string;
+  type: string;
+  createdAt: string;
+};

@@ -5,6 +5,7 @@ import { useCallback, useState, useTransition } from "react";
 import { QrScanner } from "@/components/pallet-validation/qr-scanner";
 import { validatePallet } from "@/lib/pallet-validation/actions";
 import type {
+  OrderDispatchDiscrepancy,
   OrderPalletValidation,
   PalletValidationResult,
 } from "@/lib/pallet-validation/types";
@@ -12,24 +13,46 @@ import type {
 type PalletValidationPanelProps = {
   orderId: string;
   pallets: OrderPalletValidation[];
+  dispatchDiscrepancies: OrderDispatchDiscrepancy[];
 };
 
 export function PalletValidationPanel({
   orderId,
   pallets,
+  dispatchDiscrepancies,
 }: PalletValidationPanelProps) {
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [result, setResult] = useState<PalletValidationResult | null>(null);
+
+  const [incorrectPallets, setIncorrectPallets] = useState<string[]>(
+    Array.from(
+      new Set(
+        dispatchDiscrepancies
+          .filter((discrepancy) => discrepancy.type === "wrong_order")
+          .map((discrepancy) => discrepancy.qrCode),
+      ),
+    ),
+  );
+
   const [isPending, startTransition] = useTransition();
+
   const validatedCount = pallets.filter((pallet) => pallet.validatedAt).length;
+  const missingPallets = pallets.filter((pallet) => !pallet.validatedAt);
 
   const handleScan = useCallback(
     (qrCode: string) => {
       startTransition(async () => {
         const validationResult = await validatePallet(orderId, qrCode);
-        setResult(validationResult);
-        setIsScannerOpen(false);
 
+        setResult(validationResult);
+
+        if (validationResult.outcome === "wrong_order") {
+          setIncorrectPallets((current) =>
+            current.includes(qrCode) ? current : [...current, qrCode],
+          );
+        }
+
+        setIsScannerOpen(false);
       });
     },
     [orderId],
@@ -86,6 +109,61 @@ export function PalletValidationPanel({
               <dt>Lote:</dt>
               <dd>{result.pallet.batchNumber}</dd>
             </dl>
+          )}
+        </div>
+      )}
+
+      {pallets.length > 0 && (
+        <div
+          className={`rounded-md border px-4 py-4 ${
+            missingPallets.length === 0 && incorrectPallets.length === 0
+              ? "border-green-200 bg-green-50"
+              : "border-amber-200 bg-amber-50"
+          }`}
+        >
+          {missingPallets.length === 0 && incorrectPallets.length === 0 ? (
+            <div>
+              <p className="font-medium text-green-800">
+                Carga sin inconsistencias
+              </p>
+              <p className="mt-1 text-sm text-green-700">
+                Todos los pallets asociados a la orden fueron validados correctamente.
+              </p>
+            </div>
+          ) : (
+            <div>
+              <p className="font-medium text-amber-900">
+                Inconsistencias detectadas
+              </p>
+
+              {missingPallets.length > 0 && (
+                <div className="mt-3">
+                  <p className="text-sm font-medium text-amber-900">
+                    Pallets faltantes:
+                  </p>
+                  <ul className="mt-1 list-disc pl-5 text-sm text-amber-800">
+                    {missingPallets.map((pallet) => (
+                      <li key={pallet.id}>
+                        {pallet.qrCode} — {pallet.productName} ({pallet.productSku})
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {incorrectPallets.length > 0 && (
+                <div className="mt-3">
+                  <p className="text-sm font-medium text-amber-900">
+                    Pallets incorrectos:
+                  </p>
+                  <ul className="mt-1 list-disc pl-5 text-sm text-amber-800">
+                    {incorrectPallets.map((qrCode) => (
+                      <li key={qrCode}>{qrCode}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
           )}
         </div>
       )}
