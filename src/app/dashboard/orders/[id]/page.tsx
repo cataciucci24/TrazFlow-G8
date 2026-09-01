@@ -7,6 +7,8 @@ import { getAvailablePallets, getPalletsForOrder } from "@/lib/pallets/queries";
 import { ORDER_STATUS_LABELS } from "@/lib/orders/labels";
 import { PALLET_STATUS_LABELS } from "@/lib/pallets/labels";
 import { AssociatePalletsForm } from "@/components/orders/associate-pallets-form";
+import { PalletValidationPanel } from "@/components/pallet-validation/pallet-validation-panel";
+import { getOrderPalletValidations } from "@/lib/pallet-validation/queries";
 
 export const metadata: Metadata = {
   title: "Detalle de orden | TrazFlow",
@@ -17,9 +19,10 @@ export default async function DispatchOrderDetailPage({
 }: PageProps<"/dashboard/orders/[id]">) {
   const profile = await requireUserProfile();
 
-  // Mismo criterio que en la creación de órdenes: solo el responsable
-  // logístico opera esta pantalla.
-  if (!hasRole(profile, "logistics_manager")) {
+  const isLogisticsManager = hasRole(profile, "logistics_manager");
+  const isWarehouseOperator = hasRole(profile, "warehouse_operator");
+
+  if (!isLogisticsManager && !isWarehouseOperator) {
     redirect("/dashboard");
   }
 
@@ -29,12 +32,15 @@ export default async function DispatchOrderDetailPage({
   // RLS ya filtra por empresa; si no vino nada, o no existe o es de otra empresa.
   if (!order) notFound();
 
-  const [associatedPallets, availablePallets] = await Promise.all([
+  const [associatedPallets, availablePallets, palletValidations] = await Promise.all([
     getPalletsForOrder(id),
-    order.status === "draft" ? getAvailablePallets(profile.companyId) : Promise.resolve([]),
+    isLogisticsManager && order.status === "draft"
+      ? getAvailablePallets(profile.companyId)
+      : Promise.resolve([]),
+    isWarehouseOperator ? getOrderPalletValidations(id) : Promise.resolve([]),
   ]);
 
-  const canAssociate = order.status === "draft";
+  const canAssociate = isLogisticsManager && order.status === "draft";
 
   return (
     <section className="mx-auto max-w-3xl space-y-6">
@@ -75,6 +81,10 @@ export default async function DispatchOrderDetailPage({
           </div>
         )}
       </div>
+
+      {isWarehouseOperator && (
+        <PalletValidationPanel orderId={order.id} pallets={palletValidations} />
+      )}
 
       <div className="rounded-lg border border-gray-200 bg-white p-6">
         <h2 className="mb-4 text-sm font-medium text-gray-700">
@@ -127,12 +137,12 @@ export default async function DispatchOrderDetailPage({
             <AssociatePalletsForm orderId={order.id} pallets={availablePallets} />
           )}
         </div>
-      ) : (
+      ) : isLogisticsManager ? (
         <p className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-500">
           Esta orden ya no admite asociar pallets (estado:{" "}
           {ORDER_STATUS_LABELS[order.status]}).
         </p>
-      )}
+      ) : null}
     </section>
   );
 }
