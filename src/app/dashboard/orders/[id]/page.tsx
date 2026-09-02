@@ -11,10 +11,12 @@ import { AssociatePalletsForm } from "@/components/orders/associate-pallets-form
 import { ConfirmDispatchButton } from "@/components/orders/confirm-dispatch-button";
 import { DissociatePalletButton } from "@/components/orders/dissociate-pallet-button";
 import { PalletValidationPanel } from "@/components/pallet-validation/pallet-validation-panel";
+import { PalletReceptionPanel } from "@/components/pallet-reception/pallet-reception-panel";
 import {
   getOrderDispatchDiscrepancies,
   getOrderPalletValidations,
 } from "@/lib/pallet-validation/queries";
+import { getOrderPalletReceptions } from "@/lib/pallet-reception/queries";
 
 export const metadata: Metadata = {
   title: "Detalle de orden | TrazFlow",
@@ -27,8 +29,9 @@ export default async function DispatchOrderDetailPage({
 
   const isLogisticsManager = hasRole(profile, "logistics_manager");
   const isWarehouseOperator = hasRole(profile, "warehouse_operator");
+  const isDistributorOperator = hasRole(profile, "distributor_operator");
 
-  if (!isLogisticsManager && !isWarehouseOperator) {
+  if (!isLogisticsManager && !isWarehouseOperator && !isDistributorOperator) {
     redirect("/dashboard");
   }
 
@@ -48,12 +51,16 @@ export default async function DispatchOrderDetailPage({
     availablePallets,
     palletValidations,
     dispatchDiscrepancies,
+    palletReceptions,
   ] = await Promise.all([
     getPalletsForOrder(id),
     canAssociate ? getAvailablePallets(profile.companyId) : Promise.resolve([]),
     needsPalletValidations ? getOrderPalletValidations(id) : Promise.resolve([]),
     isWarehouseOperator
       ? getOrderDispatchDiscrepancies(id)
+      : Promise.resolve([]),
+    isDistributorOperator
+      ? getOrderPalletReceptions(id)
       : Promise.resolve([]),
   ]);
 
@@ -123,6 +130,14 @@ export default async function DispatchOrderDetailPage({
           orderId={order.id}
           pallets={palletValidations}
           dispatchDiscrepancies={dispatchDiscrepancies}
+        />
+      )}
+
+      {isDistributorOperator && (
+        <PalletReceptionPanel
+          orderId={order.id}
+          pallets={palletReceptions}
+          canReceive={order.status === "confirmed"}
         />
       )}
 
