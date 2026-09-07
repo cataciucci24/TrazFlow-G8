@@ -212,3 +212,145 @@ export async function associatePallets(
       : `Se asociaron ${reservedIds.length} pallet(s) a la orden.`,
   };
 }
+
+export type ConfirmDispatchOutcome =
+  | "confirmed"
+  | "order_not_found"
+  | "invalid_status"
+  | "no_pallets"
+  | "missing_pallets"
+  | "forbidden"
+  | "error";
+
+export type ConfirmDispatchResult = {
+  outcome: ConfirmDispatchOutcome;
+  message: string;
+};
+
+type ConfirmDispatchRpcRow = {
+  outcome: ConfirmDispatchOutcome;
+  order_id: string | null;
+  status: string | null;
+  confirmed_at: string | null;
+  pallet_count: number | null;
+};
+
+const CONFIRM_MESSAGES: Record<ConfirmDispatchOutcome, string> = {
+  confirmed: "Despacho confirmado. La mercadería quedó en tránsito.",
+  order_not_found: "La orden no existe o no pertenece a tu empresa.",
+  invalid_status: "La orden ya fue confirmada (o no admite confirmarse en su estado actual).",
+  no_pallets: "La orden no tiene pallets asociados.",
+  missing_pallets: "Todavía hay pallets esperados sin validar.",
+  forbidden: "No tenés permisos para confirmar despachos.",
+  error: "No se pudo confirmar el despacho. Intentá nuevamente.",
+};
+
+/**
+ * Confirma una orden de despacho una vez validada la carga (US5). La
+ * transición 'draft' -> 'confirmed', el pase de los pallets a in_transit y el
+ * evento dispatch_confirmed se resuelven atómicamente en el RPC
+ * `confirm_dispatch_order`.
+ */
+export async function confirmDispatchOrder(
+  orderId: string,
+): Promise<ConfirmDispatchResult> {
+  const profile = await requireUserProfile();
+
+  if (!hasRole(profile, "warehouse_operator")) {
+    return { outcome: "forbidden", message: CONFIRM_MESSAGES.forbidden };
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("confirm_dispatch_order", {
+    p_order_id: orderId,
+  });
+
+  if (error) {
+    return { outcome: "error", message: CONFIRM_MESSAGES.error };
+  }
+
+  const row = (data?.[0] ?? null) as ConfirmDispatchRpcRow | null;
+  if (!row) {
+    return { outcome: "error", message: CONFIRM_MESSAGES.error };
+  }
+
+  if (row.outcome === "confirmed") {
+    revalidatePath(`/dashboard/orders/${orderId}`);
+    revalidatePath("/dashboard");
+  }
+
+  return {
+    outcome: row.outcome,
+    message: CONFIRM_MESSAGES[row.outcome] ?? CONFIRM_MESSAGES.error,
+  };
+}
+
+export type DissociatePalletOutcome =
+  | "dissociated"
+  | "order_not_found"
+  | "not_removable"
+  | "pallet_not_in_order"
+  | "forbidden"
+  | "error";
+
+export type DissociatePalletResult = {
+  outcome: DissociatePalletOutcome;
+  message: string;
+};
+
+type DissociatePalletRpcRow = {
+  outcome: DissociatePalletOutcome;
+  order_id: string | null;
+  pallet_id: string | null;
+};
+
+const DISSOCIATE_MESSAGES: Record<DissociatePalletOutcome, string> = {
+  dissociated: "Pallet desasociado de la orden.",
+  order_not_found: "La orden no existe o no pertenece a tu empresa.",
+  not_removable:
+    "El pallet ya no se puede quitar (la orden ya no está en borrador, o el pallet ya fue validado).",
+  pallet_not_in_order: "El pallet no está asociado a esta orden.",
+  forbidden: "No tenés permisos para desasociar pallets de esta orden.",
+  error: "No se pudo desasociar el pallet. Intentá nuevamente.",
+};
+
+/**
+ * Desasocia un pallet de una orden de despacho en estado 'draft' (extensión
+ * de US2). Solo se permite si todavía no fue validado por US3: la
+ * verificación y la reversión del status del pallet a 'in_warehouse' se
+ * resuelven atómicamente en el RPC `dissociate_pallet_from_order`.
+ */
+export async function dissociatePallet(
+  orderId: string,
+  palletId: string,
+): Promise<DissociatePalletResult> {
+  const profile = await requireUserProfile();
+
+  if (!hasRole(profile, "logistics_manager")) {
+    return { outcome: "forbidden", message: DISSOCIATE_MESSAGES.forbidden };
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("dissociate_pallet_from_order", {
+    p_order_id: orderId,
+    p_pallet_id: palletId,
+  });
+
+  if (error) {
+    return { outcome: "error", message: DISSOCIATE_MESSAGES.error };
+  }
+
+  const row = (data?.[0] ?? null) as DissociatePalletRpcRow | null;
+  if (!row) {
+    return { outcome: "error", message: DISSOCIATE_MESSAGES.error };
+  }
+
+  if (row.outcome === "dissociated") {
+    revalidatePath(`/dashboard/orders/${orderId}`);
+  }
+
+  return {
+    outcome: row.outcome,
+    message: DISSOCIATE_MESSAGES[row.outcome] ?? DISSOCIATE_MESSAGES.error,
+  };
+}
