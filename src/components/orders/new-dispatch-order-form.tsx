@@ -8,9 +8,11 @@ import {
   type CreateDispatchOrderState,
 } from "@/lib/orders/actions";
 import type { Distributor } from "@/lib/types";
+import type { Pallet } from "@/lib/types";
 
 type NewDispatchOrderFormProps = {
   distributors: Distributor[];
+  pallets: Pallet[];
 };
 
 const INITIAL_STATE: CreateDispatchOrderState = {
@@ -20,6 +22,7 @@ const INITIAL_STATE: CreateDispatchOrderState = {
 
 export function NewDispatchOrderForm({
   distributors,
+  pallets,
 }: NewDispatchOrderFormProps) {
   const [state, formAction, isPending] = useActionState(
     createDispatchOrder,
@@ -29,7 +32,7 @@ export function NewDispatchOrderForm({
   return (
     <form
       action={formAction}
-      className="space-y-4 rounded-lg border border-gray-200 bg-white p-6 shadow-sm"
+      className="space-y-5"
     >
       {state.errors.form && (
         <p
@@ -43,7 +46,7 @@ export function NewDispatchOrderForm({
       <div className="space-y-1">
         <label
           htmlFor="distributorId"
-          className="block text-sm font-medium text-gray-700"
+          className="block text-sm font-semibold uppercase tracking-wide text-stone-500"
         >
           Distribuidor de destino
         </label>
@@ -52,7 +55,7 @@ export function NewDispatchOrderForm({
           name="distributorId"
           defaultValue={state.values.distributorId}
           disabled={isPending}
-          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 outline-none focus:border-gray-900 focus:ring-1 focus:ring-gray-900"
+          className="w-full rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-slate-950 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
         >
           <option value="">Seleccionar distribuidor</option>
           {distributors.map((distributor) => (
@@ -66,10 +69,16 @@ export function NewDispatchOrderForm({
         )}
       </div>
 
+      <fieldset className="space-y-2">
+        <legend className="text-sm font-semibold uppercase tracking-wide text-stone-500">Pallets de la orden</legend>
+        {pallets.length === 0 ? <p className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-700">No hay pallets disponibles en depósito. Primero registrá uno desde Seguimiento.</p> : <div className="max-h-56 divide-y divide-stone-200 overflow-y-auto rounded-xl border border-stone-200 px-4">{pallets.map((pallet) => <label key={pallet.id} className="flex cursor-pointer items-center gap-3 py-3 text-sm"><input name="palletIds" type="checkbox" value={pallet.id} disabled={isPending} className="size-4 rounded border-stone-300 text-amber-500 focus:ring-amber-500" /><span className="font-mono font-semibold">{pallet.qrCode}</span><span className="text-stone-500">{pallet.productName} · lote {pallet.batchNumber}</span></label>)}</div>}
+        {state.errors.palletIds && <p className="text-xs text-red-600">{state.errors.palletIds}</p>}
+      </fieldset>
+
       <div className="space-y-1">
         <label
           htmlFor="estimatedDispatchDate"
-          className="block text-sm font-medium text-gray-700"
+          className="block text-sm font-semibold uppercase tracking-wide text-stone-500"
         >
           Fecha estimada de despacho
         </label>
@@ -79,7 +88,7 @@ export function NewDispatchOrderForm({
           type="date"
           defaultValue={state.values.estimatedDispatchDate}
           disabled={isPending}
-          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 outline-none focus:border-gray-900 focus:ring-1 focus:ring-gray-900"
+          className="w-full rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-slate-950 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
         />
         {state.errors.estimatedDispatchDate && (
           <p className="text-xs text-red-600">
@@ -91,7 +100,7 @@ export function NewDispatchOrderForm({
       <div className="space-y-1">
         <label
           htmlFor="notes"
-          className="block text-sm font-medium text-gray-700"
+          className="block text-sm font-semibold uppercase tracking-wide text-stone-500"
         >
           Observaciones (opcional)
         </label>
@@ -101,21 +110,21 @@ export function NewDispatchOrderForm({
           rows={3}
           defaultValue={state.values.notes}
           disabled={isPending}
-          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 outline-none focus:border-gray-900 focus:ring-1 focus:ring-gray-900"
+          className="w-full rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-slate-950 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
         />
       </div>
 
       <div className="flex justify-end gap-3 pt-2">
         <Link
-          href="/dashboard"
-          className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100"
+          href="/dashboard/orders"
+          className="rounded-xl border border-stone-200 px-5 py-3 text-sm font-semibold text-stone-600 transition-colors hover:bg-stone-50"
         >
           Cancelar
         </Link>
         <button
           type="submit"
           disabled={isPending}
-          className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-xl bg-amber-500 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isPending ? "Creando..." : "Crear orden"}
         </button>

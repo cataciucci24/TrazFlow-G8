@@ -61,6 +61,22 @@ export async function getAvailablePallets(companyId: string): Promise<Pallet[]> 
   return (data ?? []).map(mapPalletRow);
 }
 
+/** Inventario completo para que logística pueda seguir cada pallet por estado. */
+export async function getCompanyPallets(companyId: string): Promise<Pallet[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("pallets")
+    .select(PALLET_SELECT)
+    .eq("company_id", companyId)
+    .order("qr_code");
+
+  if (error) {
+    throw new Error(`No se pudieron leer los pallets (${error.code}: ${error.message}).`, { cause: error });
+  }
+
+  return (data ?? []).map(mapPalletRow);
+}
+
 /** Pallets ya asociados a una orden de despacho. */
 export async function getPalletsForOrder(orderId: string): Promise<Pallet[]> {
   const supabase = await createClient();

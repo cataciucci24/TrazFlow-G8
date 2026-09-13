@@ -14,7 +14,7 @@ export function TraceabilitySearch({ defaultQr }: TraceabilitySearchProps) {
       <div className="flex-1 space-y-2">
         <label
           htmlFor="traceability-qr"
-          className="block text-sm font-semibold tracking-wide text-white"
+          className="block text-sm font-semibold tracking-wide text-stone-600"
         >
           Código QR del pallet
         </label>
@@ -26,13 +26,13 @@ export function TraceabilitySearch({ defaultQr }: TraceabilitySearchProps) {
           maxLength={512}
           autoComplete="off"
           placeholder="PAL-001"
-          className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3.5 py-2.5 text-sm text-white placeholder-zinc-500 outline-none transition-all focus:border-red-500 focus:ring-2 focus:ring-red-950/20"
+          className="w-full rounded-xl border border-stone-200 bg-white px-4 py-3 text-sm text-slate-950 placeholder-stone-400 outline-none transition-all focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
         />
       </div>
 
       <button
         type="submit"
-        className="rounded-xl bg-[#3d0c11] px-5 py-2.5 text-sm font-semibold text-white shadow-md transition-all hover:bg-[#2b080c] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-950 active:scale-[0.99]"
+        className="rounded-xl bg-amber-500 px-5 py-3 text-sm font-bold text-white shadow-sm transition-colors hover:bg-amber-600"
       >
         Buscar
       </button>

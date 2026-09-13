@@ -46,7 +46,7 @@ export function AssociatePalletsForm({
         </p>
       )}
 
-      <ul className="divide-y divide-gray-100">
+      <ul className="divide-y divide-stone-200 rounded-xl border border-stone-200 px-4">
         {pallets.map((pallet) => (
           <li key={pallet.id} className="flex items-center gap-3 py-2 text-sm">
             <input
@@ -55,16 +55,16 @@ export function AssociatePalletsForm({
               type="checkbox"
               value={pallet.id}
               disabled={isPending}
-              className="h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-900"
+              className="h-4 w-4 rounded border-stone-300 text-amber-500 focus:ring-amber-500"
             />
             <label htmlFor={`pallet-${pallet.id}`} className="flex-1">
-              <span className="font-medium text-gray-900">{pallet.qrCode}</span>{" "}
-              <span className="text-gray-500">
+              <span className="font-mono font-semibold text-slate-950">{pallet.qrCode}</span>{" "}
+              <span className="text-stone-500">
                 — {pallet.productName} ({pallet.productSku}), lote{" "}
                 {pallet.batchNumber}
               </span>
             </label>
-            <span className="text-xs text-gray-500">
+            <span className="text-xs text-stone-500">
               {PALLET_STATUS_LABELS[pallet.status]}
             </span>
           </li>
@@ -75,7 +75,7 @@ export function AssociatePalletsForm({
         <button
           type="submit"
           disabled={isPending}
-          className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-xl bg-amber-500 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isPending ? "Asociando..." : "Asociar pallets seleccionados"}
         </button>

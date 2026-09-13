@@ -16,7 +16,7 @@ export default async function OrdersPage() {
 
   const { data: orders, error } = await supabase
     .from("dispatch_orders")
-    .select("id, status, estimated_dispatch_date, created_at, distributors ( name )")
+    .select("id, status, estimated_dispatch_date, created_at, notes, distributors ( name )")
     .eq("company_id", profile.companyId)
     .order("created_at", { ascending: false });
 
@@ -26,87 +26,65 @@ export default async function OrdersPage() {
 
   return (
     <div className="space-y-8">
-      <div className="absolute -left-32 -top-32 h-96 w-96 rounded-full bg-red-900/20 blur-3xl pointer-events-none" />
-      <div className="absolute -right-32 top-1/2 h-96 w-96 rounded-full bg-red-950/15 blur-3xl pointer-events-none" />
-
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800/80 pb-6">
-        <div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-white">
-            Órdenes de Despacho
-          </h1>
-          <p className="mt-1 text-sm text-zinc-400">
-            Listado general de órdenes registradas para tu empresa.
-          </p>
-        </div>
-
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <h1 className="text-2xl font-bold tracking-tight">Órdenes de despacho</h1>
         <div className="flex items-center gap-3">
           {isLogisticsManager && (
             <Link
               href="/dashboard/orders/new"
-              className="rounded-xl bg-[#3d0c11] px-4 py-2.5 text-sm font-semibold text-white shadow-md transition-all hover:bg-[#2b080c]"
+              className="inline-flex items-center gap-2 rounded-xl bg-amber-500 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-amber-600"
             >
-              + Nueva orden
+              <span className="text-xl leading-none">＋</span>Nueva orden
             </Link>
           )}
-          <Link
-            href="/dashboard"
-            className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2.5 text-sm font-medium text-zinc-300 transition-all hover:bg-zinc-800 hover:text-white shadow-sm"
-          >
-            Volver
-          </Link>
         </div>
       </div>
 
-      <div className="rounded-3xl border border-zinc-800/80 bg-zinc-900/70 p-6 backdrop-blur-md shadow-xl">
+      <div className="overflow-hidden rounded-2xl border border-stone-200 bg-white">
         {!orders || orders.length === 0 ? (
-          <p className="text-sm text-zinc-400 py-8 text-center">
+          <p className="py-12 text-center text-sm text-stone-500">
             No hay órdenes de despacho registradas en el sistema.
           </p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
+            <table className="w-full min-w-[780px] text-left text-sm">
               <thead>
-                <tr className="border-b border-zinc-800 text-zinc-400">
-                  <th className="py-3 font-medium">ID / Referencia</th>
-                  <th className="py-3 font-medium">Distribuidor</th>
-                  <th className="py-3 font-medium">Estado</th>
-                  <th className="py-3 font-medium">Fecha estimada</th>
-                  <th className="py-3 font-medium text-right">Acción</th>
+                <tr className="bg-stone-100/80 text-stone-500">
+                  <th className="px-5 py-4 font-semibold">Código</th>
+                  <th className="px-5 py-4 font-semibold">Distribuidora</th>
+                  <th className="px-5 py-4 font-semibold">Fecha despacho</th>
+                  <th className="px-5 py-4 font-semibold">Estado</th>
+                  <th className="px-5 py-4 font-semibold">Observaciones</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-800/60">
+              <tbody className="divide-y divide-stone-200">
                 {orders.map((order) => {
                   const distributor = Array.isArray(order.distributors)
                     ? order.distributors[0]
                     : order.distributors;
 
                   return (
-                    <tr key={order.id} className="transition-colors hover:bg-zinc-800/40">
-                      <td className="py-4 font-mono text-zinc-200">
-                        {order.id.slice(0, 8)}...
+                    <tr key={order.id} className="transition-colors hover:bg-amber-50/40">
+                      <td className="px-5 py-4 font-mono font-bold text-slate-950">
+                        <Link href={`/dashboard/orders/${order.id}`} className="hover:text-amber-600">{order.id.slice(0, 8).toUpperCase()}</Link>
                       </td>
-                      <td className="py-4 text-zinc-200 font-medium">
+                      <td className="px-5 py-4 font-medium text-slate-950">
                         {distributor?.name ?? "—"}
                       </td>
-                      <td className="py-4">
-                        <span className={`rounded-full border px-3 py-1 text-xs font-medium backdrop-blur-md ${
+                      <td className="px-5 py-4 text-stone-600">
+                        {order.estimated_dispatch_date ? new Date(`${order.estimated_dispatch_date}T00:00:00`).toLocaleDateString("es-AR") : "—"}
+                      </td>
+                      <td className="px-5 py-4">
+                        <span className={`rounded-full px-3 py-1.5 text-xs font-bold ${
                           order.status === "confirmed" 
-                            ? "bg-emerald-950/60 border-emerald-900/40 text-emerald-300" 
-                            : "bg-red-950/60 border-red-900/40 text-red-300"
+                            ? "bg-emerald-50 text-emerald-600"
+                            : "bg-amber-50 text-amber-600"
                         }`}>
                           {ORDER_STATUS_LABELS[order.status as keyof typeof ORDER_STATUS_LABELS] ?? order.status}
                         </span>
                       </td>
-                      <td className="py-4 text-zinc-300">
-                        {order.estimated_dispatch_date ?? "—"}
-                      </td>
-                      <td className="py-4 text-right">
-                        <Link
-                          href={`/dashboard/orders/${order.id}`}
-                          className="inline-flex items-center text-sm font-medium text-red-400 hover:text-red-300 transition-colors"
-                        >
-                          Ver detalle &rarr;
-                        </Link>
+                      <td className="max-w-72 truncate px-5 py-4 text-stone-500">
+                        {order.notes ?? "—"}
                       </td>
                     </tr>
                   );

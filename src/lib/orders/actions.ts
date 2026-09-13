@@ -10,6 +10,7 @@ export type CreateDispatchOrderState = {
   errors: {
     distributorId?: string;
     estimatedDispatchDate?: string;
+    palletIds?: string;
     form?: string;
   };
   values: {
@@ -56,6 +57,7 @@ export async function createDispatchOrder(
     formData.get("estimatedDispatchDate") ?? "",
   ).trim();
   const notes = String(formData.get("notes") ?? "").trim();
+  const palletIds = formData.getAll("palletIds").map(String).filter(Boolean);
 
   const values = { distributorId, estimatedDispatchDate, notes };
   const errors: CreateDispatchOrderState["errors"] = {};
@@ -70,19 +72,22 @@ export async function createDispatchOrder(
     errors.estimatedDispatchDate =
       "La fecha estimada de despacho no puede ser anterior a hoy.";
   }
+  if (palletIds.length === 0) {
+    errors.palletIds = "Seleccioná al menos un pallet para la orden.";
+  }
 
   if (Object.keys(errors).length > 0) {
     return { errors, values };
   }
 
   const supabase = await createClient();
-  const { error } = await supabase.from("dispatch_orders").insert({
+  const { data: createdOrder, error } = await supabase.from("dispatch_orders").insert({
     company_id: profile.companyId,
     distributor_id: distributorId,
     created_by: profile.id,
     estimated_dispatch_date: estimatedDispatchDate,
     notes: notes || null,
-  });
+  }).select("id").single();
 
   if (error) {
     return {
@@ -90,6 +95,32 @@ export async function createDispatchOrder(
       values,
     };
   }
+
+  const { data: reserved, error: reserveError } = await supabase
+    .from("pallets")
+    .update({ status: "assigned" })
+    .in("id", palletIds)
+    .eq("company_id", profile.companyId)
+    .eq("status", "in_warehouse")
+    .select("id");
+  const reservedIds = (reserved ?? []).map((pallet) => pallet.id as string);
+  if (reserveError || reservedIds.length !== palletIds.length) {
+    await supabase.from("dispatch_orders").delete().eq("id", createdOrder.id);
+    return { errors: { form: "Uno o más pallets ya no están disponibles. Actualizá e intentá nuevamente." }, values };
+  }
+
+  const { error: associationError } = await supabase.from("order_pallets").insert(
+    reservedIds.map((palletId) => ({ order_id: createdOrder.id, pallet_id: palletId, expected: true })),
+  );
+  if (associationError) {
+    await supabase.from("pallets").update({ status: "in_warehouse" }).in("id", reservedIds);
+    await supabase.from("dispatch_orders").delete().eq("id", createdOrder.id);
+    return { errors: { form: "No se pudieron asociar los pallets seleccionados." }, values };
+  }
+
+  await supabase.from("traceability_events").insert(reservedIds.map((palletId) => ({
+    company_id: profile.companyId, pallet_id: palletId, order_id: createdOrder.id, event_type: "pallet_associated", user_id: profile.id,
+  })));
 
   revalidatePath("/dashboard");
   redirect("/dashboard?created=1");
