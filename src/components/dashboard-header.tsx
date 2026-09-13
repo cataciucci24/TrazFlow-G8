@@ -12,5 +12,5 @@ export function DashboardHeader({ role }: { role: UserRole }) {
       : pathname.startsWith("/dashboard/orders")
         ? "Órdenes de despacho"
         : "Panel de control";
-  return <header className="flex h-[74px] items-center border-b border-stone-200 bg-white px-6 text-lg font-bold lg:px-10">{title}</header>;
+  return <header className="sticky top-0 z-30 flex h-[74px] items-center border-b border-stone-200 bg-white/95 px-6 text-lg font-bold backdrop-blur lg:px-10">{title}</header>;
 }

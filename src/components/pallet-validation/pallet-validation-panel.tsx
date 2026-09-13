@@ -25,6 +25,7 @@ export function PalletValidationPanel({
   initialScanHistory,
 }: PalletValidationPanelProps) {
   const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [manualCode, setManualCode] = useState("");
   const [result, setResult] = useState<PalletValidationResult | null>(null);
   const [scanHistory, setScanHistory] = useState<{ code: string; message: string; success: boolean }[]>([]);
 
@@ -70,10 +71,18 @@ export function PalletValidationPanel({
   const isSuccess = result?.outcome === "validated";
   const isDuplicate = result?.outcome === "already_validated";
 
+  const handleManualSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const code = manualCode.trim();
+    if (!code || isPending) return;
+    handleScan(code);
+    setManualCode("");
+  };
+
   return (
     <div className="space-y-5">
       <div className="grid gap-8 lg:grid-cols-[350px_minmax(0,1fr)]">
-        <div>
+        <div className="space-y-3">
           <button
           type="button"
           disabled={isPending || pallets.length === 0}
@@ -88,6 +97,11 @@ export function PalletValidationPanel({
           <span className="text-base">{isPending ? "Validando…" : "Tocá para escanear el QR"}</span>
           <span className="mt-2 text-xs text-slate-500">Se abrirá la cámara del dispositivo</span>
           </button>
+          <form onSubmit={handleManualSubmit} className="flex gap-2">
+            <label className="sr-only" htmlFor="manual-pallet-code">Código del pallet</label>
+            <input id="manual-pallet-code" value={manualCode} onChange={(event) => setManualCode(event.target.value)} disabled={isPending || pallets.length === 0} placeholder="PAL-XXXX" className="min-w-0 flex-1 rounded-xl border border-stone-200 bg-white px-3 py-2.5 font-mono text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100 disabled:opacity-60" />
+            <button type="submit" disabled={isPending || !manualCode.trim() || pallets.length === 0} className="rounded-xl bg-amber-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-60">Validar</button>
+          </form>
         </div>
         <div className="rounded-2xl border border-stone-200 bg-white p-5">
           <h2 className="text-sm font-bold tracking-[0.08em] text-stone-500">ESTADO DE LA ORDEN</h2>

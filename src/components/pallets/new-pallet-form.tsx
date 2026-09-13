@@ -1,16 +1,33 @@
 "use client";
 
-import { useActionState } from "react";
+import { useRef, useState, useTransition } from "react";
 import { createPallet, type CreatePalletState } from "@/lib/pallets/actions";
 
 const initialState: CreatePalletState = { error: null, success: null };
 
 export function NewPalletForm() {
-  const [state, formAction, isPending] = useActionState(createPallet, initialState);
+  const [state, setState] = useState(initialState);
+  const [isPending, startTransition] = useTransition();
+  const formRef = useRef<HTMLFormElement>(null);
+  const detailsRef = useRef<HTMLDetailsElement>(null);
+
+  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    startTransition(async () => {
+      const nextState = await createPallet(state, new FormData(form));
+      setState(nextState);
+      if (nextState.success) {
+        formRef.current?.reset();
+        detailsRef.current?.removeAttribute("open");
+      }
+    });
+  }
+
   return (
-    <details className="group relative">
+    <details ref={detailsRef} onToggle={(event) => { if (event.currentTarget.open) setState(initialState); }} className="group relative">
       <summary className="cursor-pointer list-none rounded-xl bg-amber-500 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-amber-600 [&::-webkit-details-marker]:hidden">＋ Nuevo pallet</summary>
-    <form action={formAction} className="absolute right-0 z-20 mt-3 grid w-[min(680px,calc(100vw-2.5rem))] gap-4 rounded-2xl border border-stone-200 bg-white p-5 shadow-xl sm:grid-cols-2">
+    <form ref={formRef} onSubmit={handleSubmit} className="absolute right-0 z-20 mt-3 grid w-[min(680px,calc(100vw-2.5rem))] gap-4 rounded-2xl border border-stone-200 bg-white p-5 shadow-xl sm:grid-cols-2">
       <div className="sm:col-span-2"><h2 className="text-base font-bold">Registrar nuevo pallet</h2><p className="mt-1 text-sm text-stone-500">Quedará disponible en depósito para asociarlo a una orden.</p></div>
       {state.error && <p role="alert" className="sm:col-span-2 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{state.error}</p>}
       {state.success && <p role="status" className="sm:col-span-2 rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{state.success}</p>}

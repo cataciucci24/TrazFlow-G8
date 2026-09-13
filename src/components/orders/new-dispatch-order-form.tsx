@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import Link from "next/link";
 
 import {
@@ -28,6 +28,9 @@ export function NewDispatchOrderForm({
     createDispatchOrder,
     INITIAL_STATE,
   );
+  const [values, setValues] = useState(INITIAL_STATE.values);
+  const [selectedPalletIds, setSelectedPalletIds] = useState<string[]>([]);
+  const today = new Intl.DateTimeFormat("sv-SE").format(new Date());
 
   return (
     <form
@@ -53,7 +56,8 @@ export function NewDispatchOrderForm({
         <select
           id="distributorId"
           name="distributorId"
-          defaultValue={state.values.distributorId}
+          value={values.distributorId}
+          onChange={(event) => setValues((current) => ({ ...current, distributorId: event.target.value }))}
           disabled={isPending}
           className="w-full rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-slate-950 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
         >
@@ -71,7 +75,7 @@ export function NewDispatchOrderForm({
 
       <fieldset className="space-y-2">
         <legend className="text-sm font-semibold uppercase tracking-wide text-stone-500">Pallets de la orden</legend>
-        {pallets.length === 0 ? <p className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-700">No hay pallets disponibles en depósito. Primero registrá uno desde Seguimiento.</p> : <div className="max-h-56 divide-y divide-stone-200 overflow-y-auto rounded-xl border border-stone-200 px-4">{pallets.map((pallet) => <label key={pallet.id} className="flex cursor-pointer items-center gap-3 py-3 text-sm"><input name="palletIds" type="checkbox" value={pallet.id} disabled={isPending} className="size-4 rounded border-stone-300 text-amber-500 focus:ring-amber-500" /><span className="font-mono font-semibold">{pallet.qrCode}</span><span className="text-stone-500">{pallet.productName} · lote {pallet.batchNumber}</span></label>)}</div>}
+        {pallets.length === 0 ? <p className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-700">No hay pallets disponibles en depósito. Primero registrá uno desde Seguimiento.</p> : <div className="max-h-56 divide-y divide-stone-200 overflow-y-auto rounded-xl border border-stone-200 px-4">{pallets.map((pallet) => <label key={pallet.id} className="flex cursor-pointer items-center gap-3 py-3 text-sm"><input name="palletIds" type="checkbox" value={pallet.id} checked={selectedPalletIds.includes(pallet.id)} onChange={(event) => setSelectedPalletIds((current) => event.target.checked ? [...current, pallet.id] : current.filter((id) => id !== pallet.id))} disabled={isPending} className="size-4 rounded border-stone-300 text-amber-500 focus:ring-amber-500" /><span className="font-mono font-semibold">{pallet.qrCode}</span><span className="text-stone-500">{pallet.productName} · lote {pallet.batchNumber}</span></label>)}</div>}
         {state.errors.palletIds && <p className="text-xs text-red-600">{state.errors.palletIds}</p>}
       </fieldset>
 
@@ -86,7 +90,9 @@ export function NewDispatchOrderForm({
           id="estimatedDispatchDate"
           name="estimatedDispatchDate"
           type="date"
-          defaultValue={state.values.estimatedDispatchDate}
+          value={values.estimatedDispatchDate}
+          min={today}
+          onChange={(event) => setValues((current) => ({ ...current, estimatedDispatchDate: event.target.value }))}
           disabled={isPending}
           className="w-full rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-slate-950 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
         />
@@ -108,7 +114,8 @@ export function NewDispatchOrderForm({
           id="notes"
           name="notes"
           rows={3}
-          defaultValue={state.values.notes}
+          value={values.notes}
+          onChange={(event) => setValues((current) => ({ ...current, notes: event.target.value }))}
           disabled={isPending}
           className="w-full rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-slate-950 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
         />

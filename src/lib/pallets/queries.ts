@@ -14,8 +14,8 @@ type RawPalletRow = {
   status: Pallet["status"];
   current_location: string | null;
   batches:
-    | { batch_number: string; products: { name: string; sku: string } | { name: string; sku: string }[] | null }
-    | { batch_number: string; products: { name: string; sku: string } | { name: string; sku: string }[] | null }[]
+    | { batch_number: string; quantity: number; products: { name: string; sku: string } | { name: string; sku: string }[] | null }
+    | { batch_number: string; quantity: number; products: { name: string; sku: string } | { name: string; sku: string }[] | null }[]
     | null;
 };
 
@@ -35,11 +35,12 @@ function mapPalletRow(row: RawPalletRow): Pallet {
     productName: product?.name ?? "—",
     productSku: product?.sku ?? "—",
     batchNumber: batch?.batch_number ?? "—",
+    quantity: batch?.quantity ?? 0,
   };
 }
 
 const PALLET_SELECT =
-  "id, qr_code, status, current_location, batches ( batch_number, products ( name, sku ) )";
+  "id, qr_code, status, current_location, batches ( batch_number, quantity, products ( name, sku ) )";
 
 /** Pallets de la empresa disponibles para asociar a una orden (en depósito, sin asignar). */
 export async function getAvailablePallets(companyId: string): Promise<Pallet[]> {

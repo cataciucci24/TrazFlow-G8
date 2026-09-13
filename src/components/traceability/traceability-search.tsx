@@ -2,10 +2,11 @@ import Form from "next/form";
 
 type TraceabilitySearchProps = {
   defaultQr: string;
+  palletCodes: string[];
 };
 
 /** Búsqueda GET: deja el QR en la URL y no necesita una Server Action. */
-export function TraceabilitySearch({ defaultQr }: TraceabilitySearchProps) {
+export function TraceabilitySearch({ defaultQr, palletCodes }: TraceabilitySearchProps) {
   return (
     <Form
       action="/dashboard/traceability"
@@ -25,9 +26,13 @@ export function TraceabilitySearch({ defaultQr }: TraceabilitySearchProps) {
           defaultValue={defaultQr}
           maxLength={512}
           autoComplete="off"
+          list="existing-pallet-codes"
           placeholder="PAL-001"
           className="w-full rounded-xl border border-stone-200 bg-white px-4 py-3 text-sm text-slate-950 placeholder-stone-400 outline-none transition-all focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
         />
+        <datalist id="existing-pallet-codes">
+          {palletCodes.map((code) => <option key={code} value={code} />)}
+        </datalist>
       </div>
 
       <button
