@@ -29,13 +29,13 @@ export function ConfirmDispatchButton({
   };
 
   return (
-    <div className="space-y-3 rounded-lg border border-gray-200 bg-white p-6">
+    <div className="space-y-3 rounded-2xl border border-stone-200 bg-white p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-sm font-medium text-gray-700">
+          <h2 className="text-base font-bold text-slate-950">
             Confirmar despacho
           </h2>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-stone-500">
             {isBlocked
               ? `Faltan validar ${missingPalletsCount} pallet(s) para poder confirmar.`
               : "La carga fue validada. Confirmá para dar por salida la mercadería."}
@@ -46,7 +46,7 @@ export function ConfirmDispatchButton({
           type="button"
           disabled={isPending || isBlocked || isSuccess}
           onClick={handleConfirm}
-          className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-xl bg-amber-500 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isPending ? "Confirmando..." : "Confirmar despacho"}
         </button>

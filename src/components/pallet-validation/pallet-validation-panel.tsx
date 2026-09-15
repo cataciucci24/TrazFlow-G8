@@ -9,20 +9,25 @@ import type {
   OrderPalletValidation,
   PalletValidationResult,
 } from "@/lib/pallet-validation/types";
+import type { ScanHistoryItem } from "@/lib/scans/queries";
 
 type PalletValidationPanelProps = {
   orderId: string;
   pallets: OrderPalletValidation[];
   dispatchDiscrepancies: OrderDispatchDiscrepancy[];
+  initialScanHistory: ScanHistoryItem[];
 };
 
 export function PalletValidationPanel({
   orderId,
   pallets,
   dispatchDiscrepancies,
+  initialScanHistory,
 }: PalletValidationPanelProps) {
   const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [manualCode, setManualCode] = useState("");
   const [result, setResult] = useState<PalletValidationResult | null>(null);
+  const [scanHistory, setScanHistory] = useState<{ code: string; message: string; success: boolean }[]>([]);
 
   const [incorrectPallets, setIncorrectPallets] = useState<string[]>(
     Array.from(
@@ -45,6 +50,11 @@ export function PalletValidationPanel({
         const validationResult = await validatePallet(orderId, qrCode);
 
         setResult(validationResult);
+        setScanHistory((current) => [{
+          code: qrCode,
+          message: validationResult.message,
+          success: validationResult.outcome === "validated" || validationResult.outcome === "already_validated",
+        }, ...current]);
 
         if (validationResult.outcome === "wrong_order") {
           setIncorrectPallets((current) =>
@@ -61,29 +71,45 @@ export function PalletValidationPanel({
   const isSuccess = result?.outcome === "validated";
   const isDuplicate = result?.outcome === "already_validated";
 
-  return (
-    <div className="space-y-4 rounded-lg border border-gray-200 bg-white p-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-medium text-gray-700">
-            Validación de pallets
-          </h2>
-          <p className="mt-1 text-sm font-semibold text-gray-900">
-            {validatedCount} de {pallets.length} pallets validados
-          </p>
-        </div>
+  const handleManualSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const code = manualCode.trim();
+    if (!code || isPending) return;
+    handleScan(code);
+    setManualCode("");
+  };
 
-        <button
+  return (
+    <div className="space-y-5">
+      <div className="grid gap-8 lg:grid-cols-[350px_minmax(0,1fr)]">
+        <div className="space-y-3">
+          <button
           type="button"
           disabled={isPending || pallets.length === 0}
           onClick={() => {
             setResult(null);
             setIsScannerOpen(true);
           }}
-          className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-60"
+          aria-label="Abrir cámara para escanear QR"
+          className="group flex aspect-square w-full flex-col items-center justify-center rounded-[22px] bg-slate-900 text-center text-slate-400 transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {isPending ? "Validando..." : "Escanear QR"}
-        </button>
+          <svg viewBox="0 0 24 24" className="mb-4 size-11 stroke-slate-500 group-hover:stroke-amber-400" fill="none" strokeWidth="1.5"><path d="M4 9V5h4M20 9V5h-4M4 15v4h4M20 15v4h-4M8 8h3v3H8zM13 8h3v3h-3zM8 13h3v3H8zM13 13h3v3h-3z" /></svg>
+          <span className="text-base">{isPending ? "Validando…" : "Tocá para escanear el QR"}</span>
+          <span className="mt-2 text-xs text-slate-500">Se abrirá la cámara del dispositivo</span>
+          </button>
+          <form onSubmit={handleManualSubmit} className="flex gap-2">
+            <label className="sr-only" htmlFor="manual-pallet-code">Código del pallet</label>
+            <input id="manual-pallet-code" value={manualCode} onChange={(event) => setManualCode(event.target.value)} disabled={isPending || pallets.length === 0} placeholder="PAL-XXXX" className="min-w-0 flex-1 rounded-xl border border-stone-200 bg-white px-3 py-2.5 font-mono text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100 disabled:opacity-60" />
+            <button type="submit" disabled={isPending || !manualCode.trim() || pallets.length === 0} className="rounded-xl bg-amber-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-60">Validar</button>
+          </form>
+        </div>
+        <div className="rounded-2xl border border-stone-200 bg-white p-5">
+          <h2 className="text-sm font-bold tracking-[0.08em] text-stone-500">ESTADO DE LA ORDEN</h2>
+          <div className="mt-4 flex items-center justify-between"><p className="font-mono font-bold">{orderId.slice(0, 8).toUpperCase()}</p><span className={`rounded-full px-3 py-1 text-xs font-bold ${missingPallets.length === 0 ? "bg-emerald-50 text-emerald-600" : "bg-amber-50 text-amber-600"}`}>{missingPallets.length === 0 ? "Completa ✓" : `${missingPallets.length} pendientes`}</span></div>
+          <div className="mt-4 h-2 overflow-hidden rounded-full bg-stone-100"><div className="h-full rounded-full bg-emerald-600" style={{ width: `${pallets.length ? (validatedCount / pallets.length) * 100 : 0}%` }} /></div>
+          <p className="mt-2 text-sm text-stone-500">{validatedCount} de {pallets.length} pallets confirmados</p>
+          <ul className="mt-3 space-y-2">{pallets.map((pallet) => <li key={pallet.id} className="flex items-center gap-2 text-sm"><span className={pallet.validatedAt ? "text-emerald-600" : "text-stone-300"}>{pallet.validatedAt ? "●" : "○"}</span><span className="font-mono font-semibold">{pallet.qrCode}</span><span className="truncate text-stone-500">{pallet.productName}</span></li>)}</ul>
+        </div>
       </div>
 
       {result && (
@@ -173,15 +199,15 @@ export function PalletValidationPanel({
           La orden todavía no tiene pallets asociados.
         </p>
       ) : (
-        <ul className="divide-y divide-gray-100">
+        <ul className="divide-y divide-stone-200 rounded-xl border border-stone-200 px-4">
           {pallets.map((pallet) => (
             <li key={pallet.id} className="flex gap-3 py-3 text-sm">
               <span aria-hidden="true" className="mt-0.5">
                 {pallet.validatedAt ? "✅" : "⬜"}
               </span>
               <div className="min-w-0 flex-1">
-                <p className="font-medium text-gray-900">{pallet.qrCode}</p>
-                <p className="text-gray-500">
+                <p className="font-mono font-semibold text-slate-950">{pallet.qrCode}</p>
+                <p className="text-stone-500">
                   {pallet.productName} ({pallet.productSku}) · Lote {pallet.batchNumber}
                 </p>
               </div>
@@ -192,6 +218,11 @@ export function PalletValidationPanel({
           ))}
         </ul>
       )}
+
+      <section className="rounded-xl border border-stone-200 bg-stone-50 p-4">
+        <h3 className="text-xs font-bold tracking-[0.1em] text-stone-500">HISTORIAL DE ESCANEOS ({initialScanHistory.length + scanHistory.length})</h3>
+        {initialScanHistory.length === 0 && scanHistory.length === 0 ? <p className="mt-3 text-sm text-stone-500">Sin escaneos registrados.</p> : <ul className="mt-3 space-y-2 text-sm">{scanHistory.map((scan, index) => <li key={`session-${scan.code}-${index}`} className="flex items-center gap-2"><span className={scan.success ? "text-emerald-600" : "text-red-600"}>●</span><span className="font-mono font-semibold">{scan.code}</span><span className="text-stone-500">{scan.message}</span></li>)}{initialScanHistory.map((scan) => <li key={scan.id} className="flex items-center gap-2"><span className="text-emerald-600">●</span><span className="font-mono font-semibold">{scan.qrCode}</span><span className="text-stone-500">Confirmado el {new Date(scan.createdAt).toLocaleString("es-AR")}</span></li>)}</ul>}
+      </section>
 
       {isScannerOpen && (
         <QrScanner

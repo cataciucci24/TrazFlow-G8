@@ -56,4 +56,5 @@ export type Pallet = {
   productName: string;
   productSku: string;
   batchNumber: string;
+  quantity: number;
 };

@@ -12,6 +12,7 @@ type RelatedProduct = {
 
 type RelatedBatch = {
   batch_number: string;
+  quantity: number;
   products: RelatedProduct | RelatedProduct[] | null;
 };
 
@@ -48,6 +49,7 @@ function mapPallet(row: RawPalletRow): Pallet {
     productName: product?.name ?? "—",
     productSku: product?.sku ?? "—",
     batchNumber: batch?.batch_number ?? "—",
+    quantity: batch?.quantity ?? 0,
   };
 }
 
@@ -71,7 +73,7 @@ export async function getPalletTraceability(
   const { data: palletData, error: palletError } = await supabase
     .from("pallets")
     .select(
-      "id, qr_code, status, current_location, batches ( batch_number, products ( name, sku ) )",
+      "id, qr_code, status, current_location, batches ( batch_number, quantity, products ( name, sku ) )",
     )
     .eq("qr_code", qrCode)
     .eq("company_id", companyId)
