@@ -1,15 +1,18 @@
 "use client";
 
 import { UnitOfMeasureField } from "@/components/pallets/unit-of-measure-field";
+import { LotField } from "@/components/pallets/lot-field";
 
 import { useRef, useState, useTransition } from "react";
 import { createPallet, type CreatePalletState } from "@/lib/pallets/actions";
+import type { ProductBatch } from "@/lib/types";
 
 const initialState: CreatePalletState = { error: null, success: null };
 
-export function NewPalletForm() {
+export function NewPalletForm({ existingBatches }: { existingBatches: ProductBatch[] }) {
   const [state, setState] = useState(initialState);
   const [isPending, startTransition] = useTransition();
+  const [productSku, setProductSku] = useState("");
   const formRef = useRef<HTMLFormElement>(null);
   const detailsRef = useRef<HTMLDetailsElement>(null);
 
@@ -21,6 +24,7 @@ export function NewPalletForm() {
       setState(nextState);
       if (nextState.success) {
         formRef.current?.reset();
+        setProductSku("");
         detailsRef.current?.removeAttribute("open");
       }
     });
@@ -37,14 +41,15 @@ export function NewPalletForm() {
       <Field label="Cantidad" name="quantity" type="number" placeholder="Mayor que 0" />
       <UnitOfMeasureField />
       <Field label="Producto" name="productName" placeholder="Nombre del producto" />
-      <Field label="SKU" name="productSku" placeholder="SKU-001" />
-      <Field label="Lote" name="batchNumber" placeholder="LOTE-0001" />
+      <Field label="SKU" name="productSku" placeholder="SKU-001" value={productSku} onChange={setProductSku} />
+      <LotField productSku={productSku} existingBatches={existingBatches} />
       <div className="flex items-end justify-end"><button disabled={isPending} className="w-full rounded-xl bg-amber-500 px-5 py-3 text-sm font-bold text-white hover:bg-amber-600 disabled:opacity-60 sm:w-auto">{isPending ? "Registrando..." : "Registrar pallet"}</button></div>
     </form>
     </details>
   );
 }
 
-function Field({ label, name, placeholder, type = "text" }: { label: string; name: string; placeholder: string; type?: string }) {
-  return <label className="block text-xs font-bold uppercase tracking-wide text-stone-500">{label}<input required name={name} type={type} min={type === "number" ? 0 : undefined} step={type === "number" ? "any" : undefined} placeholder={placeholder} className="mt-2 w-full rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm font-normal normal-case tracking-normal text-slate-950 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100" /></label>;
+function Field({ label, name, placeholder, type = "text", value, onChange }: { label: string; name: string; placeholder: string; type?: string; value?: string; onChange?: (value: string) => void }) {
+  const controlled = onChange ? { value: value ?? "", onChange: (event: React.ChangeEvent<HTMLInputElement>) => onChange(event.target.value) } : {};
+  return <label className="block text-xs font-bold uppercase tracking-wide text-stone-500">{label}<input required name={name} type={type} min={type === "number" ? 0 : undefined} step={type === "number" ? "any" : undefined} placeholder={placeholder} {...controlled} className="mt-2 w-full rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm font-normal normal-case tracking-normal text-slate-950 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100" /></label>;
 }

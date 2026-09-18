@@ -49,6 +49,12 @@ export type PalletStatus =
   | "received"
   | "discrepancy";
 
+/** Lote existente de un producto (por SKU), para elegirlo en el formulario en vez de tipearlo. */
+export type ProductBatch = {
+  productSku: string;
+  batchNumber: string;
+};
+
 /** Pallet con la info de producto/lote necesaria para identificarlo en pantalla. */
 export type Pallet = {
   id: string;
