@@ -28,16 +28,14 @@ export default async function OrdersPage() {
     <div className="space-y-8">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-2xl font-bold tracking-tight">Órdenes de despacho</h1>
-        <div className="flex items-center gap-3">
-          {isLogisticsManager && (
-            <Link
-              href="/dashboard/orders/new"
-              className="inline-flex items-center gap-2 rounded-xl bg-amber-500 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-amber-600"
-            >
-              <span className="text-xl leading-none">＋</span>Nueva orden
-            </Link>
-          )}
-        </div>
+        {isLogisticsManager && (
+          <Link
+            href="/dashboard/orders/new"
+            className="inline-flex items-center gap-2 rounded-xl bg-amber-500 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-amber-600"
+          >
+            <span className="text-xl leading-none">＋</span>Nueva orden
+          </Link>
+        )}
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-stone-200 bg-white">
