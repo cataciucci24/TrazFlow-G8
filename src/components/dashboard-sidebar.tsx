@@ -20,20 +20,29 @@ export function DashboardSidebar({ role }: DashboardSidebarProps) {
   const roleDetail = roleDetails[role];
   const isOrders = pathname.startsWith("/dashboard/orders");
   const isTraceability = pathname.startsWith("/dashboard/traceability");
+  const isInventory = pathname.startsWith("/dashboard/inventory");
   const detailTitle = role === "warehouse_operator" ? "Confirmar despacho" : role === "distributor_operator" ? "Confirmar recepción" : "Órdenes de despacho";
 
   const links = role === "logistics_manager"
     ? [
         { href: "/dashboard/orders", label: "Órdenes de despacho", icon: <OrdersIcon />, active: isOrders },
+        { href: "/dashboard/inventory", label: "Stock", icon: <InventoryIcon />, active: isInventory },
         { href: "/dashboard/traceability", label: "Seguimiento de pallets", icon: <PalletIcon />, active: isTraceability },
       ]
     : [{ href: "/dashboard", label: detailTitle, icon: <ScanIcon />, active: pathname === "/dashboard" || pathname.startsWith("/dashboard/orders/") }];
 
   return (
     <aside className="flex w-full shrink-0 flex-col border-b border-stone-200 bg-white lg:sticky lg:top-0 lg:h-screen lg:w-[284px] lg:border-r lg:border-b-0">
-      <Link href="/dashboard" className="flex h-[74px] items-center gap-4 border-b border-stone-200 px-7 text-lg font-bold tracking-tight text-slate-950">
-        <BrandMark className="size-8" />TrazFlow
-      </Link>
+      <div className="flex h-[74px] shrink-0 items-center justify-between gap-3 border-b border-stone-200 px-5 lg:px-7">
+        <Link href="/dashboard" className="flex h-full items-center gap-2 text-lg font-bold tracking-tight text-slate-950 lg:gap-4">
+          <BrandMark className="size-8" />TrazFlow
+        </Link>
+        <div className="shrink-0 lg:hidden">
+          <LogoutButton className="flex items-center gap-2 text-sm text-stone-600 transition-colors hover:text-slate-950">
+            <span aria-hidden="true">⇥</span> Cerrar sesión
+          </LogoutButton>
+        </div>
+      </div>
       <div className="border-b border-stone-200 px-5 py-4">
         <p className="mb-2 text-xs font-bold tracking-[0.12em] text-stone-500">ROL ACTIVO</p>
         <div className={`flex items-center gap-3 rounded-xl px-3 py-2.5 font-semibold ${roleDetail.tone}`}>
@@ -48,13 +57,17 @@ export function DashboardSidebar({ role }: DashboardSidebarProps) {
         ))}
       </nav>
       <div className="hidden flex-1 lg:block" />
-      <div className="border-t border-stone-200 px-5 py-4">
+      <div className="hidden border-t border-stone-200 px-5 py-4 lg:block">
         <LogoutButton className="flex items-center gap-3 text-base text-stone-600 transition-colors hover:text-slate-950">
           <span aria-hidden="true">⇥</span> Cerrar sesión
         </LogoutButton>
       </div>
     </aside>
   );
+}
+
+function InventoryIcon() {
+  return <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5 fill-none stroke-current" strokeWidth="2"><path d="M4 7 12 3l8 4-8 4-8-4Z" /><path d="M4 12l8 4 8-4" /><path d="M4 17l8 4 8-4" /></svg>;
 }
 
 function OrdersIcon() {

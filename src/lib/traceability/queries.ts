@@ -12,7 +12,6 @@ type RelatedProduct = {
 
 type RelatedBatch = {
   batch_number: string;
-  quantity: number;
   products: RelatedProduct | RelatedProduct[] | null;
 };
 
@@ -21,6 +20,8 @@ type RawPalletRow = {
   qr_code: string;
   status: PalletStatus;
   current_location: string | null;
+  quantity: number | null;
+  unit_of_measure: Pallet["unitOfMeasure"];
   batches: RelatedBatch | RelatedBatch[] | null;
 };
 
@@ -49,7 +50,8 @@ function mapPallet(row: RawPalletRow): Pallet {
     productName: product?.name ?? "—",
     productSku: product?.sku ?? "—",
     batchNumber: batch?.batch_number ?? "—",
-    quantity: batch?.quantity ?? 0,
+    quantity: row.quantity,
+    unitOfMeasure: row.unit_of_measure,
   };
 }
 
@@ -73,7 +75,7 @@ export async function getPalletTraceability(
   const { data: palletData, error: palletError } = await supabase
     .from("pallets")
     .select(
-      "id, qr_code, status, current_location, batches ( batch_number, quantity, products ( name, sku ) )",
+      "id, qr_code, status, current_location, quantity, unit_of_measure, batches ( batch_number, products ( name, sku ) )",
     )
     .eq("qr_code", qrCode)
     .eq("company_id", companyId)

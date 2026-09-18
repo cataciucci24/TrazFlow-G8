@@ -1,5 +1,7 @@
 "use client";
 
+import { UnitOfMeasureField } from "@/components/pallets/unit-of-measure-field";
+
 import { useRef, useState, useTransition } from "react";
 import { createPallet, type CreatePalletState } from "@/lib/pallets/actions";
 
@@ -32,7 +34,8 @@ export function NewPalletForm() {
       {state.error && <p role="alert" className="sm:col-span-2 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{state.error}</p>}
       {state.success && <p role="status" className="sm:col-span-2 rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{state.success}</p>}
       <Field label="Código QR" name="qrCode" placeholder="PAL-0001" />
-      <Field label="Cantidad (unidades)" name="quantity" type="number" placeholder="0" />
+      <Field label="Cantidad" name="quantity" type="number" placeholder="Mayor que 0" />
+      <UnitOfMeasureField />
       <Field label="Producto" name="productName" placeholder="Nombre del producto" />
       <Field label="SKU" name="productSku" placeholder="SKU-001" />
       <Field label="Lote" name="batchNumber" placeholder="LOTE-0001" />
@@ -43,5 +46,5 @@ export function NewPalletForm() {
 }
 
 function Field({ label, name, placeholder, type = "text" }: { label: string; name: string; placeholder: string; type?: string }) {
-  return <label className="block text-xs font-bold uppercase tracking-wide text-stone-500">{label}<input required name={name} type={type} min={type === "number" ? 0 : undefined} placeholder={placeholder} className="mt-2 w-full rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm font-normal normal-case tracking-normal text-slate-950 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100" /></label>;
+  return <label className="block text-xs font-bold uppercase tracking-wide text-stone-500">{label}<input required name={name} type={type} min={type === "number" ? 0 : undefined} step={type === "number" ? "any" : undefined} placeholder={placeholder} className="mt-2 w-full rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm font-normal normal-case tracking-normal text-slate-950 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100" /></label>;
 }
