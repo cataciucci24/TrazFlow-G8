@@ -1,6 +1,8 @@
 import { requireUserProfile, hasRole } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { ORDER_STATUS_LABELS } from "@/lib/orders/labels";
+import { ExpirationAlertSummary } from "@/components/dashboard/expiration-alerts";
+import { getExpirationAlerts } from "@/lib/pallets/queries";
 import Link from "next/link";
 
 export default async function DashboardPage() {
@@ -75,6 +77,10 @@ export default async function DashboardPage() {
     );
   }
 
+  const expirationAlerts = hasRole(profile, "logistics_manager")
+    ? await getExpirationAlerts(profile.companyId)
+    : null;
+
   return (
     <div className="space-y-8">
       <div className="border-b border-stone-200 pb-6">
@@ -85,6 +91,23 @@ export default async function DashboardPage() {
           Seleccioná una opción para comenzar a operar en el sistema.
         </p>
       </div>
+
+      {expirationAlerts && (
+        <section aria-labelledby="dashboard-expiration-alerts-title" className="rounded-2xl border border-stone-200 bg-white p-5">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <h2 id="dashboard-expiration-alerts-title" className="text-xl font-bold">Alertas de vencimiento</h2>
+              <p className="mt-1 text-sm text-stone-500">Resumen de mercadería disponible que vence en los próximos 90 días.</p>
+            </div>
+            <Link href="/dashboard/alerts" className="rounded-xl bg-amber-500 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-amber-600">
+              Ver alertas
+            </Link>
+          </div>
+          <div className="mt-5">
+            <ExpirationAlertSummary alerts={expirationAlerts} />
+          </div>
+        </section>
+      )}
 
       <div className="grid gap-6 md:grid-cols-2">
         <div className="group rounded-2xl border border-stone-200 bg-white p-6 transition-colors hover:border-amber-300">

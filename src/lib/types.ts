@@ -82,3 +82,17 @@ export type Pallet = {
   quantity: number | null;
   unitOfMeasure: PalletUnit | null;
 };
+
+/** Mercadería disponible cuyo lote vence dentro de los próximos 90 días. */
+export type ExpirationAlert = {
+  palletId: string;
+  productName: string;
+  productSku: string;
+  batchNumber: string;
+  quantity: number;
+  unitOfMeasure: PalletUnit;
+  currentLocation: string | null;
+  expirationDate: string;
+  daysRemaining: number;
+  urgency: "critical" | "warning" | "upcoming";
+};

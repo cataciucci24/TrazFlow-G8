@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import type { Lot, Pallet } from "@/lib/types";
+import type { ExpirationAlert, Lot, Pallet } from "@/lib/types";
 
 /**
  * Fila cruda que devuelve Postgrest al embeber batches/products. El cliente
@@ -138,4 +138,85 @@ export async function getCompanyLots(): Promise<Lot[]> {
       productSku: product?.sku ?? "—",
     };
   });
+}
+
+type RawExpirationAlertRow = {
+  id: string;
+  current_location: string | null;
+  quantity: number;
+  unit_of_measure: ExpirationAlert["unitOfMeasure"];
+  batches:
+    | {
+        batch_number: string;
+        expiration_date: string;
+        products: { name: string; sku: string } | { name: string; sku: string }[] | null;
+      }
+    | {
+        batch_number: string;
+        expiration_date: string;
+        products: { name: string; sku: string } | { name: string; sku: string }[] | null;
+      }[]
+    | null;
+};
+
+function dateAtMidnightUtc(date: string): number {
+  return Date.parse(`${date}T00:00:00.000Z`);
+}
+
+function argentinaToday(): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Argentina/Buenos_Aires",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value;
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
+/**
+ * Pallets disponibles que vencen en los próximos 90 días. La fecha se filtra
+ * desde Supabase y los días restantes se calculan contra el calendario local
+ * de la operación para clasificar la urgencia en la interfaz.
+ */
+export async function getExpirationAlerts(companyId: string): Promise<ExpirationAlert[]> {
+  const today = argentinaToday();
+  const maximumDate = new Date(dateAtMidnightUtc(today) + 90 * 86_400_000).toISOString().slice(0, 10);
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("pallets")
+    .select("id, current_location, quantity, unit_of_measure, batches!inner ( batch_number, expiration_date, products ( name, sku ) )")
+    .eq("company_id", companyId)
+    .eq("status", "in_warehouse")
+    .gt("quantity", 0)
+    .gte("batches.expiration_date", today)
+    .lte("batches.expiration_date", maximumDate)
+    .order("expiration_date", { foreignTable: "batches", ascending: true });
+
+  if (error) {
+    throw new Error(`No se pudieron leer las alertas de vencimiento (${error.code}: ${error.message}).`, { cause: error });
+  }
+
+  return ((data ?? []) as unknown as RawExpirationAlertRow[])
+    .flatMap((row): ExpirationAlert[] => {
+      const batch = Array.isArray(row.batches) ? row.batches[0] : row.batches;
+      if (!batch?.expiration_date || !row.unit_of_measure) return [];
+      const product = Array.isArray(batch.products) ? batch.products[0] : batch.products;
+      const daysRemaining = Math.round((dateAtMidnightUtc(batch.expiration_date) - dateAtMidnightUtc(today)) / 86_400_000);
+      const urgency = daysRemaining <= 30 ? "critical" : daysRemaining <= 60 ? "warning" : "upcoming";
+
+      return [{
+        palletId: row.id,
+        productName: product?.name ?? "—",
+        productSku: product?.sku ?? "—",
+        batchNumber: batch.batch_number,
+        quantity: row.quantity,
+        unitOfMeasure: row.unit_of_measure,
+        currentLocation: row.current_location,
+        expirationDate: batch.expiration_date,
+        daysRemaining,
+        urgency,
+      }];
+    })
+    .sort((a, b) => a.expirationDate.localeCompare(b.expirationDate));
 }
