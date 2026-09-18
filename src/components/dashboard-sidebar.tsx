@@ -33,9 +33,16 @@ export function DashboardSidebar({ role }: DashboardSidebarProps) {
 
   return (
     <aside className="flex w-full shrink-0 flex-col border-b border-stone-200 bg-white lg:sticky lg:top-0 lg:h-screen lg:w-[284px] lg:border-r lg:border-b-0">
-      <Link href="/dashboard" className="flex h-[74px] items-center gap-4 border-b border-stone-200 px-7 text-lg font-bold tracking-tight text-slate-950">
-        <BrandMark className="size-8" />TrazFlow
-      </Link>
+      <div className="flex h-[74px] shrink-0 items-center justify-between gap-3 border-b border-stone-200 px-5 lg:px-7">
+        <Link href="/dashboard" className="flex h-full items-center gap-2 text-lg font-bold tracking-tight text-slate-950 lg:gap-4">
+          <BrandMark className="size-8" />TrazFlow
+        </Link>
+        <div className="shrink-0 lg:hidden">
+          <LogoutButton className="flex items-center gap-2 text-sm text-stone-600 transition-colors hover:text-slate-950">
+            <span aria-hidden="true">⇥</span> Cerrar sesión
+          </LogoutButton>
+        </div>
+      </div>
       <div className="border-b border-stone-200 px-5 py-4">
         <p className="mb-2 text-xs font-bold tracking-[0.12em] text-stone-500">ROL ACTIVO</p>
         <div className={`flex items-center gap-3 rounded-xl px-3 py-2.5 font-semibold ${roleDetail.tone}`}>
@@ -50,7 +57,7 @@ export function DashboardSidebar({ role }: DashboardSidebarProps) {
         ))}
       </nav>
       <div className="hidden flex-1 lg:block" />
-      <div className="border-t border-stone-200 px-5 py-4">
+      <div className="hidden border-t border-stone-200 px-5 py-4 lg:block">
         <LogoutButton className="flex items-center gap-3 text-base text-stone-600 transition-colors hover:text-slate-950">
           <span aria-hidden="true">⇥</span> Cerrar sesión
         </LogoutButton>
