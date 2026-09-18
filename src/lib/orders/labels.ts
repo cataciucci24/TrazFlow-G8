@@ -5,7 +5,7 @@ export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   draft: "Pendiente",
   validating: "Validando",
   has_discrepancy: "Con discrepancia",
-  confirmed: "Confirmada",
+  confirmed: "En tránsito",
   received: "Recibida",
   received_with_discrepancy: "Recibida con discrepancia",
 };
