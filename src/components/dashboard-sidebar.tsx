@@ -20,11 +20,13 @@ export function DashboardSidebar({ role }: DashboardSidebarProps) {
   const roleDetail = roleDetails[role];
   const isOrders = pathname.startsWith("/dashboard/orders");
   const isTraceability = pathname.startsWith("/dashboard/traceability");
+  const isInventory = pathname.startsWith("/dashboard/inventory");
   const detailTitle = role === "warehouse_operator" ? "Confirmar despacho" : role === "distributor_operator" ? "Confirmar recepción" : "Órdenes de despacho";
 
   const links = role === "logistics_manager"
     ? [
         { href: "/dashboard/orders", label: "Órdenes de despacho", icon: <OrdersIcon />, active: isOrders },
+        { href: "/dashboard/inventory", label: "Stock", icon: <InventoryIcon />, active: isInventory },
         { href: "/dashboard/traceability", label: "Seguimiento de pallets", icon: <PalletIcon />, active: isTraceability },
       ]
     : [{ href: "/dashboard", label: detailTitle, icon: <ScanIcon />, active: pathname === "/dashboard" || pathname.startsWith("/dashboard/orders/") }];
@@ -55,6 +57,10 @@ export function DashboardSidebar({ role }: DashboardSidebarProps) {
       </div>
     </aside>
   );
+}
+
+function InventoryIcon() {
+  return <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5 fill-none stroke-current" strokeWidth="2"><path d="M4 7 12 3l8 4-8 4-8-4Z" /><path d="M4 12l8 4 8-4" /><path d="M4 17l8 4 8-4" /></svg>;
 }
 
 function OrdersIcon() {
