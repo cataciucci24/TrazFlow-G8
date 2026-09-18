@@ -54,7 +54,9 @@ values
   ('61000000-0000-0000-0000-000000000001', '21000000-0000-0000-0000-000000000001', '51000000-0000-0000-0000-000000000001', 'PAL-US6-OK', 'in_transit', 'En tránsito'),
   ('61000000-0000-0000-0000-000000000002', '21000000-0000-0000-0000-000000000001', '51000000-0000-0000-0000-000000000001', 'PAL-US6-WRONG-ORDER', 'in_transit', 'En tránsito'),
   ('61000000-0000-0000-0000-000000000003', '21000000-0000-0000-0000-000000000001', '51000000-0000-0000-0000-000000000001', 'PAL-US6-DRAFT', 'in_transit', 'En tránsito'),
-  ('61000000-0000-0000-0000-000000000004', '21000000-0000-0000-0000-000000000001', '51000000-0000-0000-0000-000000000001', 'PAL-US6-BAD-STATUS', 'assigned', 'Depósito');
+  ('61000000-0000-0000-0000-000000000004', '21000000-0000-0000-0000-000000000001', '51000000-0000-0000-0000-000000000001', 'PAL-US6-BAD-STATUS', 'assigned', 'Depósito'),
+  ('61000000-0000-0000-0000-000000000005', '21000000-0000-0000-0000-000000000001', '51000000-0000-0000-0000-000000000001', 'PAL-US6-MULTI-A', 'in_transit', 'En tránsito'),
+  ('61000000-0000-0000-0000-000000000006', '21000000-0000-0000-0000-000000000001', '51000000-0000-0000-0000-000000000001', 'PAL-US6-MULTI-B', 'in_transit', 'En tránsito');
 
 insert into dispatch_orders (
   id, company_id, distributor_id, created_by, status,
@@ -64,7 +66,8 @@ values
   ('71000000-0000-0000-0000-000000000001', '21000000-0000-0000-0000-000000000001', '31000000-0000-0000-0000-000000000001', '11000000-0000-0000-0000-000000000001', 'confirmed', current_date, now()),
   ('71000000-0000-0000-0000-000000000002', '21000000-0000-0000-0000-000000000001', '31000000-0000-0000-0000-000000000001', '11000000-0000-0000-0000-000000000001', 'confirmed', current_date, now()),
   ('71000000-0000-0000-0000-000000000003', '21000000-0000-0000-0000-000000000001', '31000000-0000-0000-0000-000000000001', '11000000-0000-0000-0000-000000000001', 'draft', current_date, null),
-  ('71000000-0000-0000-0000-000000000004', '21000000-0000-0000-0000-000000000001', '31000000-0000-0000-0000-000000000001', '11000000-0000-0000-0000-000000000001', 'confirmed', current_date, now());
+  ('71000000-0000-0000-0000-000000000004', '21000000-0000-0000-0000-000000000001', '31000000-0000-0000-0000-000000000001', '11000000-0000-0000-0000-000000000001', 'confirmed', current_date, now()),
+  ('71000000-0000-0000-0000-000000000005', '21000000-0000-0000-0000-000000000001', '31000000-0000-0000-0000-000000000001', '11000000-0000-0000-0000-000000000001', 'confirmed', current_date, now());
 
 insert into order_pallets (
   order_id, pallet_id, expected, detected_at_dispatch,
@@ -74,7 +77,9 @@ values
   ('71000000-0000-0000-0000-000000000001', '61000000-0000-0000-0000-000000000001', true, true, now(), '11000000-0000-0000-0000-000000000002', false),
   ('71000000-0000-0000-0000-000000000002', '61000000-0000-0000-0000-000000000002', true, true, now(), '11000000-0000-0000-0000-000000000002', false),
   ('71000000-0000-0000-0000-000000000003', '61000000-0000-0000-0000-000000000003', true, true, now(), '11000000-0000-0000-0000-000000000002', false),
-  ('71000000-0000-0000-0000-000000000004', '61000000-0000-0000-0000-000000000004', true, true, now(), '11000000-0000-0000-0000-000000000002', false);
+  ('71000000-0000-0000-0000-000000000004', '61000000-0000-0000-0000-000000000004', true, true, now(), '11000000-0000-0000-0000-000000000002', false),
+  ('71000000-0000-0000-0000-000000000005', '61000000-0000-0000-0000-000000000005', true, true, now(), '11000000-0000-0000-0000-000000000002', false),
+  ('71000000-0000-0000-0000-000000000005', '61000000-0000-0000-0000-000000000006', true, true, now(), '11000000-0000-0000-0000-000000000002', false);
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '11000000-0000-0000-0000-000000000003', true);
@@ -139,9 +144,9 @@ select pg_temp.assert_true(
 );
 
 select pg_temp.assert_true(
-  (select status = 'confirmed' and received_at is null
+  (select status = 'received' and received_at is not null
    from dispatch_orders where id = '71000000-0000-0000-0000-000000000001'),
-  'recibir un pallet no debe cerrar la orden ni completar received_at'
+  'recibir el último pallet esperado debe cerrar la orden y completar received_at'
 );
 
 -- Idempotencia: el bloqueo de la relación hace que un segundo request vea el
@@ -172,6 +177,48 @@ select pg_temp.assert_true(
   to_regclass('public.idx_events_single_reception') is not null
   and to_regclass('public.idx_movements_single_reception') is not null,
   'deben existir las restricciones únicas de concurrencia'
+);
+
+-- Orden con dos pallets esperados: solo debe cerrarse al recibir el último.
+do $$
+declare result record;
+begin
+  select * into result from receive_order_pallet(
+    '71000000-0000-0000-0000-000000000005', 'PAL-US6-MULTI-A'
+  );
+  perform pg_temp.assert_true(result.outcome = 'received', 'el primer pallet de la orden multi debe recibirse');
+end;
+$$;
+
+select pg_temp.assert_true(
+  (select status = 'confirmed' and received_at is null
+   from dispatch_orders where id = '71000000-0000-0000-0000-000000000005'),
+  'la orden debe seguir confirmed mientras falte recibir un pallet esperado'
+);
+
+do $$
+declare result record;
+begin
+  select * into result from receive_order_pallet(
+    '71000000-0000-0000-0000-000000000005', 'PAL-US6-MULTI-B'
+  );
+  perform pg_temp.assert_true(result.outcome = 'received', 'el último pallet de la orden multi debe recibirse');
+end;
+$$;
+
+select pg_temp.assert_true(
+  (select status = 'received' and received_at is not null
+   from dispatch_orders where id = '71000000-0000-0000-0000-000000000005'),
+  'la orden debe cerrarse al recibir el último pallet esperado'
+);
+
+-- Reintento tras el cierre de la orden: debe seguir siendo idempotente y no
+-- romperse con invalid_status.
+select pg_temp.assert_true(
+  (select outcome from receive_order_pallet(
+    '71000000-0000-0000-0000-000000000005', 'PAL-US6-MULTI-B'
+  )) = 'already_received',
+  'un reintento sobre una orden ya recibida debe seguir devolviendo already_received'
 );
 
 -- Errores funcionales sin escrituras.

@@ -139,58 +139,45 @@ export function PalletValidationPanel({
         </div>
       )}
 
-      {pallets.length > 0 && (
-        <div
-          className={`rounded-md border px-4 py-4 ${
-            missingPallets.length === 0 && incorrectPallets.length === 0
-              ? "border-green-200 bg-green-50"
-              : "border-amber-200 bg-amber-50"
-          }`}
-        >
-          {missingPallets.length === 0 && incorrectPallets.length === 0 ? (
-            <div>
-              <p className="font-medium text-green-800">
-                Carga sin inconsistencias
-              </p>
-              <p className="mt-1 text-sm text-green-700">
-                Todos los pallets asociados a la orden fueron validados correctamente.
-              </p>
-            </div>
-          ) : (
-            <div>
-              <p className="font-medium text-amber-900">
-                Inconsistencias detectadas
-              </p>
+      {pallets.length > 0 && missingPallets.length === 0 && incorrectPallets.length === 0 && (
+        <div className="rounded-md border border-green-200 bg-green-50 px-4 py-4">
+          <p className="font-medium text-green-800">
+            Carga sin inconsistencias
+          </p>
+          <p className="mt-1 text-sm text-green-700">
+            Todos los pallets asociados a la orden fueron validados correctamente.
+          </p>
+        </div>
+      )}
 
-              {missingPallets.length > 0 && (
-                <div className="mt-3">
-                  <p className="text-sm font-medium text-amber-900">
-                    Pallets faltantes:
-                  </p>
-                  <ul className="mt-1 list-disc pl-5 text-sm text-amber-800">
-                    {missingPallets.map((pallet) => (
-                      <li key={pallet.id}>
-                        {pallet.qrCode} — {pallet.productName} ({pallet.productSku})
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+      {missingPallets.length > 0 && (
+        <div className="rounded-md border border-sky-200 bg-sky-50 px-4 py-4">
+          <p className="font-medium text-sky-900">
+            Pendientes de escanear
+          </p>
+          <ul className="mt-2 list-disc pl-5 text-sm text-sky-800">
+            {missingPallets.map((pallet) => (
+              <li key={pallet.id}>
+                {pallet.qrCode} — {pallet.productName} ({pallet.productSku})
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
-              {incorrectPallets.length > 0 && (
-                <div className="mt-3">
-                  <p className="text-sm font-medium text-amber-900">
-                    Pallets incorrectos:
-                  </p>
-                  <ul className="mt-1 list-disc pl-5 text-sm text-amber-800">
-                    {incorrectPallets.map((qrCode) => (
-                      <li key={qrCode}>{qrCode}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          )}
+      {incorrectPallets.length > 0 && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-4">
+          <p className="font-medium text-amber-900">
+            Inconsistencias detectadas
+          </p>
+          <p className="mt-3 text-sm font-medium text-amber-900">
+            Pallets incorrectos:
+          </p>
+          <ul className="mt-1 list-disc pl-5 text-sm text-amber-800">
+            {incorrectPallets.map((qrCode) => (
+              <li key={qrCode}>{qrCode}</li>
+            ))}
+          </ul>
         </div>
       )}
 

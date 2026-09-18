@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import type { Pallet } from "@/lib/types";
+import type { Lot, Pallet } from "@/lib/types";
 
 /**
  * Fila cruda que devuelve Postgrest al embeber batches/products. El cliente
@@ -103,4 +103,39 @@ export async function getPalletsForOrder(orderId: string): Promise<Pallet[]> {
     })
     .filter((pallet): pallet is RawPalletRow => pallet != null)
     .map(mapPalletRow);
+}
+
+type RawLotRow = {
+  id: string;
+  batch_number: string;
+  expiration_date: string | null;
+  products: { name: string; sku: string } | { name: string; sku: string }[] | null;
+};
+
+/**
+ * Todos los lotes de la empresa del usuario autenticado. No filtra por
+ * company_id explícitamente porque la policy `batches_company` de RLS ya
+ * restringe las filas a los lotes de productos de la propia empresa.
+ */
+export async function getCompanyLots(): Promise<Lot[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("batches")
+    .select("id, batch_number, expiration_date, products ( name, sku )")
+    .order("batch_number");
+
+  if (error) {
+    throw new Error(`No se pudieron leer los lotes (${error.code}: ${error.message}).`, { cause: error });
+  }
+
+  return (data as RawLotRow[] ?? []).map((row) => {
+    const product = Array.isArray(row.products) ? row.products[0] : row.products;
+    return {
+      id: row.id,
+      batchNumber: row.batch_number,
+      expirationDate: row.expiration_date,
+      productName: product?.name ?? "—",
+      productSku: product?.sku ?? "—",
+    };
+  });
 }

@@ -83,7 +83,15 @@ export default async function DispatchOrderDetailPage({
   if (isWarehouseOperator) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold">Confirmar despacho</h1>
+        <div className="flex items-center justify-between gap-4">
+          <h1 className="text-2xl font-bold">Confirmar despacho</h1>
+          <Link
+            href="/dashboard"
+            className="rounded-xl border border-stone-200 bg-white px-4 py-2 text-sm font-semibold text-stone-600 transition-colors hover:bg-stone-50"
+          >
+            Volver
+          </Link>
+        </div>
         <PalletValidationPanel
           orderId={order.id}
           pallets={palletValidations}
@@ -98,7 +106,15 @@ export default async function DispatchOrderDetailPage({
   if (isDistributorOperator) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold">Confirmar recepción</h1>
+        <div className="flex items-center justify-between gap-4">
+          <h1 className="text-2xl font-bold">Confirmar recepción</h1>
+          <Link
+            href="/dashboard"
+            className="rounded-xl border border-stone-200 bg-white px-4 py-2 text-sm font-semibold text-stone-600 transition-colors hover:bg-stone-50"
+          >
+            Volver
+          </Link>
+        </div>
         <PalletReceptionPanel orderId={order.id} pallets={palletReceptions} canReceive={order.status === "confirmed"} initialScanHistory={receptionScanHistory} />
       </div>
     );
