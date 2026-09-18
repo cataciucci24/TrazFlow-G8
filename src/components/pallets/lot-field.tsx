@@ -53,8 +53,8 @@ export function LotField({
           className={fieldClass}
         >
           {matchingLots.length > 0 && <option value="" disabled>Seleccioná un lote existente</option>}
-          {matchingLots.map((lot) => <option key={lot} value={lot}>{lot}</option>)}
           <option value={NEW_LOT}>＋ Registrar lote nuevo</option>
+          {matchingLots.map((lot) => <option key={lot} value={lot}>{lot}</option>)}
         </select>
       </label>
       {isNew ? (

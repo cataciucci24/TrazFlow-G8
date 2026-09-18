@@ -15,3 +15,20 @@ export type PalletTraceability = {
   pallet: Pallet;
   movements: PalletMovement[];
 };
+
+/** Un pallet del lote junto con su recorrido logístico. */
+export type LotPallet = {
+  pallet: Pallet;
+  movements: PalletMovement[];
+};
+
+/** Historial de trazabilidad de un lote: sus datos y todos sus pallets asociados. */
+export type LotTraceability = {
+  batchId: string;
+  batchNumber: string;
+  expirationDate: string | null;
+  batchQuantity: number;
+  productName: string;
+  productSku: string;
+  pallets: LotPallet[];
+};

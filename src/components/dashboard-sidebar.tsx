@@ -27,7 +27,7 @@ export function DashboardSidebar({ role }: DashboardSidebarProps) {
     ? [
         { href: "/dashboard/orders", label: "Órdenes de despacho", icon: <OrdersIcon />, active: isOrders },
         { href: "/dashboard/inventory", label: "Stock", icon: <InventoryIcon />, active: isInventory },
-        { href: "/dashboard/traceability", label: "Seguimiento de pallets", icon: <PalletIcon />, active: isTraceability },
+        { href: "/dashboard/traceability", label: "Seguimiento", icon: <PalletIcon />, active: isTraceability },
       ]
     : [{ href: "/dashboard", label: detailTitle, icon: <ScanIcon />, active: pathname === "/dashboard" || pathname.startsWith("/dashboard/orders/") }];
 
