@@ -1,3 +1,5 @@
+import type { PalletUnit } from "@/lib/pallets/units";
+
 /** Roles de la app, espejo del enum `user_role` de Postgres. */
 export type UserRole =
   | "logistics_manager"
@@ -56,5 +58,6 @@ export type Pallet = {
   productName: string;
   productSku: string;
   batchNumber: string;
-  quantity: number;
+  quantity: number | null;
+  unitOfMeasure: PalletUnit | null;
 };

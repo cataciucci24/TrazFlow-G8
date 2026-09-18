@@ -3,6 +3,9 @@
 import { useState } from "react";
 import { PALLET_STATUS_LABELS } from "@/lib/pallets/labels";
 import type { Pallet } from "@/lib/types";
+import { PALLET_UNITS } from "@/lib/pallets/units";
+
+const formatQuantity = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 20 });
 
 const STATUS_CLASSES: Record<Pallet["status"], string> = {
   in_warehouse: "bg-sky-50 text-sky-700",
@@ -114,20 +117,38 @@ export function InventoryPanel({ pallets }: { pallets: Pallet[] }) {
         </div>
       ) : locations.filter((value) => groups.has(value)).map((value) => {
         const group = groups.get(value)!;
+        const defined = group.filter((pallet) => pallet.quantity !== null && pallet.unitOfMeasure !== null);
+        const undefinedCount = group.length - defined.length;
+        const positiveTotals = PALLET_UNITS.map((unit) => {
+          const matching = defined.filter((pallet) => pallet.unitOfMeasure === unit);
+          const total = matching.reduce((sum, pallet) => sum + pallet.quantity!, 0);
+          return { unit, total };
+        }).filter(({ total }) => total > 0);
         const label = value ?? "Sin ubicación registrada";
         return (
           <section key={JSON.stringify(value)} aria-label={`Pallets: ${label}`}
             className="overflow-hidden rounded-2xl border border-stone-200 bg-white">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-200 px-5 py-4">
               <h2 className="min-w-0 break-words text-lg font-bold">{label}</h2>
-              <span className="text-sm text-stone-500">{group.length} pallets</span>
+              <span className="text-sm text-stone-500">{group.length} {group.length === 1 ? "pallet" : "pallets"}</span>
+            </div>
+            <div className="space-y-2 border-b border-stone-200 px-5 py-4 text-sm">
+              <p className="font-semibold">Total de mercadería{hasFilters ? " (según filtros)" : ""}</p>
+              {positiveTotals.length > 0 ? (
+                <ul className="flex flex-wrap gap-x-6 gap-y-2">
+                  {positiveTotals.map(({ unit, total }) => (
+                    <li key={unit}>{formatQuantity.format(total)} {unit}</li>
+                  ))}
+                </ul>
+              ) : <p className="text-stone-500">Stock aún no cuantificado</p>}
+              {undefinedCount > 0 && <p className="text-amber-800">{undefinedCount} {undefinedCount === 1 ? "pallet" : "pallets"} sin cantidad</p>}
             </div>
             <div className="overflow-x-auto" tabIndex={0} role="region" aria-label={`Detalle de stock: ${label}`}>
               <table className="w-full min-w-[900px] text-left text-sm">
                 <caption className="sr-only">Pallets en {label}</caption>
                 <thead className="bg-stone-100/80 text-stone-500">
                   <tr>
-                    {["Código QR", "Producto", "SKU", "Lote", "Cantidad del lote", "Estado", "Ubicación"].map((heading) => (
+                    {["Código QR", "Producto", "SKU", "Lote", "Cantidad", "Estado", "Ubicación"].map((heading) => (
                       <th key={heading} scope="col" className="px-5 py-4 font-semibold">{heading}</th>
                     ))}
                   </tr>
@@ -139,7 +160,7 @@ export function InventoryPanel({ pallets }: { pallets: Pallet[] }) {
                       <td className="max-w-64 break-words px-5 py-4 font-medium">{pallet.productName}</td>
                       <td className="max-w-48 break-words px-5 py-4 font-mono text-stone-600">{pallet.productSku}</td>
                       <td className="max-w-48 break-words px-5 py-4 font-mono text-stone-600">{pallet.batchNumber}</td>
-                      <td className="px-5 py-4 tabular-nums">{pallet.quantity}</td>
+                      <td className="px-5 py-4 tabular-nums">{pallet.quantity === null || pallet.unitOfMeasure === null ? "Sin definir" : `${formatQuantity.format(pallet.quantity)} ${pallet.unitOfMeasure}`}</td>
                       <td className="px-5 py-4">
                         <span className={`inline-block whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-bold ${STATUS_CLASSES[pallet.status]}`}>
                           {PALLET_STATUS_LABELS[pallet.status]}
