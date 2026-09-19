@@ -28,7 +28,11 @@ export default async function StockReportPage() {
         <div role="status" className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-amber-800">La carga de stock estará disponible cuando se aplique la migración correspondiente en Supabase.</div>
       ) : (
         <>
-          <StockReportForm distributors={data.distributors} products={data.products} />
+          {data.distributor ? (
+            <StockReportForm products={data.products} />
+          ) : (
+            <div role="alert" className="rounded-2xl border border-red-200 bg-red-50 p-6 text-sm text-red-700">Tu cuenta debe estar asociada a una única distribuidora para informar stock.</div>
+          )}
 
           <section aria-labelledby="reported-stock-title" className="space-y-4">
             <div>
@@ -39,9 +43,16 @@ export default async function StockReportPage() {
               <div className="rounded-2xl border border-stone-200 bg-white p-8 text-center text-sm text-stone-500">Todavía no informaste stock de productos.</div>
             ) : (
               <div className="overflow-x-auto rounded-2xl border border-stone-200 bg-white">
-                <table className="w-full min-w-[760px] text-left text-sm">
-                  <thead className="bg-stone-100/80 text-stone-500"><tr><th scope="col" className="px-5 py-4 font-semibold">Producto</th><th scope="col" className="px-5 py-4 font-semibold">Distribuidora</th><th scope="col" className="px-5 py-4 text-right font-semibold">Stock actual</th><th scope="col" className="px-5 py-4 text-right font-semibold">Consumo diario</th><th scope="col" className="px-5 py-4 font-semibold">Actualizado</th></tr></thead>
-                  <tbody className="divide-y divide-stone-200">{data.entries.map((entry) => <tr key={entry.id}><td className="px-5 py-4"><p className="font-medium">{entry.productName}</p><p className="mt-0.5 font-mono text-xs text-stone-500">{entry.productSku}</p></td><td className="px-5 py-4">{entry.distributorName}</td><td className="px-5 py-4 text-right font-mono">{NUMBER_FORMATTER.format(entry.currentStock)}</td><td className="px-5 py-4 text-right font-mono">{NUMBER_FORMATTER.format(entry.dailyConsumption)}</td><td className="px-5 py-4 text-stone-500">{DATE_FORMATTER.format(new Date(entry.updatedAt))}</td></tr>)}</tbody>
+                <table className="w-full min-w-[980px] text-left text-sm">
+                  <thead className="bg-stone-100/80 text-stone-500"><tr><th scope="col" className="px-5 py-4 font-semibold">Producto</th><th scope="col" className="px-5 py-4 font-semibold">Distribuidora</th><th scope="col" className="px-5 py-4 text-right font-semibold">Stock actual</th><th scope="col" className="px-5 py-4 text-right font-semibold">Consumo diario</th><th scope="col" className="px-5 py-4 text-right font-semibold">Días restantes</th><th scope="col" className="px-5 py-4 font-semibold">Alerta de stock</th><th scope="col" className="px-5 py-4 font-semibold">Actualizado</th></tr></thead>
+                  <tbody className="divide-y divide-stone-200">{data.entries.map((entry) => {
+                    const risk = entry.riskLevel === "critical"
+                      ? { label: "CRÍTICA", className: "bg-red-100 text-red-700" }
+                      : entry.riskLevel === "caution"
+                        ? { label: "PRECAUCIÓN", className: "bg-amber-100 text-amber-700" }
+                        : { label: "SIN ALERTA", className: "bg-emerald-100 text-emerald-700" };
+                    return <tr key={entry.id}><td className="px-5 py-4"><p className="font-medium">{entry.productName}</p><p className="mt-0.5 font-mono text-xs text-stone-500">{entry.productSku}</p></td><td className="px-5 py-4">{entry.distributorName}</td><td className="px-5 py-4 text-right font-mono">{NUMBER_FORMATTER.format(entry.currentStock)}</td><td className="px-5 py-4 text-right font-mono">{NUMBER_FORMATTER.format(entry.dailyConsumption)}</td><td className="px-5 py-4 text-right font-mono font-semibold">{NUMBER_FORMATTER.format(entry.stockDays)}</td><td className="px-5 py-4"><span className={`inline-block rounded-full px-3 py-1.5 text-xs font-bold ${risk.className}`}>{risk.label}</span></td><td className="px-5 py-4 text-stone-500">{DATE_FORMATTER.format(new Date(entry.updatedAt))}</td></tr>;
+                  })}</tbody>
                 </table>
               </div>
             )}

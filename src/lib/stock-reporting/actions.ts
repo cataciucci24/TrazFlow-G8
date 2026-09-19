@@ -22,13 +22,12 @@ export async function saveDistributorStock(
     return { ...EMPTY_STATE, error: "No tenés permisos para informar stock de una distribuidora." };
   }
 
-  const distributorId = String(formData.get("distributorId") ?? "").trim();
   const productId = String(formData.get("productId") ?? "").trim();
   const currentStock = Number(formData.get("currentStock"));
   const dailyConsumption = Number(formData.get("dailyConsumption"));
 
-  if (!distributorId || !productId) {
-    return { ...EMPTY_STATE, error: "Seleccioná la distribuidora y el producto." };
+  if (!productId) {
+    return { ...EMPTY_STATE, error: "Seleccioná el producto." };
   }
   if (!Number.isInteger(currentStock) || currentStock < 0) {
     return { ...EMPTY_STATE, error: "El stock actual debe ser un número entero mayor o igual a cero." };
@@ -38,13 +37,12 @@ export async function saveDistributorStock(
   }
 
   const supabase = await createClient();
-  const [assignmentResult, productResult] = await Promise.all([
+  const [assignmentsResult, productResult] = await Promise.all([
     supabase
       .from("distributor_users")
       .select("distributor_id")
       .eq("user_id", profile.id)
-      .eq("distributor_id", distributorId)
-      .maybeSingle(),
+      .limit(2),
     supabase
       .from("products")
       .select("id")
@@ -53,12 +51,14 @@ export async function saveDistributorStock(
       .maybeSingle(),
   ]);
 
-  if (assignmentResult.error || !assignmentResult.data) {
-    return { ...EMPTY_STATE, error: "La distribuidora seleccionada no está asociada a tu usuario." };
+  if (assignmentsResult.error || assignmentsResult.data?.length !== 1) {
+    return { ...EMPTY_STATE, error: "Tu cuenta debe estar asociada a una única distribuidora para informar stock." };
   }
   if (productResult.error || !productResult.data) {
     return { ...EMPTY_STATE, error: "El producto seleccionado no está disponible para tu empresa." };
   }
+
+  const distributorId = assignmentsResult.data[0].distributor_id;
 
   const { error } = await supabase.from("distributor_product_stocks").upsert({
     company_id: profile.companyId,

@@ -55,6 +55,8 @@ export type DistributorStockEntry = {
   productSku: string;
   currentStock: number;
   dailyConsumption: number;
+  stockDays: number;
+  riskLevel: StockRiskLevel | null;
   updatedAt: string;
 };
 

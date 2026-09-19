@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { calculateStockDays, getStockRiskLevel } from "@/lib/stock-alerts/queries";
 import type { DistributorStockEntry } from "@/lib/types";
 
 export type StockReportingDistributor = { id: string; name: string };
@@ -21,7 +22,7 @@ type RawStockEntry = {
 };
 
 export type StockReportingData = {
-  distributors: StockReportingDistributor[];
+  distributor: StockReportingDistributor | null;
   products: StockReportingProduct[];
   entries: DistributorStockEntry[];
   sourceAvailable: boolean;
@@ -46,7 +47,7 @@ export async function getStockReportingData(userId: string, companyId: string): 
   ]);
 
   if (entriesResult.error?.code === "PGRST205") {
-    return { distributors: [], products: [], entries: [], sourceAvailable: false };
+    return { distributor: null, products: [], entries: [], sourceAvailable: false };
   }
 
   const firstError = distributorsResult.error ?? productsResult.error ?? entriesResult.error;
@@ -62,6 +63,7 @@ export async function getStockReportingData(userId: string, companyId: string): 
   const entries = ((entriesResult.data ?? []) as RawStockEntry[]).map((row) => {
     const distributor = Array.isArray(row.distributors) ? row.distributors[0] : row.distributors;
     const product = Array.isArray(row.products) ? row.products[0] : row.products;
+    const stockDays = calculateStockDays(row.current_stock, row.daily_consumption);
     return {
       id: row.id,
       distributorId: row.distributor_id,
@@ -71,12 +73,14 @@ export async function getStockReportingData(userId: string, companyId: string): 
       productSku: product?.sku ?? "—",
       currentStock: row.current_stock,
       dailyConsumption: row.daily_consumption,
+      stockDays,
+      riskLevel: getStockRiskLevel(stockDays),
       updatedAt: row.updated_at,
     };
   });
 
   return {
-    distributors,
+    distributor: distributors.length === 1 ? distributors[0] : null,
     products: (productsResult.data ?? []) as StockReportingProduct[],
     entries,
     sourceAvailable: true,
