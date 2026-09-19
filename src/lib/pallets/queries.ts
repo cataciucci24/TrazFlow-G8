@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import type { ExpirationAlert, Lot, Pallet } from "@/lib/types";
+import type { ExistingProduct, ExpirationAlert, Lot, Pallet } from "@/lib/types";
 
 /**
  * Fila cruda que devuelve Postgrest al embeber batches/products. El cliente
@@ -138,6 +138,22 @@ export async function getCompanyLots(): Promise<Lot[]> {
       productSku: product?.sku ?? "—",
     };
   });
+}
+
+/** Productos disponibles para los formularios de logística. */
+export async function getCompanyProducts(companyId: string): Promise<ExistingProduct[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("products")
+    .select("name, sku")
+    .eq("company_id", companyId)
+    .order("sku");
+
+  if (error) {
+    throw new Error(`No se pudieron leer los productos (${error.code}: ${error.message}).`, { cause: error });
+  }
+
+  return (data ?? []) as ExistingProduct[];
 }
 
 type RawExpirationAlertRow = {

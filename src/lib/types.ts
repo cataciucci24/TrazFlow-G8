@@ -45,6 +45,21 @@ export type DistributorStockAlert = {
   riskLevel: StockRiskLevel;
 };
 
+/** Registro editable de stock informado por una distribuidora. */
+export type DistributorStockEntry = {
+  id: string;
+  distributorId: string;
+  distributorName: string;
+  productId: string;
+  productName: string;
+  productSku: string;
+  currentStock: number;
+  dailyConsumption: number;
+  stockDays: number;
+  riskLevel: StockRiskLevel | null;
+  updatedAt: string;
+};
+
 /** Orden de despacho (fila de la tabla `dispatch_orders`). */
 export type DispatchOrder = {
   id: string;

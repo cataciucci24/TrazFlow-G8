@@ -38,9 +38,9 @@ export default async function AlertsPage() {
         <ExpirationAlertSummary alerts={expirationAlerts} />
       </section>
 
-      <StockAlerts {...stockAlerts} />
-
       <ExpirationAlerts alerts={expirationAlerts} />
+
+      <StockAlerts {...stockAlerts} />
     </div>
   );
 }

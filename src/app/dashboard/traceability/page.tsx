@@ -10,9 +10,10 @@ import { LotsTable } from "@/components/traceability/lots-table";
 import { TraceabilityTabs } from "@/components/traceability/traceability-tabs";
 import { hasRole, requireUserProfile } from "@/lib/auth/session";
 import { getPalletTraceability, getLotTraceability } from "@/lib/traceability/queries";
-import { getCompanyPallets, getCompanyLots } from "@/lib/pallets/queries";
+import { getCompanyPallets, getCompanyLots, getCompanyProducts } from "@/lib/pallets/queries";
 import { PALLET_STATUS_LABELS } from "@/lib/pallets/labels";
 import { NewPalletForm } from "@/components/pallets/new-pallet-form";
+import { NewLotForm } from "@/components/pallets/new-lot-form";
 import { PalletActions } from "@/components/pallets/pallet-actions";
 import type { ExistingProduct, Pallet, ProductBatch } from "@/lib/types";
 
@@ -40,7 +41,10 @@ export default async function TraceabilityPage({
 
   const resolvedSearchParams = await searchParams;
   const view = resolvedSearchParams?.view === "lotes" ? "lotes" : "pallets";
-  const pallets = await getCompanyPallets(profile.companyId);
+  const [pallets, companyProducts] = await Promise.all([
+    getCompanyPallets(profile.companyId),
+    getCompanyProducts(profile.companyId),
+  ]);
   const existingBatches: ProductBatch[] = Array.from(
     new Map(pallets.map((pallet) => [`${pallet.productSku} ${pallet.batchNumber}`, { productSku: pallet.productSku, batchNumber: pallet.batchNumber }])).values(),
   );
@@ -66,7 +70,7 @@ export default async function TraceabilityPage({
       </div>
 
       {view === "lotes" ? (
-        <LotesTabContent pallets={pallets} rawLote={resolvedSearchParams?.lote} />
+        <LotesTabContent pallets={pallets} existingProducts={companyProducts} rawLote={resolvedSearchParams?.lote} />
       ) : (
         <PalletsTabContent
           pallets={pallets}
@@ -164,7 +168,7 @@ async function PalletsTabContent({
   );
 }
 
-async function LotesTabContent({ pallets, rawLote }: { pallets: Pallet[]; rawLote?: string }) {
+async function LotesTabContent({ pallets, existingProducts, rawLote }: { pallets: Pallet[]; existingProducts: ExistingProduct[]; rawLote?: string }) {
   const normalizedLote = typeof rawLote === "string" ? rawLote.trim() : "";
   const isTooLong = normalizedLote.length > 512;
   const shouldSearch = normalizedLote.length > 0 && !isTooLong;
@@ -175,6 +179,10 @@ async function LotesTabContent({ pallets, rawLote }: { pallets: Pallet[]; rawLot
 
   return (
     <>
+      <div className="flex justify-end">
+        <NewLotForm existingProducts={existingProducts} />
+      </div>
+
       <div>
         <LotSearch defaultLot={typeof rawLote === "string" ? rawLote : ""} lotNumbers={lots.map((lot) => lot.batchNumber)} />
       </div>

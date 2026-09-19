@@ -22,6 +22,7 @@ export function DashboardSidebar({ role }: DashboardSidebarProps) {
   const isTraceability = pathname.startsWith("/dashboard/traceability");
   const isInventory = pathname.startsWith("/dashboard/inventory");
   const isAlerts = pathname.startsWith("/dashboard/alerts");
+  const isStockReport = pathname.startsWith("/dashboard/stock-report");
   const detailTitle = role === "warehouse_operator" ? "Confirmar despacho" : role === "distributor_operator" ? "Confirmar recepción" : "Órdenes de despacho";
 
   const links = role === "logistics_manager"
@@ -31,7 +32,12 @@ export function DashboardSidebar({ role }: DashboardSidebarProps) {
         { href: "/dashboard/alerts", label: "Alertas", icon: <AlertIcon />, active: isAlerts },
         { href: "/dashboard/traceability", label: "Seguimiento", icon: <PalletIcon />, active: isTraceability },
       ]
-    : [{ href: "/dashboard", label: detailTitle, icon: <ScanIcon />, active: pathname === "/dashboard" || pathname.startsWith("/dashboard/orders/") }];
+    : role === "distributor_operator"
+      ? [
+          { href: "/dashboard", label: detailTitle, icon: <ScanIcon />, active: pathname === "/dashboard" || pathname.startsWith("/dashboard/orders/") },
+          { href: "/dashboard/stock-report", label: "Mi stock", icon: <InventoryIcon />, active: isStockReport },
+        ]
+      : [{ href: "/dashboard", label: detailTitle, icon: <ScanIcon />, active: pathname === "/dashboard" || pathname.startsWith("/dashboard/orders/") }];
 
   return (
     <aside className="flex w-full shrink-0 flex-col border-b border-stone-200 bg-white lg:sticky lg:top-0 lg:h-screen lg:w-[284px] lg:border-r lg:border-b-0">
