@@ -12,12 +12,14 @@ import { ConfirmDispatchButton } from "@/components/orders/confirm-dispatch-butt
 import { DissociatePalletButton } from "@/components/orders/dissociate-pallet-button";
 import { PalletValidationPanel } from "@/components/pallet-validation/pallet-validation-panel";
 import { PalletReceptionPanel } from "@/components/pallet-reception/pallet-reception-panel";
+import { OrderNotificationsPanel } from "@/components/orders/order-notifications-panel";
 import {
   getOrderDispatchDiscrepancies,
   getOrderPalletValidations,
 } from "@/lib/pallet-validation/queries";
 import { getOrderPalletReceptions } from "@/lib/pallet-reception/queries";
 import { getOrderScanHistory } from "@/lib/scans/queries";
+import { getOrderNotifications } from "@/lib/order-notifications/queries";
 
 export const metadata: Metadata = {
   title: "Detalle de orden | TrazFlow",
@@ -46,6 +48,8 @@ export default async function DispatchOrderDetailPage({
   const canAssociate = isLogisticsManager && order.status === "draft";
   const needsPalletValidations = isWarehouseOperator || canAssociate;
 
+  const canSeeNotifications = isLogisticsManager || isWarehouseOperator;
+
   const [
     associatedPallets,
     availablePallets,
@@ -54,6 +58,7 @@ export default async function DispatchOrderDetailPage({
     palletReceptions,
     dispatchScanHistory,
     receptionScanHistory,
+    orderNotifications,
   ] = await Promise.all([
     getPalletsForOrder(id),
     canAssociate ? getAvailablePallets(profile.companyId) : Promise.resolve([]),
@@ -66,6 +71,7 @@ export default async function DispatchOrderDetailPage({
       : Promise.resolve([]),
     isWarehouseOperator ? getOrderScanHistory(id, "dispatch") : Promise.resolve([]),
     isDistributorOperator ? getOrderScanHistory(id, "reception") : Promise.resolve([]),
+    canSeeNotifications ? getOrderNotifications(id) : Promise.resolve([]),
   ]);
 
   const validatedAtByPalletId = new Map(
@@ -99,6 +105,7 @@ export default async function DispatchOrderDetailPage({
           initialScanHistory={dispatchScanHistory}
         />
         {canConfirm && <ConfirmDispatchButton orderId={order.id} missingPalletsCount={missingPalletsCount} />}
+        <OrderNotificationsPanel notifications={orderNotifications} />
       </div>
     );
   }
@@ -203,6 +210,8 @@ export default async function DispatchOrderDetailPage({
           />
         </div>
       )}
+
+      <OrderNotificationsPanel notifications={orderNotifications} />
 
       <div className="rounded-2xl border border-stone-200 bg-white p-6">
         <h2 className="mb-4 text-base font-semibold">
