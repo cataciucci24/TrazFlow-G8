@@ -30,6 +30,21 @@ export type Distributor = {
   name: string;
 };
 
+/** Nivel de riesgo de quiebre según los días de cobertura disponibles. */
+export type StockRiskLevel = "critical" | "caution";
+
+/** Alerta calculada para el stock de un producto en una distribuidora. */
+export type DistributorStockAlert = {
+  id: string;
+  distributorName: string;
+  productName: string;
+  productSku: string;
+  currentStock: number;
+  dailyConsumption: number;
+  stockDays: number;
+  riskLevel: StockRiskLevel;
+};
+
 /** Orden de despacho (fila de la tabla `dispatch_orders`). */
 export type DispatchOrder = {
   id: string;
