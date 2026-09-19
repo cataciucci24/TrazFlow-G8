@@ -51,8 +51,11 @@ export async function saveDistributorStock(
       .maybeSingle(),
   ]);
 
-  if (assignmentsResult.error || assignmentsResult.data?.length !== 1) {
-    return { ...EMPTY_STATE, error: "Tu cuenta debe estar asociada a una única distribuidora para informar stock." };
+  if (assignmentsResult.error) {
+    return { ...EMPTY_STATE, error: "No pudimos identificar la distribuidora de tu cuenta. Intentá nuevamente." };
+  }
+  if (assignmentsResult.data?.length !== 1) {
+    return { ...EMPTY_STATE, error: "La distribuidora de tu cuenta no está configurada correctamente. Contactá al administrador." };
   }
   if (productResult.error || !productResult.data) {
     return { ...EMPTY_STATE, error: "El producto seleccionado no está disponible para tu empresa." };
