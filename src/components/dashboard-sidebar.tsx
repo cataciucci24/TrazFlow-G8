@@ -20,12 +20,14 @@ export function DashboardSidebar({ role }: DashboardSidebarProps) {
   const roleDetail = roleDetails[role];
   const isOrders = pathname.startsWith("/dashboard/orders");
   const isTraceability = pathname.startsWith("/dashboard/traceability");
+  const isStagnant = pathname.startsWith("/dashboard/stagnant");
   const detailTitle = role === "warehouse_operator" ? "Confirmar despacho" : role === "distributor_operator" ? "Confirmar recepción" : "Órdenes de despacho";
 
   const links = role === "logistics_manager"
     ? [
         { href: "/dashboard/orders", label: "Órdenes de despacho", icon: <OrdersIcon />, active: isOrders },
         { href: "/dashboard/traceability", label: "Seguimiento de pallets", icon: <PalletIcon />, active: isTraceability },
+        { href: "/dashboard/stagnant", label: "Mercadería inmovilizada", icon: <AlertIcon />, active: isStagnant },
       ]
     : [{ href: "/dashboard", label: detailTitle, icon: <ScanIcon />, active: pathname === "/dashboard" || pathname.startsWith("/dashboard/orders/") }];
 
@@ -67,4 +69,8 @@ function PalletIcon() {
 
 function ScanIcon() {
   return <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5 fill-none stroke-current" strokeWidth="2"><path d="M4 9V5h4M20 9V5h-4M4 15v4h4M20 15v4h-4M8 8h3v3H8zM13 8h3v3h-3zM8 13h3v3H8zM13 13h3v3h-3z" /></svg>;
+}
+
+function AlertIcon() {
+  return <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5 fill-none stroke-current" strokeWidth="2"><path d="m12 4 9 16H3z" /><path d="M12 9v5M12 18h.01" /></svg>;
 }
