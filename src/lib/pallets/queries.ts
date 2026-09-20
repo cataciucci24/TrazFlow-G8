@@ -15,10 +15,17 @@ type RawPalletRow = {
   current_location: string | null;
   quantity: number | null;
   unit_of_measure: Pallet["unitOfMeasure"];
+  created_at: string;
   batches:
     | { batch_number: string; products: { name: string; sku: string } | { name: string; sku: string }[] | null }
     | { batch_number: string; products: { name: string; sku: string } | { name: string; sku: string }[] | null }[]
     | null;
+};
+
+export type StalePallet = Pallet & {
+  createdAt: string;
+  lastMovementAt: string | null;
+  daysWithoutMovement: number;
 };
 
 function mapPalletRow(row: RawPalletRow): Pallet {
@@ -43,7 +50,7 @@ function mapPalletRow(row: RawPalletRow): Pallet {
 }
 
 const PALLET_SELECT =
-  "id, qr_code, status, current_location, quantity, unit_of_measure, batches ( batch_number, products ( name, sku ) )";
+  "id, qr_code, status, current_location, quantity, unit_of_measure, created_at, batches ( batch_number, products ( name, sku ) )";
 
 /** Pallets de la empresa disponibles para asociar a una orden (en depósito, sin asignar). */
 export async function getAvailablePallets(companyId: string): Promise<Pallet[]> {
@@ -79,6 +86,57 @@ export async function getCompanyPallets(companyId: string): Promise<Pallet[]> {
   }
 
   return (data ?? []).map(mapPalletRow);
+}
+
+/** Mercadería cuya última actividad supera el umbral indicado, ordenada por antigüedad. */
+export async function getStalePallets(
+  companyId: string,
+  thresholdDays: number,
+): Promise<StalePallet[]> {
+  const supabase = await createClient();
+  const { data: palletData, error: palletError } = await supabase
+    .from("pallets")
+    .select(PALLET_SELECT)
+    .eq("company_id", companyId)
+    .order("created_at", { ascending: true });
+
+  if (palletError) {
+    throw new Error(`No se pudieron leer los pallets inmovilizados (${palletError.code}: ${palletError.message}).`, { cause: palletError });
+  }
+
+  const pallets = (palletData ?? []) as unknown as RawPalletRow[];
+  if (pallets.length === 0) return [];
+
+  const palletIds = pallets.map((pallet) => pallet.id);
+  const { data: movementData, error: movementError } = await supabase
+    .from("movements")
+    .select("pallet_id, created_at")
+    .in("pallet_id", palletIds)
+    .order("created_at", { ascending: false });
+
+  if (movementError) {
+    throw new Error(`No se pudo consultar la actividad de los pallets (${movementError.code}: ${movementError.message}).`, { cause: movementError });
+  }
+
+  const latestMovementByPallet = new Map<string, string>();
+  for (const movement of movementData ?? []) {
+    if (!latestMovementByPallet.has(movement.pallet_id)) {
+      latestMovementByPallet.set(movement.pallet_id, movement.created_at);
+    }
+  }
+
+  const now = Date.now();
+  const millisecondsPerDay = 24 * 60 * 60 * 1000;
+  return pallets
+    .map((row) => {
+      const pallet = mapPalletRow(row);
+      const lastMovementAt = latestMovementByPallet.get(row.id) ?? null;
+      const activityAt = lastMovementAt ?? row.created_at;
+      const daysWithoutMovement = Math.max(0, Math.floor((now - new Date(activityAt).getTime()) / millisecondsPerDay));
+      return { ...pallet, createdAt: row.created_at, lastMovementAt, daysWithoutMovement };
+    })
+    .filter((pallet) => pallet.daysWithoutMovement >= thresholdDays)
+    .sort((left, right) => right.daysWithoutMovement - left.daysWithoutMovement);
 }
 
 /** Pallets ya asociados a una orden de despacho. */
