@@ -5,14 +5,10 @@ import type { ProductBatch } from "@/lib/types";
 
 const fieldClass = "form-control mt-2 font-normal";
 
-const NEW_LOT = "__new__";
-
 /**
- * Antes este campo era texto libre: un typo en el lote creaba un lote nuevo
- * en silencio (upsert por product_id+batch_number) en vez de reusar el
- * existente, lo que rompe la trazabilidad por lote. Acá se obliga a elegir
- * uno de los lotes ya registrados para el SKU tipeado, o a declarar
- * explícitamente que es un lote nuevo.
+ * La creación de lotes se realiza desde la sección Lotes. Al registrar o
+ * editar un pallet se exige asociarlo a un lote ya existente para preservar
+ * la trazabilidad y, en particular, su fecha real de vencimiento.
  */
 export function LotField({
   productSku,
@@ -33,11 +29,7 @@ export function LotField({
   ).sort((a, b) => a.localeCompare(b, "es-AR"));
 
   const [selection, setSelection] = useState(defaultValue);
-  const [touched, setTouched] = useState(defaultValue !== "");
-
-  const knownSelection = touched && selection !== NEW_LOT && matchingLots.includes(selection);
-  const isNew = touched ? !knownSelection : matchingLots.length === 0;
-  const selectValue = isNew ? NEW_LOT : touched ? selection : "";
+  const selectedLot = matchingLots.includes(selection) ? selection : "";
 
   return (
     <div className="grid gap-2">
@@ -45,29 +37,16 @@ export function LotField({
         Lote
         <select
           required
-          value={selectValue}
-          onChange={(event) => {
-            setTouched(true);
-            setSelection(event.target.value);
-          }}
+          disabled={matchingLots.length === 0}
+          value={selectedLot}
+          onChange={(event) => setSelection(event.target.value)}
           className={fieldClass}
         >
-          {matchingLots.length > 0 && <option value="" disabled>Seleccioná un lote existente</option>}
-          <option value={NEW_LOT}>＋ Registrar lote nuevo</option>
+          <option value="" disabled>{matchingLots.length > 0 ? "Seleccioná un lote existente" : "No hay lotes para este producto"}</option>
           {matchingLots.map((lot) => <option key={lot} value={lot}>{lot}</option>)}
         </select>
       </label>
-      {isNew ? (
-        <input
-          required
-          name="batchNumber"
-          placeholder="LOTE-0001"
-          defaultValue={matchingLots.includes(defaultValue) ? "" : defaultValue}
-          className={fieldClass}
-        />
-      ) : (
-        <input type="hidden" name="batchNumber" value={selectValue} />
-      )}
+      {matchingLots.length === 0 ? <p className="text-xs text-stone-500">Creá primero un lote para este producto desde la sección Lotes.</p> : <input type="hidden" name="batchNumber" value={selectedLot} />}
     </div>
   );
 }
