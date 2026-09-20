@@ -3,7 +3,7 @@
 import { useState } from "react";
 import type { ProductBatch } from "@/lib/types";
 
-const fieldClass = "mt-2 w-full rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm font-normal normal-case tracking-normal text-slate-950 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100";
+const fieldClass = "form-control mt-2 font-normal";
 
 const NEW_LOT = "__new__";
 

@@ -29,7 +29,7 @@ export function LotSearch({ defaultLot, lotNumbers }: LotSearchProps) {
           autoComplete="off"
           list="existing-lot-numbers"
           placeholder="LOTE-0001"
-          className="w-full rounded-xl border border-stone-200 bg-white px-4 py-3 text-sm text-slate-950 placeholder-stone-400 outline-none transition-all focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+          className="form-control"
         />
         <datalist id="existing-lot-numbers">
           {lotNumbers.map((number) => <option key={number} value={number} />)}
@@ -38,7 +38,7 @@ export function LotSearch({ defaultLot, lotNumbers }: LotSearchProps) {
 
       <button
         type="submit"
-        className="rounded-xl bg-amber-500 px-5 py-3 text-sm font-bold text-white shadow-sm transition-colors hover:bg-amber-600"
+        className="button-primary"
       >
         Buscar
       </button>

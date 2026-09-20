@@ -20,6 +20,7 @@ import {
 import { getOrderPalletReceptions } from "@/lib/pallet-reception/queries";
 import { getOrderScanHistory } from "@/lib/scans/queries";
 import { getOrderNotifications } from "@/lib/order-notifications/queries";
+import { OrderStatusBadge, PageHeader, SectionHeader, TableShell } from "@/components/ui/design-system";
 
 export const metadata: Metadata = {
   title: "Detalle de orden | TrazFlow",
@@ -88,16 +89,8 @@ export default async function DispatchOrderDetailPage({
 
   if (isWarehouseOperator) {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between gap-4">
-          <h1 className="text-2xl font-bold">Confirmar despacho</h1>
-          <Link
-            href="/dashboard"
-            className="rounded-xl border border-stone-200 bg-white px-4 py-2 text-sm font-semibold text-stone-600 transition-colors hover:bg-stone-50"
-          >
-            Volver
-          </Link>
-        </div>
+      <div className="app-page">
+        <PageHeader title="Confirmar despacho" description="Validá los pallets asignados antes de confirmar la salida." action={<Link href="/dashboard" className="button-secondary">Volver</Link>} />
         <PalletValidationPanel
           orderId={order.id}
           pallets={palletValidations}
@@ -112,40 +105,20 @@ export default async function DispatchOrderDetailPage({
 
   if (isDistributorOperator) {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between gap-4">
-          <h1 className="text-2xl font-bold">Confirmar recepción</h1>
-          <Link
-            href="/dashboard"
-            className="rounded-xl border border-stone-200 bg-white px-4 py-2 text-sm font-semibold text-stone-600 transition-colors hover:bg-stone-50"
-          >
-            Volver
-          </Link>
-        </div>
+      <div className="app-page">
+        <PageHeader title="Confirmar recepción" description="Registrá la recepción de los pallets incluidos en la orden." action={<Link href="/dashboard" className="button-secondary">Volver</Link>} />
         <PalletReceptionPanel orderId={order.id} pallets={palletReceptions} canReceive={order.status === "confirmed"} initialScanHistory={receptionScanHistory} />
       </div>
     );
   }
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-col justify-between gap-4 border-b border-stone-200 pb-6 sm:flex-row sm:items-center">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">
-            {isDistributorOperator ? "Confirmar recepción" : "Confirmar despacho"}
-          </h1>
-          <p className="mt-1 font-mono text-sm text-stone-500">{order.id}</p>
-        </div>
+    <div className="app-page">
+      <PageHeader title="Detalle de orden" description={`Código ${order.id}`} action={<Link href="/dashboard/orders" className="button-secondary">Volver</Link>} />
 
-        <Link
-          href="/dashboard/orders"
-          className="rounded-xl border border-stone-200 bg-white px-4 py-2 text-sm font-semibold text-stone-600 transition-colors hover:bg-stone-50"
-        >
-          Volver
-        </Link>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 rounded-2xl border border-stone-200 bg-white p-6 text-sm sm:grid-cols-2">
+      <section className="section-stack">
+      <SectionHeader title="Información de la orden" description="Destino, fechas y estado operativo actual." />
+      <div className="surface grid grid-cols-1 gap-5 p-6 text-sm sm:grid-cols-2">
         <div>
           <p className="text-stone-500">Distribuidor de destino</p>
           <p className="font-semibold">{order.distributorName}</p>
@@ -153,13 +126,7 @@ export default async function DispatchOrderDetailPage({
         <div>
           <p className="text-stone-500">Estado</p>
           <p className="mt-1 inline-block">
-            <span className={`rounded-full px-3 py-1 text-xs font-bold ${
-              order.status === "confirmed" 
-                ? "bg-emerald-50 text-emerald-600"
-                : "bg-amber-50 text-amber-600"
-            }`}>
-              {ORDER_STATUS_LABELS[order.status]}
-            </span>
+            <OrderStatusBadge status={order.status} />
           </p>
         </div>
         <div>
@@ -179,9 +146,10 @@ export default async function DispatchOrderDetailPage({
           </div>
         )}
       </div>
+      </section>
 
       {isWarehouseOperator && (
-        <div className="rounded-2xl border border-stone-200 bg-white p-6">
+        <div className="surface p-6">
           <PalletValidationPanel
             orderId={order.id}
             pallets={palletValidations}
@@ -192,7 +160,7 @@ export default async function DispatchOrderDetailPage({
       )}
 
       {isDistributorOperator && (
-        <div className="rounded-2xl border border-stone-200 bg-white p-6">
+        <div className="surface p-6">
           <PalletReceptionPanel
             orderId={order.id}
             pallets={palletReceptions}
@@ -213,18 +181,16 @@ export default async function DispatchOrderDetailPage({
 
       <OrderNotificationsPanel notifications={orderNotifications} />
 
-      <div className="rounded-2xl border border-stone-200 bg-white p-6">
-        <h2 className="mb-4 text-base font-semibold">
-          Pallets asociados
-        </h2>
+      <section className="section-stack">
+        <SectionHeader title="Pallets asociados" description="Mercadería vinculada actualmente a esta orden." />
 
         {associatedPallets.length === 0 ? (
-          <p className="text-sm text-stone-500">
+          <p className="surface p-6 text-sm text-stone-500">
             Todavía no hay pallets asociados a esta orden.
           </p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
+          <TableShell label="Pallets asociados a la orden">
+            <table className="data-table min-w-[700px]">
               <thead>
                 <tr className="border-b border-stone-200 text-stone-500">
                   <th className="py-3 font-medium">QR</th>
@@ -238,7 +204,7 @@ export default async function DispatchOrderDetailPage({
               </thead>
               <tbody className="divide-y divide-stone-200">
                 {associatedPallets.map((pallet) => (
-                  <tr key={pallet.id} className="transition-colors hover:bg-amber-50/40">
+                  <tr key={pallet.id} className="transition-colors hover:bg-[var(--brand-soft)]">
                     <td className="py-3 font-mono font-semibold">{pallet.qrCode}</td>
                     <td className="py-3">
                       {pallet.productName} ({pallet.productSku})
@@ -260,26 +226,24 @@ export default async function DispatchOrderDetailPage({
                 ))}
               </tbody>
             </table>
-          </div>
+          </TableShell>
         )}
-      </div>
+      </section>
 
       {canAssociate ? (
-        <div className="rounded-2xl border border-stone-200 bg-white p-6">
-          <h2 className="mb-4 text-base font-semibold">
-            Asociar pallets disponibles
-          </h2>
+        <section className="section-stack">
+          <SectionHeader title="Asociar pallets disponibles" description="Seleccioná pallets en depósito para incorporarlos a la orden." />
 
           {availablePallets.length === 0 ? (
-            <p className="text-sm text-stone-500">
+            <p className="surface p-6 text-sm text-stone-500">
               No hay pallets en depósito disponibles para asociar.
             </p>
           ) : (
-            <AssociatePalletsForm orderId={order.id} pallets={availablePallets} />
+            <div className="surface p-6"><AssociatePalletsForm orderId={order.id} pallets={availablePallets} /></div>
           )}
-        </div>
+        </section>
       ) : isLogisticsManager ? (
-        <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-500">
+        <div className="feedback border-slate-200 bg-slate-50 text-slate-600">
           Esta orden ya no admite asociar pallets (estado:{" "}
           <span className="font-medium text-slate-950">{ORDER_STATUS_LABELS[order.status]}</span>).
         </div>

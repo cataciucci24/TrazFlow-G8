@@ -1,5 +1,6 @@
 import type { OrderNotification } from "@/lib/order-notifications/types";
 import { ORDER_NOTIFICATION_LABELS } from "@/lib/order-notifications/labels";
+import { SectionHeader } from "@/components/ui/design-system";
 
 type OrderNotificationsPanelProps = {
   notifications: OrderNotification[];
@@ -15,8 +16,9 @@ export function OrderNotificationsPanel({
   notifications,
 }: OrderNotificationsPanelProps) {
   return (
-    <div className="rounded-2xl border border-stone-200 bg-white p-6">
-      <h2 className="mb-4 text-base font-semibold">Notificaciones</h2>
+    <section className="section-stack">
+      <SectionHeader title="Notificaciones" description="Inconsistencias y eventos registrados para esta orden." />
+      <div className="surface p-6">
 
       {notifications.length === 0 ? (
         <p className="text-sm text-stone-500">
@@ -26,9 +28,7 @@ export function OrderNotificationsPanel({
         <ul className="divide-y divide-stone-200">
           {notifications.map((notification) => (
             <li key={notification.id} className="flex gap-3 py-3 text-sm">
-              <span aria-hidden="true" className="mt-0.5 text-amber-500">
-                ⚠
-              </span>
+              <svg aria-hidden="true" viewBox="0 0 24 24" className="mt-0.5 size-5 shrink-0 fill-none stroke-amber-600" strokeWidth="2"><path d="m12 3 9 17H3z" /><path d="M12 9v5M12 18h.01" /></svg>
               <div className="min-w-0 flex-1">
                 <p className="font-semibold text-slate-950">
                   {ORDER_NOTIFICATION_LABELS[
@@ -44,6 +44,7 @@ export function OrderNotificationsPanel({
           ))}
         </ul>
       )}
-    </div>
+      </div>
+    </section>
   );
 }

@@ -15,7 +15,7 @@ function Tab({ href, active, children }: { href: string; active: boolean; childr
     <Link
       href={href}
       aria-current={active ? "page" : undefined}
-      className={`border-b-2 px-4 py-3 text-sm font-bold transition-colors ${active ? "border-amber-500 text-amber-600" : "border-transparent text-stone-500 hover:text-stone-700"}`}
+      className={`min-h-11 border-b-2 px-4 py-3 text-sm font-bold transition-colors ${active ? "border-[var(--brand)] text-[var(--brand)]" : "border-transparent text-stone-500 hover:text-stone-800"}`}
     >
       {children}
     </Link>

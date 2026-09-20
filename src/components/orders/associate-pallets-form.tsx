@@ -55,7 +55,7 @@ export function AssociatePalletsForm({
               type="checkbox"
               value={pallet.id}
               disabled={isPending}
-              className="h-4 w-4 rounded border-stone-300 text-amber-500 focus:ring-amber-500"
+              className="h-4 w-4 rounded border-stone-300 text-[var(--brand)] focus:ring-[var(--focus)]"
             />
             <label htmlFor={`pallet-${pallet.id}`} className="flex-1">
               <span className="font-mono font-semibold text-slate-950">{pallet.qrCode}</span>{" "}
@@ -75,7 +75,7 @@ export function AssociatePalletsForm({
         <button
           type="submit"
           disabled={isPending}
-          className="rounded-xl bg-amber-500 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-60"
+          className="button-primary disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isPending ? "Asociando..." : "Asociar pallets seleccionados"}
         </button>

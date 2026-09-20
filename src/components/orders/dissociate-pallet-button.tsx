@@ -34,7 +34,7 @@ export function DissociatePalletButton({
         type="button"
         disabled={disabled || isPending}
         onClick={handleClick}
-        className="rounded-md border border-gray-300 px-3 py-1 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60"
+        className="filter-chip disabled:cursor-not-allowed disabled:opacity-60"
       >
         {isPending ? "Quitando..." : "Quitar"}
       </button>
