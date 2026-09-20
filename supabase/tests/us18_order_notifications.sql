@@ -118,10 +118,16 @@ select pg_temp.assert_true(
 -- Se asocia un pallet nuevo a la orden (todavía 'draft') y se valida el que
 -- faltaba originalmente: el próximo bloqueo por faltantes es por un pallet
 -- distinto, así que debe generar una segunda notificación, no reusar la
--- primera. order_pallets_write no restringe por rol, así que este insert de
--- fixture es válido para el warehouse_operator actualmente autenticado.
+-- primera. La policy real de insert en order_pallets es
+-- order_pallets_insert_manager (US3, 20260831235900_add_pallet_validation.sql):
+-- exige auth_role() = 'logistics_manager', no warehouse_operator. Se cambia
+-- de usuario para este insert de fixture y se vuelve a warehouse_operator
+-- después, que es quien necesita invocar validate_order_pallet /
+-- confirm_dispatch_order.
+select set_config('request.jwt.claim.sub', '11000000-0000-0000-0000-000000000002', true);
 insert into order_pallets (order_id, pallet_id, expected)
 values ('71000000-0000-0000-0000-000000000001', '61000000-0000-0000-0000-000000000003', true);
+select set_config('request.jwt.claim.sub', '11000000-0000-0000-0000-000000000001', true);
 
 do $$
 declare result record;
@@ -144,11 +150,16 @@ select pg_temp.assert_true(
   'un bloqueo por un conjunto de pallets faltantes distinto debe crear una segunda notificación, no reusar la primera'
 );
 
+-- Se ordena por `seq` (bigserial), no por created_at: dentro de esta misma
+-- transacción de test, now() es constante, así que las dos filas
+-- dispatch_missing_pallets empatan en created_at y "order by created_at
+-- desc" queda indefinido entre ellas. `seq` sí refleja el orden real de
+-- inserción.
 select pg_temp.assert_true(
   (select missing_pallet_ids from order_notifications
    where order_id = '71000000-0000-0000-0000-000000000001'
      and event_type = 'dispatch_missing_pallets'
-   order by created_at desc limit 1)
+   order by seq desc limit 1)
     = array['61000000-0000-0000-0000-000000000003'::uuid],
   'la segunda notificación debe reflejar el nuevo conjunto de pallets faltantes'
 );
@@ -186,7 +197,36 @@ begin
     values ('21000000-0000-0000-0000-000000000001', '71000000-0000-0000-0000-000000000001', 'dispatch_wrong_pallet', 'intento manual');
     perform pg_temp.assert_true(false, 'logistics_manager no debería poder insertar notificaciones directamente (solo los RPCs, como warehouse_operator)');
   exception when insufficient_privilege or others then
-    null; -- esperado: la policy de insert bloquea a logistics_manager
+    null; -- esperado: sin GRANT de insert sobre la tabla, ni RLS llega a evaluarse
+  end;
+end;
+$$;
+
+-- Este es el caso que importa de verdad: un warehouse_operator SÍ pasa el
+-- rol que exigía la vieja policy (company_id = auth_company_id() and
+-- auth_role() = 'warehouse_operator'), así que una policy de insert basada
+-- solo en esas dos condiciones lo dejaría pasar con datos inventados
+-- (missing_pallet_ids falso, sin haber llamado a validate_order_pallet ni a
+-- confirm_dispatch_order). Con el insert revocado a nivel tabla, ni
+-- warehouse_operator puede insertar directo: solo los RPCs SECURITY DEFINER
+-- pueden.
+select set_config('request.jwt.claim.sub', '11000000-0000-0000-0000-000000000001', true);
+do $$
+begin
+  begin
+    insert into order_notifications (
+      company_id, order_id, event_type, description, missing_pallet_ids
+    )
+    values (
+      '21000000-0000-0000-0000-000000000001',
+      '71000000-0000-0000-0000-000000000001',
+      'dispatch_missing_pallets',
+      'intento manual salteando confirm_dispatch_order',
+      array['61000000-0000-0000-0000-000000000001'::uuid]
+    );
+    perform pg_temp.assert_true(false, 'warehouse_operator no debería poder insertar notificaciones directamente, ni siquiera con su propio rol (solo vía los RPCs)');
+  exception when insufficient_privilege or others then
+    null; -- esperado: sin GRANT de insert sobre la tabla, ni RLS llega a evaluarse
   end;
 end;
 $$;

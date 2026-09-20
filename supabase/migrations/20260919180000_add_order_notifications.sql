@@ -40,6 +40,14 @@
 
 create table order_notifications (
   id            uuid primary key default gen_random_uuid(),
+  -- Desempate de orden de inserción para "última notificación de este tipo
+  -- para la orden" (usado por confirm_dispatch_order para decidir el dedup
+  -- por contenido, y por quien lea el log). `created_at` no sirve para esto:
+  -- dentro de una misma transacción, now() devuelve siempre el mismo valor,
+  -- así que dos filas insertadas en la misma transacción pueden empatar en
+  -- created_at. bigserial sí garantiza orden de inserción (nextval() no es
+  -- transaccional, incrementa siempre, incluso dentro de la misma tx).
+  seq           bigserial not null,
   company_id    uuid not null references companies(id) on delete cascade,
   order_id      uuid not null references dispatch_orders(id) on delete cascade,
   pallet_id     uuid references pallets(id) on delete set null,
@@ -60,7 +68,7 @@ create table order_notifications (
   created_at    timestamptz not null default now()
 );
 
-create index idx_order_notifications_order on order_notifications(order_id, created_at desc);
+create index idx_order_notifications_order on order_notifications(order_id, seq desc);
 create index idx_order_notifications_company on order_notifications(company_id);
 
 alter table order_notifications enable row level security;
@@ -72,18 +80,38 @@ create policy order_notifications_select on order_notifications
   );
 
 -- Los inserts salen únicamente de los RPCs de despacho (validate_order_pallet,
--- confirm_dispatch_order), que corren security invoker como warehouse_operator
--- (mismo patrón que ya usan para traceability_events).
-create policy order_notifications_insert on order_notifications
-  for insert with check (
-    company_id = auth_company_id()
-    and auth_role() = 'warehouse_operator'
-  );
+-- confirm_dispatch_order). Una policy de INSERT basada solo en company_id +
+-- rol ('warehouse_operator') no alcanza para eso: cualquier fila que cumpla
+-- ese check pasa, sin importar si vino del RPC o de un insert directo del
+-- cliente con event_type/description/missing_pallet_ids inventados (un
+-- warehouse_operator autenticado puede hacer ambos con las mismas
+-- credenciales). No existe una policy de INSERT que distinga "vino de este
+-- RPC" de "insert directo" porque RLS solo ve la fila y el rol, no el
+-- call stack.
+--
+-- La solución real es sacar el privilegio de INSERT de la tabla para
+-- authenticated/anon (no hay policy que lo reemplace: sin GRANT no se llega
+-- ni a evaluar RLS) y hacer que los dos RPCs corran SECURITY DEFINER, para
+-- que sigan pudiendo insertar pese al revoke. Los RPCs ya validan
+-- auth.uid()/auth_role()/company_id a mano en su cuerpo (ver más abajo), así
+-- que ejecutarlos con los privilegios del owner no abre ninguna puerta
+-- adicional: siguen exigiendo exactamente lo mismo que exigía esta policy,
+-- pero ahora es la única forma de escribir en la tabla.
+revoke insert on order_notifications from authenticated, anon;
 
 -- ----------------------------------------------------------------------------
 -- validate_order_pallet: además del traceability_event 'dispatch_discrepancy'
 -- ya existente, registra la notificación visible por rol para el pallet
 -- incorrecto.
+--
+-- SECURITY DEFINER (no invoker): necesario para poder insertar en
+-- order_notifications pese al revoke insert de arriba. Todas las tablas que
+-- toca (dispatch_orders, pallets, order_pallets, traceability_events,
+-- order_notifications) se filtran a mano por auth_company_id()/p_order_id ya
+-- validado, y el rol se valida al principio (auth_role() = 'warehouse_operator'),
+-- así que correr con los privilegios del owner no relaja ningún chequeo:
+-- reproduce a mano lo que hacían las policies de RLS que este flujo ya no
+-- atraviesa.
 -- ----------------------------------------------------------------------------
 create or replace function validate_order_pallet(
   p_order_id uuid,
@@ -99,7 +127,7 @@ returns table (
   validated_at timestamptz
 )
 language plpgsql
-security invoker
+security definer
 set search_path = public
 as $$
 declare
@@ -245,6 +273,12 @@ grant execute on function validate_order_pallet(uuid, text) to authenticated;
 -- dispatch_orders al principio de la función ya serializa confirmaciones
 -- concurrentes de la misma orden, así que este check-then-insert no
 -- necesita una constraint unique aparte para ser race-safe.
+--
+-- SECURITY DEFINER (no invoker): mismo motivo que validate_order_pallet
+-- (ver nota ahí arriba) — necesita poder insertar en order_notifications
+-- pese al revoke insert de la tabla. auth_role()/auth_company_id() se
+-- validan a mano al principio y todas las queries filtran por p_order_id ya
+-- confirmado de esa compañía.
 -- ----------------------------------------------------------------------------
 create or replace function confirm_dispatch_order(
   p_order_id uuid
@@ -257,7 +291,7 @@ returns table (
   pallet_count integer
 )
 language plpgsql
-security invoker
+security definer
 set search_path = public
 as $$
 declare
@@ -320,7 +354,7 @@ begin
     from order_notifications notification
     where notification.order_id = p_order_id
       and notification.event_type = 'dispatch_missing_pallets'
-    order by notification.created_at desc
+    order by notification.seq desc
     limit 1;
 
     -- v_missing_ids ya viene ordenado por pallet_id (mismo criterio con el
