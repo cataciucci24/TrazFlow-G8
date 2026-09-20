@@ -1,5 +1,7 @@
 "use server";
 
+import { isPalletUnit } from "@/lib/pallets/units";
+
 import { revalidatePath } from "next/cache";
 
 import { hasRole, requireUserProfile } from "@/lib/auth/session";
@@ -12,8 +14,63 @@ export type CreatePalletState = {
 
 export type UpdatePalletState = CreatePalletState;
 export type DeletePalletState = CreatePalletState;
+export type CreateLotState = CreatePalletState;
 
 const INITIAL_ERROR = "No se pudo crear el pallet. Revisá los datos e intentá nuevamente.";
+
+/** Registra un lote sin exigir que ya tenga pallets asociados. */
+export async function createLot(
+  _previousState: CreateLotState,
+  formData: FormData,
+): Promise<CreateLotState> {
+  const profile = await requireUserProfile();
+  if (!hasRole(profile, "logistics_manager")) {
+    return { error: "Solo logística puede registrar lotes.", success: null };
+  }
+
+  const productName = String(formData.get("productName") ?? "").trim();
+  const productSku = String(formData.get("productSku") ?? "").trim();
+  const batchNumber = String(formData.get("batchNumber") ?? "").trim();
+  const expirationDate = String(formData.get("expirationDate") ?? "").trim();
+
+  if (!productName || !productSku || !batchNumber) {
+    return { error: "Completá producto, SKU y número de lote.", success: null };
+  }
+  if (batchNumber.length > 512) {
+    return { error: "El número de lote no puede superar los 512 caracteres.", success: null };
+  }
+  if (expirationDate && !/^\d{4}-\d{2}-\d{2}$/.test(expirationDate)) {
+    return { error: "Ingresá una fecha de vencimiento válida.", success: null };
+  }
+
+  const supabase = await createClient();
+  const { data: product, error: productError } = await supabase
+    .from("products")
+    .upsert({ company_id: profile.companyId, sku: productSku, name: productName }, { onConflict: "company_id,sku" })
+    .select("id")
+    .single();
+  if (productError || !product) {
+    return { error: "No se pudo identificar el producto del lote.", success: null };
+  }
+
+  const { error: lotError } = await supabase.from("batches").insert({
+    product_id: product.id,
+    batch_number: batchNumber,
+    expiration_date: expirationDate || null,
+    quantity: 0,
+  });
+  if (lotError) {
+    return {
+      error: lotError.code === "23505"
+        ? "Ya existe ese número de lote para el producto seleccionado."
+        : "No se pudo registrar el lote. Revisá los datos e intentá nuevamente.",
+      success: null,
+    };
+  }
+
+  revalidatePath("/dashboard/traceability");
+  return { error: null, success: `Lote ${batchNumber} registrado.` };
+}
 
 /** Crea un pallet en depósito, reutilizando producto/lote si ya existen. */
 export async function createPallet(
@@ -30,9 +87,10 @@ export async function createPallet(
   const productSku = String(formData.get("productSku") ?? "").trim();
   const batchNumber = String(formData.get("batchNumber") ?? "").trim();
   const quantity = Number(formData.get("quantity") ?? 0);
+  const unitOfMeasure = String(formData.get("unitOfMeasure") ?? "");
 
-  if (!qrCode || !productName || !productSku || !batchNumber || !Number.isInteger(quantity) || quantity < 0) {
-    return { error: "Completá código QR, producto, SKU, lote y una cantidad válida.", success: null };
+  if (!qrCode || !productName || !productSku || !batchNumber || !Number.isFinite(quantity) || quantity <= 0 || !isPalletUnit(unitOfMeasure)) {
+    return { error: "Completá código QR, producto, SKU, lote, una cantidad mayor que 0 y una unidad válida.", success: null };
   }
 
   const supabase = await createClient();
@@ -43,10 +101,17 @@ export async function createPallet(
     .single();
   if (productError || !product) return { error: INITIAL_ERROR, success: null };
 
+  // El 0 satisface el campo legado solo al crear el lote; nunca pisa su cantidad.
+  const { error: batchInsertError } = await supabase
+    .from("batches")
+    .upsert({ product_id: product.id, batch_number: batchNumber, quantity: 0 }, { onConflict: "product_id,batch_number", ignoreDuplicates: true });
+  if (batchInsertError) return { error: INITIAL_ERROR, success: null };
+
   const { data: batch, error: batchError } = await supabase
     .from("batches")
-    .upsert({ product_id: product.id, batch_number: batchNumber, quantity }, { onConflict: "product_id,batch_number" })
     .select("id")
+    .eq("product_id", product.id)
+    .eq("batch_number", batchNumber)
     .single();
   if (batchError || !batch) return { error: INITIAL_ERROR, success: null };
 
@@ -54,12 +119,15 @@ export async function createPallet(
     company_id: profile.companyId,
     batch_id: batch.id,
     qr_code: qrCode,
+    quantity,
+    unit_of_measure: unitOfMeasure,
     current_location: "Depósito",
   });
   if (palletError) {
     return { error: palletError.code === "23505" ? "Ya existe un pallet con ese código QR." : INITIAL_ERROR, success: null };
   }
 
+  revalidatePath("/dashboard/inventory");
   revalidatePath("/dashboard/traceability");
   revalidatePath("/dashboard/orders");
   return { error: null, success: `Pallet ${qrCode} registrado en depósito.` };
@@ -82,9 +150,10 @@ export async function updatePallet(
   const batchNumber = String(formData.get("batchNumber") ?? "").trim();
   const currentLocation = String(formData.get("currentLocation") ?? "").trim();
   const quantity = Number(formData.get("quantity") ?? 0);
+  const unitOfMeasure = String(formData.get("unitOfMeasure") ?? "");
 
-  if (!qrCode || !productName || !productSku || !batchNumber || !Number.isInteger(quantity) || quantity < 0) {
-    return { error: "Completá código QR, producto, SKU, lote y una cantidad válida.", success: null };
+  if (!qrCode || !productName || !productSku || !batchNumber || !Number.isFinite(quantity) || quantity <= 0 || !isPalletUnit(unitOfMeasure)) {
+    return { error: "Completá código QR, producto, SKU, lote, una cantidad mayor que 0 y una unidad válida.", success: null };
   }
 
   const supabase = await createClient();
@@ -103,20 +172,28 @@ export async function updatePallet(
     .single();
   if (productError || !product) return { error: INITIAL_ERROR, success: null };
 
+  // El 0 satisface el campo legado solo al crear el lote; nunca pisa su cantidad.
+  const { error: batchInsertError } = await supabase
+    .from("batches")
+    .upsert({ product_id: product.id, batch_number: batchNumber, quantity: 0 }, { onConflict: "product_id,batch_number", ignoreDuplicates: true });
+  if (batchInsertError) return { error: INITIAL_ERROR, success: null };
+
   const { data: batch, error: batchError } = await supabase
     .from("batches")
-    .upsert({ product_id: product.id, batch_number: batchNumber, quantity }, { onConflict: "product_id,batch_number" })
     .select("id")
+    .eq("product_id", product.id)
+    .eq("batch_number", batchNumber)
     .single();
   if (batchError || !batch) return { error: INITIAL_ERROR, success: null };
 
   const { error: updateError } = await supabase
     .from("pallets")
-    .update({ qr_code: qrCode, batch_id: batch.id, current_location: currentLocation || null })
+    .update({ qr_code: qrCode, batch_id: batch.id, quantity, unit_of_measure: unitOfMeasure, current_location: currentLocation || null })
     .eq("id", palletId)
     .eq("company_id", profile.companyId);
   if (updateError) return { error: updateError.code === "23505" ? "Ya existe un pallet con ese código QR." : INITIAL_ERROR, success: null };
 
+  revalidatePath("/dashboard/inventory");
   revalidatePath("/dashboard/traceability");
   revalidatePath("/dashboard/orders");
   return { error: null, success: `Pallet ${qrCode} actualizado.` };
@@ -147,6 +224,7 @@ export async function deletePallet(palletId: string): Promise<DeletePalletState>
     .eq("status", "in_warehouse");
   if (deleteError) return { error: INITIAL_ERROR, success: null };
 
+  revalidatePath("/dashboard/inventory");
   revalidatePath("/dashboard/traceability");
   revalidatePath("/dashboard/orders");
   return { error: null, success: `Pallet ${pallet.qr_code} eliminado.` };

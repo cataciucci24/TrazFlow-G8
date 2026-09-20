@@ -1,3 +1,5 @@
+import type { PalletUnit } from "@/lib/pallets/units";
+
 /** Roles de la app, espejo del enum `user_role` de Postgres. */
 export type UserRole =
   | "logistics_manager"
@@ -28,6 +30,36 @@ export type Distributor = {
   name: string;
 };
 
+/** Nivel de riesgo de quiebre según los días de cobertura disponibles. */
+export type StockRiskLevel = "critical" | "caution";
+
+/** Alerta calculada para el stock de un producto en una distribuidora. */
+export type DistributorStockAlert = {
+  id: string;
+  distributorName: string;
+  productName: string;
+  productSku: string;
+  currentStock: number;
+  dailyConsumption: number;
+  stockDays: number;
+  riskLevel: StockRiskLevel;
+};
+
+/** Registro editable de stock informado por una distribuidora. */
+export type DistributorStockEntry = {
+  id: string;
+  distributorId: string;
+  distributorName: string;
+  productId: string;
+  productName: string;
+  productSku: string;
+  currentStock: number;
+  dailyConsumption: number;
+  stockDays: number;
+  riskLevel: StockRiskLevel | null;
+  updatedAt: string;
+};
+
 /** Orden de despacho (fila de la tabla `dispatch_orders`). */
 export type DispatchOrder = {
   id: string;
@@ -47,6 +79,27 @@ export type PalletStatus =
   | "received"
   | "discrepancy";
 
+/** Lote existente de un producto (por SKU), para elegirlo en el formulario en vez de tipearlo. */
+export type ProductBatch = {
+  productSku: string;
+  batchNumber: string;
+};
+
+/** Producto existente de la empresa (por SKU), para elegirlo en el formulario en vez de tipearlo. */
+export type ExistingProduct = {
+  sku: string;
+  name: string;
+};
+
+/** Lote (fila de `batches`) con los datos de producto necesarios para listarlo. */
+export type Lot = {
+  id: string;
+  batchNumber: string;
+  productName: string;
+  productSku: string;
+  expirationDate: string | null;
+};
+
 /** Pallet con la info de producto/lote necesaria para identificarlo en pantalla. */
 export type Pallet = {
   id: string;
@@ -56,5 +109,20 @@ export type Pallet = {
   productName: string;
   productSku: string;
   batchNumber: string;
+  quantity: number | null;
+  unitOfMeasure: PalletUnit | null;
+};
+
+/** Mercadería disponible cuyo lote vence dentro de los próximos 90 días. */
+export type ExpirationAlert = {
+  palletId: string;
+  productName: string;
+  productSku: string;
+  batchNumber: string;
   quantity: number;
+  unitOfMeasure: PalletUnit;
+  currentLocation: string | null;
+  expirationDate: string;
+  daysRemaining: number;
+  urgency: "critical" | "warning" | "upcoming";
 };

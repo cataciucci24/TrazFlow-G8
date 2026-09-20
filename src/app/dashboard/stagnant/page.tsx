@@ -41,7 +41,7 @@ export default async function StagnantInventoryPage({
   const visiblePallets = stalePallets.filter(
     (pallet) => selectedStatus === "all" || pallet.status === selectedStatus,
   );
-  const totalQuantity = visiblePallets.reduce((total, pallet) => total + pallet.quantity, 0);
+  const totalQuantity = visiblePallets.reduce((total, pallet) => total + (pallet.quantity ?? 0), 0);
 
   return (
     <div className="space-y-8">
@@ -94,7 +94,7 @@ export default async function StagnantInventoryPage({
               {visiblePallets.map((pallet) => (
                 <tr key={pallet.id} className="hover:bg-amber-50/40">
                   <td className="px-5 py-4"><Link href={`/dashboard/traceability?qr=${encodeURIComponent(pallet.qrCode)}`} className="font-mono font-bold hover:text-amber-600">{pallet.qrCode}</Link></td>
-                  <td className="px-5 py-4"><p className="font-semibold">{pallet.productName}</p><p className="text-xs text-stone-500">SKU {pallet.productSku} · {pallet.quantity} unidades</p></td>
+                  <td className="px-5 py-4"><p className="font-semibold">{pallet.productName}</p><p className="text-xs text-stone-500">SKU {pallet.productSku} · {pallet.quantity ?? 0} unidades</p></td>
                   <td className="px-5 py-4 font-mono text-stone-600">{pallet.batchNumber}</td>
                   <td className="px-5 py-4"><StatusBadge status={pallet.status} /></td>
                   <td className="px-5 py-4 text-stone-500">{pallet.currentLocation ?? "Sin ubicación"}</td>
