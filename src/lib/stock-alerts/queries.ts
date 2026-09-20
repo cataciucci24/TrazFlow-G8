@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import type { PalletUnit } from "@/lib/pallets/units";
 import type { DistributorStockAlert, StockRiskLevel } from "@/lib/types";
 
 type RelatedRecord = { name: string; sku?: string } | { name: string; sku?: string }[] | null;
@@ -7,6 +8,7 @@ type RawStockRow = {
   id: string;
   current_stock: number;
   daily_consumption: number;
+  unit_of_measure: PalletUnit;
   distributors: RelatedRecord;
   products: RelatedRecord;
 };
@@ -33,7 +35,7 @@ export async function getDistributorStockAlerts(companyId: string): Promise<Stoc
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("distributor_product_stocks")
-    .select("id, current_stock, daily_consumption, distributors ( name ), products ( name, sku )")
+    .select("id, current_stock, daily_consumption, unit_of_measure, distributors ( name ), products ( name, sku )")
     .eq("company_id", companyId);
 
   if (error) {
@@ -62,6 +64,7 @@ export async function getDistributorStockAlerts(companyId: string): Promise<Stoc
         productSku: product?.sku ?? "—",
         currentStock: row.current_stock,
         dailyConsumption: row.daily_consumption,
+        unitOfMeasure: row.unit_of_measure,
         stockDays,
         riskLevel,
       };

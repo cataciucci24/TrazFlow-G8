@@ -41,6 +41,7 @@ export type DistributorStockAlert = {
   productSku: string;
   currentStock: number;
   dailyConsumption: number;
+  unitOfMeasure: PalletUnit;
   stockDays: number;
   riskLevel: StockRiskLevel;
 };
@@ -55,6 +56,7 @@ export type DistributorStockEntry = {
   productSku: string;
   currentStock: number;
   dailyConsumption: number;
+  unitOfMeasure: PalletUnit;
   stockDays: number;
   riskLevel: StockRiskLevel | null;
   updatedAt: string;

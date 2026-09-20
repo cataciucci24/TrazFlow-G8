@@ -1,3 +1,4 @@
+import type { PalletUnit } from "@/lib/pallets/units";
 import { createClient } from "@/lib/supabase/server";
 import { calculateStockDays, getStockRiskLevel } from "@/lib/stock-alerts/queries";
 import type { DistributorStockEntry } from "@/lib/types";
@@ -16,6 +17,7 @@ type RawStockEntry = {
   product_id: string;
   current_stock: number;
   daily_consumption: number;
+  unit_of_measure: PalletUnit;
   updated_at: string;
   distributors: { name: string } | { name: string }[] | null;
   products: { name: string; sku: string } | { name: string; sku: string }[] | null;
@@ -42,7 +44,7 @@ export async function getStockReportingData(userId: string, companyId: string): 
       .order("name"),
     supabase
       .from("distributor_product_stocks")
-      .select("id, distributor_id, product_id, current_stock, daily_consumption, updated_at, distributors ( name ), products ( name, sku )")
+      .select("id, distributor_id, product_id, current_stock, daily_consumption, unit_of_measure, updated_at, distributors ( name ), products ( name, sku )")
       .order("updated_at", { ascending: false }),
   ]);
 
@@ -73,6 +75,7 @@ export async function getStockReportingData(userId: string, companyId: string): 
       productSku: product?.sku ?? "—",
       currentStock: row.current_stock,
       dailyConsumption: row.daily_consumption,
+      unitOfMeasure: row.unit_of_measure,
       stockDays,
       riskLevel: getStockRiskLevel(stockDays),
       updatedAt: row.updated_at,
