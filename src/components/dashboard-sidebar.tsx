@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 
 import { LogoutButton } from "@/components/logout-button";
 import { BrandMark } from "@/components/brand-mark";
@@ -17,9 +17,12 @@ const roleDetails = {
 
 export function DashboardSidebar({ role }: DashboardSidebarProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const roleDetail = roleDetails[role];
   const isOrders = pathname.startsWith("/dashboard/orders");
-  const isTraceability = pathname.startsWith("/dashboard/traceability");
+  const traceabilityShowsLots = pathname.startsWith("/dashboard/traceability") && searchParams.get("view") === "lotes";
+  const isPallets = pathname.startsWith("/dashboard/pallets") || (pathname.startsWith("/dashboard/traceability") && !traceabilityShowsLots);
+  const isLots = pathname.startsWith("/dashboard/lots") || traceabilityShowsLots;
   const isInventory = pathname.startsWith("/dashboard/inventory");
   const isAlerts = pathname.startsWith("/dashboard/alerts");
   const isStockReport = pathname.startsWith("/dashboard/stock-report");
@@ -31,7 +34,8 @@ export function DashboardSidebar({ role }: DashboardSidebarProps) {
         { href: "/dashboard/orders", label: "Órdenes de despacho", icon: <OrdersIcon />, active: isOrders },
         { href: "/dashboard/inventory", label: "Stock", icon: <InventoryIcon />, active: isInventory },
         { href: "/dashboard/alerts", label: "Alertas", icon: <AlertIcon />, active: isAlerts },
-        { href: "/dashboard/traceability", label: "Seguimiento", icon: <PalletIcon />, active: isTraceability },
+        { href: "/dashboard/pallets", label: "Pallets", icon: <PalletIcon />, active: isPallets },
+        { href: "/dashboard/lots", label: "Lotes", icon: <LotIcon />, active: isLots },
         { href: "/dashboard/stagnant", label: "Mercadería inmovilizada", icon: <StagnantIcon />, active: isStagnant },
       ]
     : role === "distributor_operator"
@@ -90,6 +94,10 @@ function PalletIcon() {
 
 function AlertIcon() {
   return <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5 fill-none stroke-current" strokeWidth="2"><path d="M12 3a6 6 0 0 0-6 6v3.5L4 16h16l-2-3.5V9a6 6 0 0 0-6-6Z" /><path d="M10 20h4" /></svg>;
+}
+
+function LotIcon() {
+  return <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5 fill-none stroke-current" strokeWidth="2"><path d="M5 4h14v16H5z" /><path d="M8 8h8M8 12h8M8 16h5" /></svg>;
 }
 
 function ScanIcon() {
