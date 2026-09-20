@@ -56,7 +56,7 @@ function unifyAlerts(expirationAlerts: ExpirationAlert[], stockAlerts: Distribut
     productSku: alert.productSku,
     location: alert.distributorName,
     situation: `${NUMBER_FORMATTER.format(alert.stockDays)} ${alert.stockDays === 1 ? "día" : "días"} de stock restantes`,
-    supportingDetail: `${NUMBER_FORMATTER.format(alert.currentStock)} disponibles · ${NUMBER_FORMATTER.format(alert.dailyConsumption)} de consumo diario`,
+    supportingDetail: `${NUMBER_FORMATTER.format(alert.currentStock)} ${alert.unitOfMeasure} disponibles · ${NUMBER_FORMATTER.format(alert.dailyConsumption)} ${alert.unitOfMeasure} de consumo diario`,
     href: `/dashboard/inventory?search=${encodeURIComponent(alert.productSku)}`,
   }));
 

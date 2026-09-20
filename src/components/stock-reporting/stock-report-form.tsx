@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 
+import { PALLET_UNITS } from "@/lib/pallets/units";
 import { saveDistributorStock, type SaveDistributorStockState } from "@/lib/stock-reporting/actions";
 import type { StockReportingProduct } from "@/lib/stock-reporting/queries";
 
@@ -33,10 +34,16 @@ export function StockReportForm({
             {products.map((product) => <option key={product.id} value={product.id}>{product.name} ({product.sku})</option>)}
           </select>
         </Field>
-        <Field label="Stock actual" hint="Unidades disponibles hoy.">
-          <input name="currentStock" type="number" min="0" step="1" required disabled={isPending} placeholder="Ej. 80" className={CONTROL_CLASS} />
+        <Field label="Unidad de medida" hint="Se usa para el stock y el consumo diario.">
+          <select name="unitOfMeasure" required disabled={isPending} defaultValue="" className={CONTROL_CLASS}>
+            <option value="" disabled>Seleccionar unidad</option>
+            {PALLET_UNITS.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
+          </select>
         </Field>
-        <Field label="Consumo diario estimado" hint="Promedio de unidades consumidas por día.">
+        <Field label="Stock actual" hint="Cantidad disponible hoy, en la unidad elegida.">
+          <input name="currentStock" type="number" min="0" step="0.01" required disabled={isPending} placeholder="Ej. 80" className={CONTROL_CLASS} />
+        </Field>
+        <Field label="Consumo diario estimado" hint="Promedio consumido por día, en la misma unidad.">
           <input name="dailyConsumption" type="number" min="0.01" step="0.01" required disabled={isPending} placeholder="Ej. 10" className={CONTROL_CLASS} />
         </Field>
       </div>

@@ -29,7 +29,7 @@ export function PageHeader({ title, description, eyebrow, action }: PageHeaderPr
 
 type SectionHeaderProps = {
   title: string;
-  description?: string;
+  description?: ReactNode;
   action?: ReactNode;
   id?: string;
 };

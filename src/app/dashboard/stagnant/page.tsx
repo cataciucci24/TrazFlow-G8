@@ -4,14 +4,17 @@ import { redirect } from "next/navigation";
 
 import { hasRole, requireUserProfile } from "@/lib/auth/session";
 import { getStalePallets } from "@/lib/pallets/queries";
+import { getRedistributionSuggestions } from "@/lib/redistribution/queries";
 import type { PalletStatus } from "@/lib/types";
 import { PageHeader, PalletStatusBadge, SectionHeader, SummaryCard, TableShell } from "@/components/ui/design-system";
+import { RedistributionSuggestions } from "@/components/stagnant/redistribution-suggestions";
 
 export const metadata: Metadata = {
   title: "Mercadería inmovilizada | TrazFlow",
 };
 
 const THRESHOLDS = [7, 15, 30, 60, 90];
+const NUMBER_FORMATTER = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 2 });
 const STATUS_FILTERS: Array<{ value: "all" | PalletStatus; label: string }> = [
   { value: "all", label: "Todos" },
   { value: "in_warehouse", label: "En depósito" },
@@ -38,10 +41,18 @@ export default async function StagnantInventoryPage({
     ? (params.status as "all" | PalletStatus)
     : "all";
   const stalePallets = await getStalePallets(profile.companyId, thresholdDays);
+  const redistribution = await getRedistributionSuggestions(profile.companyId, stalePallets);
   const visiblePallets = stalePallets.filter(
     (pallet) => selectedStatus === "all" || pallet.status === selectedStatus,
   );
-  const totalQuantity = visiblePallets.reduce((total, pallet) => total + (pallet.quantity ?? 0), 0);
+  const totalsByUnit = new Map<string, number>();
+  for (const pallet of visiblePallets) {
+    if (pallet.quantity === null || pallet.unitOfMeasure === null) continue;
+    totalsByUnit.set(pallet.unitOfMeasure, (totalsByUnit.get(pallet.unitOfMeasure) ?? 0) + pallet.quantity);
+  }
+  const totalQuantityLabel = totalsByUnit.size === 0
+    ? "—"
+    : [...totalsByUnit].map(([unit, total]) => `${NUMBER_FORMATTER.format(total)} ${unit}`).join(" · ");
 
   return (
     <div className="app-page">
@@ -49,9 +60,11 @@ export default async function StagnantInventoryPage({
 
       <section className="grid gap-4 sm:grid-cols-3">
         <SummaryCard label="PALLETS INMOVILIZADOS" value={String(visiblePallets.length)} />
-        <SummaryCard label="UNIDADES INVOLUCRADAS" value={String(totalQuantity)} />
+        <SummaryCard label="CANTIDAD INVOLUCRADA" value={totalQuantityLabel} />
         <SummaryCard label="UMBRAL ACTUAL" value={`${thresholdDays} días`} />
       </section>
+
+      <RedistributionSuggestions suggestions={redistribution.suggestions} stockSourceAvailable={redistribution.stockSourceAvailable} />
 
       <section className="section-stack">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -82,7 +95,7 @@ export default async function StagnantInventoryPage({
               {visiblePallets.map((pallet) => (
                 <tr key={pallet.id} className="hover:bg-[var(--brand-soft)]">
                   <td className="px-5 py-4"><Link href={`/dashboard/traceability?qr=${encodeURIComponent(pallet.qrCode)}`} className="table-action font-mono">{pallet.qrCode}</Link></td>
-                  <td className="px-5 py-4"><p className="font-semibold">{pallet.productName}</p><p className="text-xs text-stone-500">SKU {pallet.productSku} · {pallet.quantity ?? 0} unidades</p></td>
+                  <td className="px-5 py-4"><p className="font-semibold">{pallet.productName}</p><p className="text-xs text-stone-500">SKU {pallet.productSku} · {pallet.quantity !== null ? `${NUMBER_FORMATTER.format(pallet.quantity)} ${pallet.unitOfMeasure}` : "cantidad sin definir"}</p></td>
                   <td className="px-5 py-4 font-mono text-stone-600">{pallet.batchNumber}</td>
                   <td className="px-5 py-4"><PalletStatusBadge status={pallet.status} /></td>
                   <td className="px-5 py-4 text-stone-500">{pallet.currentLocation ?? "Sin ubicación"}</td>
