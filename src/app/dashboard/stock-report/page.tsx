@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { StockReportForm } from "@/components/stock-reporting/stock-report-form";
 import { hasRole, requireUserProfile } from "@/lib/auth/session";
 import { getStockReportingData } from "@/lib/stock-reporting/queries";
+import { EmptyState, PageHeader, SectionHeader, StatusBadge, TableShell } from "@/components/ui/design-system";
 
 export const metadata: Metadata = { title: "Mi stock | TrazFlow" };
 
@@ -17,44 +18,37 @@ export default async function StockReportPage() {
   const data = await getStockReportingData(profile.id, profile.companyId);
 
   return (
-    <div className="space-y-8">
-      <div className="border-b border-stone-200 pb-6">
-        <p className="text-xs font-bold tracking-[0.12em] text-emerald-700">INVENTARIO DE DISTRIBUCIÓN</p>
-        <h1 className="mt-2 text-2xl font-bold tracking-tight">Mi stock</h1>
-        <p className="mt-1 text-sm text-stone-500">Mantené actualizado el stock disponible y el consumo diario estimado de cada producto.</p>
-      </div>
+    <div className="app-page">
+      <PageHeader eyebrow="Inventario de distribución" title="Mi stock" description="Mantené actualizado el stock disponible y el consumo diario estimado de cada producto." />
 
       {!data.sourceAvailable ? (
-        <div role="status" className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-amber-800">La carga de stock estará disponible cuando se aplique la migración correspondiente en Supabase.</div>
+        <div role="status" className="feedback feedback-warning">La carga de stock estará disponible cuando se aplique la migración correspondiente en Supabase.</div>
       ) : (
         <>
           {data.distributor ? (
             <StockReportForm products={data.products} />
           ) : (
-            <div role="alert" className="rounded-2xl border border-red-200 bg-red-50 p-6 text-sm text-red-700">Tu cuenta debe estar asociada a una única distribuidora para informar stock.</div>
+            <div role="alert" className="feedback feedback-danger">Tu cuenta debe estar asociada a una única distribuidora para informar stock.</div>
           )}
 
-          <section aria-labelledby="reported-stock-title" className="space-y-4">
-            <div>
-              <h2 id="reported-stock-title" className="text-xl font-bold">Información reportada</h2>
-              <p className="mt-1 text-sm text-stone-500">El mismo producto puede volver a guardarse para actualizar sus valores.</p>
-            </div>
+          <section aria-labelledby="reported-stock-title" className="section-stack">
+            <SectionHeader id="reported-stock-title" title="Información reportada" description="El mismo producto puede volver a guardarse para actualizar sus valores." />
             {data.entries.length === 0 ? (
-              <div className="rounded-2xl border border-stone-200 bg-white p-8 text-center text-sm text-stone-500">Todavía no informaste stock de productos.</div>
+              <div className="surface"><EmptyState title="Todavía no informaste stock" description="Los productos guardados aparecerán acá con su cobertura estimada." /></div>
             ) : (
-              <div className="overflow-x-auto rounded-2xl border border-stone-200 bg-white">
-                <table className="w-full min-w-[980px] text-left text-sm">
-                  <thead className="bg-stone-100/80 text-stone-500"><tr><th scope="col" className="px-5 py-4 font-semibold">Producto</th><th scope="col" className="px-5 py-4 font-semibold">Distribuidora</th><th scope="col" className="px-5 py-4 text-right font-semibold">Stock actual</th><th scope="col" className="px-5 py-4 text-right font-semibold">Consumo diario</th><th scope="col" className="px-5 py-4 text-right font-semibold">Días restantes</th><th scope="col" className="px-5 py-4 font-semibold">Alerta de stock</th><th scope="col" className="px-5 py-4 font-semibold">Actualizado</th></tr></thead>
+              <TableShell label="Stock informado por producto">
+                <table className="data-table min-w-[980px]">
+                  <thead><tr><th scope="col">Producto</th><th scope="col">Distribuidora</th><th scope="col" className="text-right">Stock actual</th><th scope="col" className="text-right">Consumo diario</th><th scope="col" className="text-right">Días restantes</th><th scope="col">Alerta de stock</th><th scope="col">Actualizado</th></tr></thead>
                   <tbody className="divide-y divide-stone-200">{data.entries.map((entry) => {
                     const risk = entry.riskLevel === "critical"
-                      ? { label: "CRÍTICA", className: "bg-red-100 text-red-700" }
+                      ? { status: "critical" as const }
                       : entry.riskLevel === "caution"
-                        ? { label: "PRECAUCIÓN", className: "bg-amber-100 text-amber-700" }
-                        : { label: "SIN ALERTA", className: "bg-emerald-100 text-emerald-700" };
-                    return <tr key={entry.id}><td className="px-5 py-4"><p className="font-medium">{entry.productName}</p><p className="mt-0.5 font-mono text-xs text-stone-500">{entry.productSku}</p></td><td className="px-5 py-4">{entry.distributorName}</td><td className="px-5 py-4 text-right font-mono">{NUMBER_FORMATTER.format(entry.currentStock)}</td><td className="px-5 py-4 text-right font-mono">{NUMBER_FORMATTER.format(entry.dailyConsumption)}</td><td className="px-5 py-4 text-right font-mono font-semibold">{NUMBER_FORMATTER.format(entry.stockDays)}</td><td className="px-5 py-4"><span className={`inline-block rounded-full px-3 py-1.5 text-xs font-bold ${risk.className}`}>{risk.label}</span></td><td className="px-5 py-4 text-stone-500">{DATE_FORMATTER.format(new Date(entry.updatedAt))}</td></tr>;
+                        ? { status: "caution" as const }
+                        : null;
+                    return <tr key={entry.id}><td><p className="font-medium">{entry.productName}</p><p className="table-secondary font-mono">{entry.productSku}</p></td><td>{entry.distributorName}</td><td className="text-right font-mono">{NUMBER_FORMATTER.format(entry.currentStock)}</td><td className="text-right font-mono">{NUMBER_FORMATTER.format(entry.dailyConsumption)}</td><td className="text-right font-mono font-semibold">{NUMBER_FORMATTER.format(entry.stockDays)}</td><td>{risk ? <StatusBadge status={risk.status} /> : <span className="status-badge bg-emerald-50 text-emerald-700">SIN ALERTA</span>}</td><td className="text-slate-500">{DATE_FORMATTER.format(new Date(entry.updatedAt))}</td></tr>;
                   })}</tbody>
                 </table>
-              </div>
+              </TableShell>
             )}
           </section>
         </>

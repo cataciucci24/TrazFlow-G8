@@ -28,7 +28,7 @@ export function TraceabilitySearch({ defaultQr, palletCodes }: TraceabilitySearc
           autoComplete="off"
           list="existing-pallet-codes"
           placeholder="PAL-001"
-          className="w-full rounded-xl border border-stone-200 bg-white px-4 py-3 text-sm text-slate-950 placeholder-stone-400 outline-none transition-all focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+          className="form-control"
         />
         <datalist id="existing-pallet-codes">
           {palletCodes.map((code) => <option key={code} value={code} />)}
@@ -37,7 +37,7 @@ export function TraceabilitySearch({ defaultQr, palletCodes }: TraceabilitySearc
 
       <button
         type="submit"
-        className="rounded-xl bg-amber-500 px-5 py-3 text-sm font-bold text-white shadow-sm transition-colors hover:bg-amber-600"
+        className="button-primary"
       >
         Buscar
       </button>

@@ -7,7 +7,7 @@ import { createLot, type CreateLotState } from "@/lib/pallets/actions";
 import type { ExistingProduct } from "@/lib/types";
 
 const INITIAL_STATE: CreateLotState = { error: null, success: null };
-const FIELD_CLASS = "mt-2 w-full rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm font-normal normal-case tracking-normal text-slate-950 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100";
+const FIELD_CLASS = "form-control mt-2 font-normal";
 
 export function NewLotForm({ existingProducts }: { existingProducts: ExistingProduct[] }) {
   const [state, setState] = useState(INITIAL_STATE);
@@ -33,10 +33,10 @@ export function NewLotForm({ existingProducts }: { existingProducts: ExistingPro
 
   return (
     <details ref={detailsRef} className="group relative">
-      <summary className="cursor-pointer list-none rounded-xl bg-amber-500 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-amber-600 [&::-webkit-details-marker]:hidden">
-        ＋ Agregar lote
+      <summary className="button-primary list-none [&::-webkit-details-marker]:hidden">
+        <span aria-hidden="true">+</span>&nbsp; Agregar lote
       </summary>
-      <form ref={formRef} onSubmit={handleSubmit} className="absolute right-0 z-20 mt-3 grid w-[min(680px,calc(100vw-2.5rem))] gap-4 rounded-2xl border border-stone-200 bg-white p-5 shadow-xl sm:grid-cols-2">
+      <form ref={formRef} onSubmit={handleSubmit} className="surface absolute right-0 z-20 mt-3 grid w-[min(680px,calc(100vw-2rem))] gap-4 p-5 shadow-xl sm:grid-cols-2">
         <div className="sm:col-span-2">
           <h2 className="text-base font-bold">Registrar nuevo lote</h2>
           <p className="mt-1 text-sm text-stone-500">Podrás asociarle pallets desde la pestaña de seguimiento de pallets.</p>
@@ -46,8 +46,8 @@ export function NewLotForm({ existingProducts }: { existingProducts: ExistingPro
         <Field label="Número de lote" name="batchNumber" placeholder="LOTE-001" />
         <Field label="Vencimiento (opcional)" name="expirationDate" type="date" />
         <div className="flex items-end justify-end gap-3 sm:col-span-2">
-          <button type="button" onClick={closeForm} className="rounded-xl px-5 py-3 text-sm font-bold text-stone-600 hover:text-stone-800">Cancelar</button>
-          <button disabled={isPending} className="rounded-xl bg-amber-500 px-5 py-3 text-sm font-bold text-white hover:bg-amber-600 disabled:opacity-60">
+          <button type="button" onClick={closeForm} className="button-secondary">Cancelar</button>
+          <button disabled={isPending} className="button-primary disabled:opacity-60">
             {isPending ? "Registrando..." : "Registrar lote"}
           </button>
         </div>
@@ -58,7 +58,7 @@ export function NewLotForm({ existingProducts }: { existingProducts: ExistingPro
 
 function Field({ label, name, placeholder, type = "text" }: { label: string; name: string; placeholder?: string; type?: string }) {
   return (
-    <label className="block text-xs font-bold uppercase tracking-wide text-stone-500">
+    <label className="form-label">
       {label}
       <input required={type !== "date"} name={name} type={type} placeholder={placeholder} className={FIELD_CLASS} />
     </label>

@@ -29,7 +29,7 @@ export function ConfirmDispatchButton({
   };
 
   return (
-    <div className="space-y-3 rounded-2xl border border-stone-200 bg-white p-5">
+    <div className="surface space-y-3 p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-base font-bold text-slate-950">
@@ -46,7 +46,7 @@ export function ConfirmDispatchButton({
           type="button"
           disabled={isPending || isBlocked || isSuccess}
           onClick={handleConfirm}
-          className="rounded-xl bg-amber-500 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-60"
+          className="button-primary disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isPending ? "Confirmando..." : "Confirmar despacho"}
         </button>

@@ -6,6 +6,7 @@ import { LotTraceability } from "@/components/traceability/lot-traceability";
 import { PalletTraceability } from "@/components/traceability/pallet-traceability";
 import { hasRole, requireUserProfile } from "@/lib/auth/session";
 import { getLotTraceability, getPalletTraceability } from "@/lib/traceability/queries";
+import { PageHeader } from "@/components/ui/design-system";
 
 export const metadata: Metadata = { title: "Trazabilidad | TrazFlow" };
 
@@ -34,13 +35,13 @@ export default async function TraceabilityPage({ searchParams }: { searchParams:
 }
 
 function TraceabilityLayout({ backHref, backLabel, title, children }: { backHref: string; backLabel: string; title: string; children: React.ReactNode }) {
-  return <div className="space-y-8"><div className="border-b border-stone-200 pb-6"><h1 className="text-2xl font-bold tracking-tight">Trazabilidad de {title}</h1><p className="mt-1 text-sm text-stone-500">Consultá el historial de movimientos registrado.</p></div><Link href={backHref} className="inline-flex text-sm font-bold text-amber-600 hover:text-amber-700">← Volver a {backLabel}</Link>{children}</div>;
+  return <div className="app-page"><PageHeader title={`Trazabilidad de ${title}`} description="Consultá el historial de movimientos registrado." action={<Link href={backHref} className="button-secondary">← Volver a {backLabel}</Link>} />{children}</div>;
 }
 
 function TooLongMessage() {
-  return <p role="alert" className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">El código de búsqueda no puede superar los 512 caracteres.</p>;
+  return <p role="alert" className="feedback feedback-danger">El código de búsqueda no puede superar los 512 caracteres.</p>;
 }
 
 function NotFoundMessage({ entity }: { entity: string }) {
-  return <p role="status" className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">No se encontró ningún {entity} con ese código.</p>;
+  return <p role="status" className="feedback feedback-warning">No se encontró ningún {entity} con ese código.</p>;
 }

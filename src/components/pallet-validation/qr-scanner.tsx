@@ -58,12 +58,12 @@ export function QrScanner({ disabled, onCancel, onScan }: QrScannerProps) {
       aria-labelledby="qr-scanner-title"
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
     >
-      <div className="w-full max-w-md space-y-4 rounded-lg bg-white p-4 shadow-xl">
+      <div className="surface w-full max-w-md space-y-4 p-5 shadow-xl">
         <div>
-          <h3 id="qr-scanner-title" className="font-semibold text-gray-900">
+          <h3 id="qr-scanner-title" className="font-semibold text-slate-950">
             Escanear pallet
           </h3>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-slate-500">
             Apuntá la cámara al código QR adherido al pallet.
           </p>
         </div>
@@ -93,7 +93,7 @@ export function QrScanner({ disabled, onCancel, onScan }: QrScannerProps) {
             controlsRef.current?.stop();
             onCancel();
           }}
-          className="w-full rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+          className="button-secondary w-full disabled:opacity-60"
         >
           {disabled ? "Validando..." : "Cancelar"}
         </button>

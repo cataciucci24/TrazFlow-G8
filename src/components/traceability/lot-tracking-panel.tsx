@@ -4,8 +4,9 @@ import { useMemo, useState } from "react";
 
 import { LotsTable } from "@/components/traceability/lots-table";
 import type { Lot, Pallet } from "@/lib/types";
+import { CompactSummaryCard, SectionHeader } from "@/components/ui/design-system";
 
-const fieldClass = "mt-2 w-full rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-slate-950 outline-none transition-colors focus:border-amber-500 focus:ring-2 focus:ring-amber-100";
+const fieldClass = "form-control mt-2";
 const DAY = 86_400_000;
 
 function normalize(value: string) {
@@ -33,6 +34,9 @@ export function LotTrackingPanel({ lots, pallets }: { lots: Lot[]; pallets: Pall
     (!status || (status === "with_pallets" ? (palletsByLot.get(lot.id) ?? 0) > 0 : (palletsByLot.get(lot.id) ?? 0) === 0)),
   );
   const hasFilters = Boolean(search || expiration || status);
+  const lotsWithPallets = lots.filter((lot) => (palletsByLot.get(lot.id) ?? 0) > 0).length;
+  const lotsWithoutPallets = lots.length - lotsWithPallets;
+  const expiringLots = lots.filter((lot) => ["critical", "warning", "upcoming"].includes(expirationGroup(lot.expirationDate))).length;
 
   function clearFilters() {
     setSearch("");
@@ -41,23 +45,36 @@ export function LotTrackingPanel({ lots, pallets }: { lots: Lot[]; pallets: Pall
   }
 
   return (
-    <section className="space-y-5" aria-label="Seguimiento de lotes">
-      <div className="rounded-2xl border border-stone-200 bg-white p-5">
+    <section className="space-y-10" aria-label="Seguimiento de lotes">
+      <section aria-label="Filtros de lotes" className="surface p-5">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-[2fr_1fr_1fr]">
-          <label className="text-sm font-semibold md:col-span-2 xl:col-span-1">Buscar
-            <input value={search} onChange={(event) => setSearch(event.target.value)} type="search" placeholder="Número de lote, producto o SKU" className={fieldClass} />
-          </label>
-          <label className="text-sm font-semibold">Vencimiento
-            <select value={expiration} onChange={(event) => setExpiration(event.target.value)} className={fieldClass}><option value="">Todos los vencimientos</option><option value="critical">Hasta 30 días</option><option value="warning">31 a 60 días</option><option value="upcoming">61 a 90 días</option><option value="later">Más de 90 días</option><option value="none">Sin fecha</option></select>
-          </label>
-          <label className="text-sm font-semibold">Estado
-            <select value={status} onChange={(event) => setStatus(event.target.value)} className={fieldClass}><option value="">Todos los lotes</option><option value="with_pallets">Con pallets</option><option value="without_pallets">Sin pallets</option></select>
-          </label>
+            <label className="text-sm font-semibold md:col-span-2 xl:col-span-1">Buscar
+              <input value={search} onChange={(event) => setSearch(event.target.value)} type="search" placeholder="Número de lote, producto o SKU" className={fieldClass} />
+            </label>
+            <label className="text-sm font-semibold">Vencimiento
+              <select value={expiration} onChange={(event) => setExpiration(event.target.value)} className={fieldClass}><option value="">Todos los vencimientos</option><option value="critical">Hasta 30 días</option><option value="warning">31 a 60 días</option><option value="upcoming">61 a 90 días</option><option value="later">Más de 90 días</option><option value="none">Sin fecha</option></select>
+            </label>
+            <label className="text-sm font-semibold">Estado
+              <select value={status} onChange={(event) => setStatus(event.target.value)} className={fieldClass}><option value="">Todos los lotes</option><option value="with_pallets">Con pallets</option><option value="without_pallets">Sin pallets</option></select>
+            </label>
         </div>
-        {hasFilters && <button type="button" onClick={clearFilters} className="mt-4 rounded-xl border border-stone-200 px-4 py-2 text-sm font-bold text-stone-600 transition-colors hover:bg-stone-50">Limpiar filtros</button>}
+        {hasFilters && <button type="button" onClick={clearFilters} className="button-secondary mt-4">Limpiar filtros</button>}
+      </section>
+
+      <section aria-label="Resumen de lotes" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <CompactSummaryCard label="Total de lotes" value={lots.length} tone="brand" />
+        <CompactSummaryCard label="Con pallets" value={lotsWithPallets} tone="green" />
+        <CompactSummaryCard label="Sin pallets" value={lotsWithoutPallets} tone="neutral" />
+        <CompactSummaryCard label="Vencen en 90 días" value={expiringLots} tone="amber" />
+      </section>
+
+      <div className="section-stack">
+        <SectionHeader
+          title="Lotes registrados"
+          action={<p role="status" className="text-sm text-stone-500">Mostrando {visibleLots.length} de {lots.length}</p>}
+        />
+        <LotsTable lots={visibleLots} pallets={pallets} />
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-xl font-bold">Lotes registrados</h2><p className="text-sm text-stone-500">Mostrando {visibleLots.length} de {lots.length}</p></div>
-      <LotsTable lots={visibleLots} pallets={pallets} />
     </section>
   );
 }

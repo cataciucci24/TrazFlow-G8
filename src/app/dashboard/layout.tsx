@@ -1,6 +1,5 @@
 import { requireUserProfile } from "@/lib/auth/session";
 import { DashboardSidebar } from "@/components/dashboard-sidebar";
-import { DashboardHeader } from "@/components/dashboard-header";
 
 export default async function DashboardLayout({
   children,
@@ -10,11 +9,10 @@ export default async function DashboardLayout({
   const profile = await requireUserProfile();
 
   return (
-    <div className="min-h-screen bg-[#faf9f7] text-slate-950 lg:flex">
+    <div className="min-h-dvh bg-stone-50 text-stone-950 lg:flex">
       <DashboardSidebar role={profile.role} />
-      <section className="min-w-0 flex-1 lg:h-screen lg:overflow-y-auto">
-        <DashboardHeader />
-        <main className="mx-auto w-full max-w-[1120px] px-5 py-8 sm:px-8 lg:px-10 lg:py-10">{children}</main>
+      <section className="min-w-0 flex-1 lg:h-dvh lg:overflow-y-auto">
+        <main id="main-content" className="mx-auto w-full max-w-[1180px] px-4 py-7 sm:px-7 lg:px-10 lg:py-12">{children}</main>
       </section>
     </div>
   );
