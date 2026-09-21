@@ -59,7 +59,7 @@ export function NewDispatchOrderForm({
           value={values.distributorId}
           onChange={(event) => setValues((current) => ({ ...current, distributorId: event.target.value }))}
           disabled={isPending}
-          className="w-full rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-slate-950 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+          className="form-control"
         >
           <option value="">Seleccionar distribuidor</option>
           {distributors.map((distributor) => (
@@ -75,7 +75,7 @@ export function NewDispatchOrderForm({
 
       <fieldset className="space-y-2">
         <legend className="text-sm font-semibold uppercase tracking-wide text-stone-500">Pallets de la orden</legend>
-        {pallets.length === 0 ? <p className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-700">No hay pallets disponibles en depósito. Primero registrá uno desde Seguimiento.</p> : <div className="max-h-56 divide-y divide-stone-200 overflow-y-auto rounded-xl border border-stone-200 px-4">{pallets.map((pallet) => <label key={pallet.id} className="flex cursor-pointer items-center gap-3 py-3 text-sm"><input name="palletIds" type="checkbox" value={pallet.id} checked={selectedPalletIds.includes(pallet.id)} onChange={(event) => setSelectedPalletIds((current) => event.target.checked ? [...current, pallet.id] : current.filter((id) => id !== pallet.id))} disabled={isPending} className="size-4 rounded border-stone-300 text-amber-500 focus:ring-amber-500" /><span className="font-mono font-semibold">{pallet.qrCode}</span><span className="text-stone-500">{pallet.productName} · lote {pallet.batchNumber}</span></label>)}</div>}
+        {pallets.length === 0 ? <p className="feedback feedback-warning">No hay pallets disponibles en depósito. Primero registrá uno desde Seguimiento.</p> : <div className="max-h-56 divide-y divide-stone-200 overflow-y-auto rounded-xl border border-stone-200 px-4">{pallets.map((pallet) => <label key={pallet.id} className="flex min-h-11 cursor-pointer items-center gap-3 py-3 text-sm"><input name="palletIds" type="checkbox" value={pallet.id} checked={selectedPalletIds.includes(pallet.id)} onChange={(event) => setSelectedPalletIds((current) => event.target.checked ? [...current, pallet.id] : current.filter((id) => id !== pallet.id))} disabled={isPending} className="size-4 rounded border-stone-300 text-[var(--brand)] focus:ring-[var(--focus)]" /><span className="font-mono font-semibold">{pallet.qrCode}</span><span className="text-stone-500">{pallet.productName} · lote {pallet.batchNumber}</span></label>)}</div>}
         {state.errors.palletIds && <p className="text-xs text-red-600">{state.errors.palletIds}</p>}
       </fieldset>
 
@@ -94,7 +94,7 @@ export function NewDispatchOrderForm({
           min={today}
           onChange={(event) => setValues((current) => ({ ...current, estimatedDispatchDate: event.target.value }))}
           disabled={isPending}
-          className="w-full rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-slate-950 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+          className="form-control"
         />
         {state.errors.estimatedDispatchDate && (
           <p className="text-xs text-red-600">
@@ -117,21 +117,21 @@ export function NewDispatchOrderForm({
           value={values.notes}
           onChange={(event) => setValues((current) => ({ ...current, notes: event.target.value }))}
           disabled={isPending}
-          className="w-full rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-slate-950 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+          className="form-control"
         />
       </div>
 
       <div className="flex justify-end gap-3 pt-2">
         <Link
           href="/dashboard/orders"
-          className="rounded-xl border border-stone-200 px-5 py-3 text-sm font-semibold text-stone-600 transition-colors hover:bg-stone-50"
+          className="button-secondary"
         >
           Cancelar
         </Link>
         <button
           type="submit"
           disabled={isPending}
-          className="rounded-xl bg-amber-500 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-60"
+          className="button-primary disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isPending ? "Creando..." : "Crear orden"}
         </button>

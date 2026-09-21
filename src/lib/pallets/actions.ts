@@ -69,6 +69,9 @@ export async function createLot(
   }
 
   revalidatePath("/dashboard/traceability");
+  revalidatePath("/dashboard/lots");
+  revalidatePath("/dashboard/pallets");
+  revalidatePath("/dashboard/alerts");
   return { error: null, success: `Lote ${batchNumber} registrado.` };
 }
 
@@ -101,19 +104,13 @@ export async function createPallet(
     .single();
   if (productError || !product) return { error: INITIAL_ERROR, success: null };
 
-  // El 0 satisface el campo legado solo al crear el lote; nunca pisa su cantidad.
-  const { error: batchInsertError } = await supabase
-    .from("batches")
-    .upsert({ product_id: product.id, batch_number: batchNumber, quantity: 0 }, { onConflict: "product_id,batch_number", ignoreDuplicates: true });
-  if (batchInsertError) return { error: INITIAL_ERROR, success: null };
-
   const { data: batch, error: batchError } = await supabase
     .from("batches")
     .select("id")
     .eq("product_id", product.id)
     .eq("batch_number", batchNumber)
     .single();
-  if (batchError || !batch) return { error: INITIAL_ERROR, success: null };
+  if (batchError || !batch) return { error: "El lote seleccionado no existe para ese producto. Crealo primero desde la sección Lotes.", success: null };
 
   const { error: palletError } = await supabase.from("pallets").insert({
     company_id: profile.companyId,
@@ -130,6 +127,9 @@ export async function createPallet(
   revalidatePath("/dashboard/inventory");
   revalidatePath("/dashboard/traceability");
   revalidatePath("/dashboard/orders");
+  revalidatePath("/dashboard/pallets");
+  revalidatePath("/dashboard/lots");
+  revalidatePath("/dashboard/alerts");
   return { error: null, success: `Pallet ${qrCode} registrado en depósito.` };
 }
 
@@ -172,19 +172,13 @@ export async function updatePallet(
     .single();
   if (productError || !product) return { error: INITIAL_ERROR, success: null };
 
-  // El 0 satisface el campo legado solo al crear el lote; nunca pisa su cantidad.
-  const { error: batchInsertError } = await supabase
-    .from("batches")
-    .upsert({ product_id: product.id, batch_number: batchNumber, quantity: 0 }, { onConflict: "product_id,batch_number", ignoreDuplicates: true });
-  if (batchInsertError) return { error: INITIAL_ERROR, success: null };
-
   const { data: batch, error: batchError } = await supabase
     .from("batches")
     .select("id")
     .eq("product_id", product.id)
     .eq("batch_number", batchNumber)
     .single();
-  if (batchError || !batch) return { error: INITIAL_ERROR, success: null };
+  if (batchError || !batch) return { error: "El lote seleccionado no existe para ese producto. Crealo primero desde la sección Lotes.", success: null };
 
   const { error: updateError } = await supabase
     .from("pallets")
@@ -196,6 +190,9 @@ export async function updatePallet(
   revalidatePath("/dashboard/inventory");
   revalidatePath("/dashboard/traceability");
   revalidatePath("/dashboard/orders");
+  revalidatePath("/dashboard/pallets");
+  revalidatePath("/dashboard/lots");
+  revalidatePath("/dashboard/alerts");
   return { error: null, success: `Pallet ${qrCode} actualizado.` };
 }
 
@@ -227,5 +224,8 @@ export async function deletePallet(palletId: string): Promise<DeletePalletState>
   revalidatePath("/dashboard/inventory");
   revalidatePath("/dashboard/traceability");
   revalidatePath("/dashboard/orders");
+  revalidatePath("/dashboard/pallets");
+  revalidatePath("/dashboard/lots");
+  revalidatePath("/dashboard/alerts");
   return { error: null, success: `Pallet ${pallet.qr_code} eliminado.` };
 }

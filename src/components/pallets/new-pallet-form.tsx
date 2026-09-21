@@ -68,8 +68,8 @@ export function NewPalletForm({
       }}
       className="group relative"
     >
-      <summary className="cursor-pointer list-none rounded-xl bg-amber-500 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-amber-600 [&::-webkit-details-marker]:hidden">＋ Nuevo pallet</summary>
-    <form ref={formRef} onSubmit={handleSubmit} className="absolute right-0 z-20 mt-3 grid w-[min(680px,calc(100vw-2.5rem))] gap-4 rounded-2xl border border-stone-200 bg-white p-5 shadow-xl sm:grid-cols-2">
+      <summary className="button-primary list-none [&::-webkit-details-marker]:hidden"><span aria-hidden="true">+</span>&nbsp; Nuevo pallet</summary>
+    <form ref={formRef} onSubmit={handleSubmit} className="surface absolute right-0 z-20 mt-3 grid w-[min(680px,calc(100vw-2rem))] gap-4 p-5 shadow-xl sm:grid-cols-2">
       <div className="sm:col-span-2"><h2 className="text-base font-bold">Registrar nuevo pallet</h2><p className="mt-1 text-sm text-stone-500">Quedará disponible en depósito para asociarlo a una orden.</p></div>
       {state.error && <p role="alert" className="sm:col-span-2 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{state.error}</p>}
       {state.success && <p role="status" className="sm:col-span-2 rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{state.success}</p>}
@@ -79,8 +79,8 @@ export function NewPalletForm({
       <Field label="Cantidad" name="quantity" type="number" placeholder="Mayor que 0" />
       <UnitOfMeasureField />
       <div className="flex items-end justify-end gap-3 sm:col-span-2">
-        <button type="button" onClick={closeForm} className="rounded-xl px-5 py-3 text-sm font-bold text-stone-600 hover:text-stone-800">Cancelar</button>
-        <button disabled={isPending} className="rounded-xl bg-amber-500 px-5 py-3 text-sm font-bold text-white hover:bg-amber-600 disabled:opacity-60">{isPending ? "Registrando..." : "Registrar pallet"}</button>
+        <button type="button" onClick={closeForm} className="button-secondary">Cancelar</button>
+        <button disabled={isPending} className="button-primary disabled:opacity-60">{isPending ? "Registrando..." : "Registrar pallet"}</button>
       </div>
     </form>
     </details>
@@ -89,5 +89,5 @@ export function NewPalletForm({
 
 function Field({ label, name, placeholder, type = "text", value, onChange }: { label: string; name: string; placeholder: string; type?: string; value?: string; onChange?: (value: string) => void }) {
   const controlled = onChange ? { value: value ?? "", onChange: (event: React.ChangeEvent<HTMLInputElement>) => onChange(event.target.value) } : {};
-  return <label className="block text-xs font-bold uppercase tracking-wide text-stone-500">{label}<input required name={name} type={type} min={type === "number" ? 0 : undefined} step={type === "number" ? "any" : undefined} placeholder={placeholder} {...controlled} className="mt-2 w-full rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm font-normal normal-case tracking-normal text-slate-950 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100" /></label>;
+  return <label className="form-label">{label}<input required name={name} type={type} min={type === "number" ? 0 : undefined} step={type === "number" ? "any" : undefined} placeholder={placeholder} {...controlled} className="form-control mt-2 font-normal" /></label>;
 }

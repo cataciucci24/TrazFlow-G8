@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { isPalletUnit } from "@/lib/pallets/units";
 import { hasRole, requireUserProfile } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 
@@ -25,12 +26,19 @@ export async function saveDistributorStock(
   const productId = String(formData.get("productId") ?? "").trim();
   const currentStock = Number(formData.get("currentStock"));
   const dailyConsumption = Number(formData.get("dailyConsumption"));
+  const unitOfMeasure = String(formData.get("unitOfMeasure") ?? "").trim();
 
   if (!productId) {
     return { ...EMPTY_STATE, error: "Seleccioná el producto." };
   }
-  if (!Number.isInteger(currentStock) || currentStock < 0) {
-    return { ...EMPTY_STATE, error: "El stock actual debe ser un número entero mayor o igual a cero." };
+  if (!isPalletUnit(unitOfMeasure)) {
+    return { ...EMPTY_STATE, error: "Seleccioná la unidad de medida." };
+  }
+  if (!Number.isFinite(currentStock) || currentStock < 0) {
+    return { ...EMPTY_STATE, error: "El stock actual debe ser un número mayor o igual a cero." };
+  }
+  if (unitOfMeasure !== "kilogramos" && !Number.isInteger(currentStock)) {
+    return { ...EMPTY_STATE, error: "El stock en unidades o cajas debe ser un número entero." };
   }
   if (!Number.isFinite(dailyConsumption) || dailyConsumption <= 0) {
     return { ...EMPTY_STATE, error: "El consumo diario debe ser un número mayor a cero." };
@@ -69,6 +77,7 @@ export async function saveDistributorStock(
     product_id: productId,
     current_stock: currentStock,
     daily_consumption: dailyConsumption,
+    unit_of_measure: unitOfMeasure,
   }, { onConflict: "distributor_id,product_id" });
 
   if (error) {

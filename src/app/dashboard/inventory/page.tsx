@@ -4,12 +4,13 @@ import { redirect } from "next/navigation";
 import { InventoryPanel } from "@/components/inventory/inventory-panel";
 import { hasRole, requireUserProfile } from "@/lib/auth/session";
 import { getCompanyPallets } from "@/lib/pallets/queries";
+import { PageHeader } from "@/components/ui/design-system";
 
 export const metadata: Metadata = {
   title: "Stock | TrazFlow",
 };
 
-export default async function InventoryPage() {
+export default async function InventoryPage({ searchParams }: { searchParams: Promise<{ search?: string }> }) {
   const profile = await requireUserProfile();
 
   if (!hasRole(profile, "logistics_manager")) {
@@ -18,15 +19,12 @@ export default async function InventoryPage() {
 
   const pallets = await getCompanyPallets(profile.companyId);
 
+  const params = await searchParams;
+
   return (
-    <div className="space-y-8">
-      <div className="border-b border-stone-200 pb-6">
-        <h1 className="text-2xl font-bold tracking-tight">Stock</h1>
-        <p className="mt-1 text-sm text-stone-500">
-          Consultá los pallets de tu empresa por ubicación, producto y estado.
-        </p>
-      </div>
-      <InventoryPanel pallets={pallets} />
+    <div className="app-page">
+      <PageHeader title="Stock" description="Consultá los pallets de tu empresa por ubicación, producto y estado." />
+      <InventoryPanel pallets={pallets} initialSearch={params.search ?? ""} />
     </div>
   );
 }

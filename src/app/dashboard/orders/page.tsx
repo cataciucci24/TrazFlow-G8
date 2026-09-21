@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { requireUserProfile, hasRole } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
-import { ORDER_STATUS_LABELS } from "@/lib/orders/labels";
+import { OrderStatusBadge, PageHeader, TableShell } from "@/components/ui/design-system";
+import type { OrderStatus } from "@/lib/types";
 
 export const metadata: Metadata = {
   title: "Órdenes de despacho | TrazFlow",
@@ -25,34 +26,31 @@ export default async function OrdersPage() {
   }
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-2xl font-bold tracking-tight">Órdenes de despacho</h1>
-        {isLogisticsManager && (
+    <div className="app-page">
+      <PageHeader
+        title="Órdenes de despacho"
+        description="Gestioná y consultá el estado de los envíos a cada distribuidora."
+        action={isLogisticsManager ? (
           <Link
             href="/dashboard/orders/new"
-            className="inline-flex items-center gap-2 rounded-xl bg-amber-500 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-amber-600"
+            className="button-primary gap-2"
           >
-            <span className="text-xl leading-none">＋</span>Nueva orden
+            <span aria-hidden="true" className="text-lg leading-none">+</span>Nueva orden
           </Link>
-        )}
-      </div>
+        ) : undefined}
+      />
 
-      <div className="overflow-hidden rounded-2xl border border-stone-200 bg-white">
+      <TableShell label="Órdenes de despacho registradas">
         {!orders || orders.length === 0 ? (
           <p className="py-12 text-center text-sm text-stone-500">
             No hay órdenes de despacho registradas en el sistema.
           </p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[780px] text-left text-sm">
+            <table className="data-table min-w-[780px]">
               <thead>
-                <tr className="bg-stone-100/80 text-stone-500">
-                  <th className="px-5 py-4 font-semibold">Código</th>
-                  <th className="px-5 py-4 font-semibold">Distribuidora</th>
-                  <th className="px-5 py-4 font-semibold">Fecha despacho</th>
-                  <th className="px-5 py-4 font-semibold">Estado</th>
-                  <th className="px-5 py-4 font-semibold">Observaciones</th>
+                <tr>
+                  <th>Código</th><th>Distribuidora</th><th>Fecha despacho</th><th>Estado</th><th>Observaciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-200">
@@ -62,26 +60,20 @@ export default async function OrdersPage() {
                     : order.distributors;
 
                   return (
-                    <tr key={order.id} className="transition-colors hover:bg-amber-50/40">
-                      <td className="px-5 py-4 font-mono font-bold text-slate-950">
-                        <Link href={`/dashboard/orders/${order.id}`} className="hover:text-amber-600">{order.id.slice(0, 8).toUpperCase()}</Link>
+                    <tr key={order.id}>
+                      <td className="font-mono font-bold text-slate-950">
+                        <Link href={`/dashboard/orders/${order.id}`} className="table-action">{order.id.slice(0, 8).toUpperCase()}</Link>
                       </td>
-                      <td className="px-5 py-4 font-medium text-slate-950">
+                      <td className="font-medium text-slate-950">
                         {distributor?.name ?? "—"}
                       </td>
-                      <td className="px-5 py-4 text-stone-600">
+                      <td className="text-slate-600">
                         {order.estimated_dispatch_date ? new Date(`${order.estimated_dispatch_date}T00:00:00`).toLocaleDateString("es-AR") : "—"}
                       </td>
-                      <td className="px-5 py-4">
-                        <span className={`rounded-full px-3 py-1.5 text-xs font-bold ${
-                          order.status === "confirmed" 
-                            ? "bg-emerald-50 text-emerald-600"
-                            : "bg-amber-50 text-amber-600"
-                        }`}>
-                          {ORDER_STATUS_LABELS[order.status as keyof typeof ORDER_STATUS_LABELS] ?? order.status}
-                        </span>
+                      <td>
+                        <OrderStatusBadge status={order.status as OrderStatus} />
                       </td>
-                      <td className="max-w-72 truncate px-5 py-4 text-stone-500">
+                      <td className="max-w-72 truncate text-slate-500">
                         {order.notes ?? "—"}
                       </td>
                     </tr>
@@ -91,7 +83,7 @@ export default async function OrdersPage() {
             </table>
           </div>
         )}
-      </div>
+      </TableShell>
     </div>
   );
 }

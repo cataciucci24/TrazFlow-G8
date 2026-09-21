@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
-import { ExpirationAlerts, ExpirationAlertSummary } from "@/components/dashboard/expiration-alerts";
-import { StockAlerts } from "@/components/dashboard/stock-alerts";
+import { AlertsCenter } from "@/components/dashboard/alerts-center";
+import { PageHeader } from "@/components/ui/design-system";
 import { hasRole, requireUserProfile } from "@/lib/auth/session";
 import { getExpirationAlerts } from "@/lib/pallets/queries";
 import { getDistributorStockAlerts } from "@/lib/stock-alerts/queries";
@@ -24,23 +24,16 @@ export default async function AlertsPage() {
   ]);
 
   return (
-    <div className="space-y-8">
-      <div className="border-b border-stone-200 pb-6">
-        <h1 className="text-2xl font-bold tracking-tight">Alertas</h1>
-        <p className="mt-1 text-sm text-stone-500">Anticipá quiebres de stock y priorizá la distribución de mercadería próxima a vencer.</p>
-      </div>
-
-      <section aria-labelledby="urgency-summary-title" className="space-y-4">
-        <div>
-          <h2 id="urgency-summary-title" className="text-xl font-bold">Resumen por urgencia</h2>
-          <p className="mt-1 text-sm text-stone-500">Alertas generadas para vencimientos dentro de los próximos 90 días.</p>
-        </div>
-        <ExpirationAlertSummary alerts={expirationAlerts} />
-      </section>
-
-      <ExpirationAlerts alerts={expirationAlerts} />
-
-      <StockAlerts {...stockAlerts} />
+    <div className="app-page">
+      <PageHeader
+        title="Alertas"
+        description="Anticipá problemas de stock y vencimientos antes de que afecten la distribución."
+      />
+      <AlertsCenter
+        expirationAlerts={expirationAlerts}
+        stockAlerts={stockAlerts.alerts}
+        inventorySourceAvailable={stockAlerts.inventorySourceAvailable}
+      />
     </div>
   );
 }

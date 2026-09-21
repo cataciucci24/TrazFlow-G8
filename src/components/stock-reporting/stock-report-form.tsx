@@ -2,11 +2,12 @@
 
 import { useActionState } from "react";
 
+import { PALLET_UNITS } from "@/lib/pallets/units";
 import { saveDistributorStock, type SaveDistributorStockState } from "@/lib/stock-reporting/actions";
 import type { StockReportingProduct } from "@/lib/stock-reporting/queries";
 
 const INITIAL_STATE: SaveDistributorStockState = { error: null, success: null };
-const CONTROL_CLASS = "w-full rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-slate-950 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100";
+const CONTROL_CLASS = "form-control";
 
 export function StockReportForm({
   products,
@@ -16,10 +17,10 @@ export function StockReportForm({
   const [state, formAction, isPending] = useActionState(saveDistributorStock, INITIAL_STATE);
 
   return (
-    <form action={formAction} className="space-y-5 rounded-2xl border border-stone-200 bg-white p-5 sm:p-6">
+    <section className="section-stack" aria-labelledby="update-stock-title">
+      <div><h2 id="update-stock-title" className="section-title">Actualizar disponibilidad</h2><p className="section-description">Informá una estimación diaria para anticipar posibles quiebres de stock.</p></div>
+      <form action={formAction} className="surface space-y-5 p-5 sm:p-6">
       <div>
-        <h2 className="text-lg font-bold">Actualizar disponibilidad</h2>
-        <p className="mt-1 text-sm text-stone-500">Informá una estimación diaria para anticipar posibles quiebres de stock.</p>
         <p className="mt-3 inline-flex rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700">Los datos se asociarán automáticamente a tu distribuidora.</p>
       </div>
 
@@ -33,20 +34,27 @@ export function StockReportForm({
             {products.map((product) => <option key={product.id} value={product.id}>{product.name} ({product.sku})</option>)}
           </select>
         </Field>
-        <Field label="Stock actual" hint="Unidades disponibles hoy.">
-          <input name="currentStock" type="number" min="0" step="1" required disabled={isPending} placeholder="Ej. 80" className={CONTROL_CLASS} />
+        <Field label="Unidad de medida" hint="Se usa para el stock y el consumo diario.">
+          <select name="unitOfMeasure" required disabled={isPending} defaultValue="" className={CONTROL_CLASS}>
+            <option value="" disabled>Seleccionar unidad</option>
+            {PALLET_UNITS.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
+          </select>
         </Field>
-        <Field label="Consumo diario estimado" hint="Promedio de unidades consumidas por día.">
+        <Field label="Stock actual" hint="Cantidad disponible hoy, en la unidad elegida.">
+          <input name="currentStock" type="number" min="0" step="0.01" required disabled={isPending} placeholder="Ej. 80" className={CONTROL_CLASS} />
+        </Field>
+        <Field label="Consumo diario estimado" hint="Promedio consumido por día, en la misma unidad.">
           <input name="dailyConsumption" type="number" min="0.01" step="0.01" required disabled={isPending} placeholder="Ej. 10" className={CONTROL_CLASS} />
         </Field>
       </div>
 
       <div className="flex justify-end">
-        <button type="submit" disabled={isPending || products.length === 0} className="rounded-xl bg-emerald-600 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60">
+        <button type="submit" disabled={isPending || products.length === 0} className="button-primary disabled:cursor-not-allowed disabled:opacity-60">
           {isPending ? "Guardando..." : "Guardar información"}
         </button>
       </div>
-    </form>
+      </form>
+    </section>
   );
 }
 
