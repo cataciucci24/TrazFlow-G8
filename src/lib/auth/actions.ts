@@ -41,3 +41,26 @@ export async function logout() {
   revalidatePath("/", "layout");
   redirect("/login");
 }
+
+
+export async function signUp(formData: FormData) {
+  // Acción pública: no lleva requireUserProfile(), el usuario todavía no existe.
+  const email = String(formData.get("email") ?? "").trim();
+  const password = String(formData.get("password") ?? "");
+
+  // Validación en el server: el minLength del HTML se saltea fácil.
+  if (!email || password.length < 8) {
+    redirect("/register?error=" + encodeURIComponent("Email inválido o contraseña de menos de 8 caracteres"));
+  }
+
+  const supabase = await createClient(); // usá el mismo helper que usa login()
+  const { error } = await supabase.auth.signUp({ email, password });
+
+  if (error) {
+    redirect("/register?error=" + encodeURIComponent(error.message));
+  }
+
+  // Sin perfil ni rol todavía: cerramos la sesión para evitar el loop con el proxy.
+  await supabase.auth.signOut();
+  redirect("/login?registered=1");
+}
