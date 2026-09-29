@@ -69,12 +69,12 @@ export async function proxy(request: NextRequest) {
   // Salvo que venga con ?error=..., que es justamente el caso de una sesión
   // válida que no puede entrar (ej: perfil sin dar de alta en `users`).
   // Sin esta excepción se armaría un loop de redirects con requireUserProfile().
-  if (user && pathname === "/login" && !request.nextUrl.searchParams.has("error")) {
-    const dashboardUrl = request.nextUrl.clone();
-    dashboardUrl.pathname = "/dashboard";
-    dashboardUrl.search = "";
-    return NextResponse.redirect(dashboardUrl);
-  }
+if (user && (pathname === "/login" || pathname === "/register") &&!request.nextUrl.searchParams.has("error")){
+  const dashboardUrl = request.nextUrl.clone();
+  dashboardUrl.pathname = "/dashboard";
+  dashboardUrl.search = "";
+  return NextResponse.redirect(dashboardUrl);
+}
 
   return response;
 }

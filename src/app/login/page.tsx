@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { login } from "@/lib/auth/actions";
 import { BrandLogo } from "@/components/brand-mark";
+import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "Ingresar | TrazFlow",
@@ -82,9 +83,12 @@ export default function LoginPage() {
           </form>
         </div>
 
-        <p className="text-center text-xs text-stone-500">
-          ¿No tenés cuenta? Las cuentas las crea el administrador.
-        </p>
+      <p className="text-center text-sm text-stone-500">
+        ¿No tenés cuenta?{" "}
+        <Link href="/register" className="font-semibold text-slate-950 underline underline-offset-2">
+          Registrate
+        </Link>
+      </p>
       </div>
       </section>
     </main>
