@@ -47,20 +47,35 @@ export async function signUp(formData: FormData) {
   // Acción pública: no lleva requireUserProfile(), el usuario todavía no existe.
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
+  const companyId = String(formData.get("companyId") ?? "");
+  const role = String(formData.get("role") ?? "");
 
-  // Validación en el server: el minLength del HTML se saltea fácil.
-  if (!email || password.length < 8) {
-    redirect("/register?error=" + encodeURIComponent("Email inválido o contraseña de menos de 8 caracteres"));
+  // Validar todo en el server: lo que manda el cliente no es confiable
+  if (
+    !email ||
+    password.length < 8 ||
+    !companyId ||
+    !["warehouse_operator", "distributor_operator"].includes(role)
+  ) {
+    redirect("/register?error=" + encodeURIComponent("Datos inválidos"));
   }
 
-  const supabase = await createClient(); // usá el mismo helper que usa login()
-  const { error } = await supabase.auth.signUp({ email, password });
-
-  if (error) {
-    redirect("/register?error=" + encodeURIComponent(error.message));
+  const supabase = await createClient();
+  const { data, error } = await supabase.auth.signUp({ email, password });
+  if (error || !data.user) {
+    redirect("/register?error=" + encodeURIComponent(error?.message ?? "No se pudo crear la cuenta"));
   }
 
-  // Sin perfil ni rol todavía: cerramos la sesión para evitar el loop con el proxy.
+  // user_id sale de la cuenta recién creada, nunca del formulario
+  const { error: reqError } = await supabase.from("access_requests").insert({
+    user_id: data.user.id,
+    company_id: companyId,
+    requested_role: role,
+  });
+  if (reqError) {
+    redirect("/register?error=" + encodeURIComponent("No se pudo enviar la solicitud"));
+  }
+
   await supabase.auth.signOut();
   redirect("/login?registered=1");
 }

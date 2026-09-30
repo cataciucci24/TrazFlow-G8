@@ -1,11 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { signUp } from "@/lib/auth/actions";
 import { BrandLogo } from "@/components/brand-mark";
+import { createClient } from "@/lib/supabase/server"; // el mismo helper que usa actions.ts
+import { RegisterWizard } from "./register-wizard";
 
-export const metadata: Metadata = {
-  title: "Crear cuenta | TrazFlow",
-};
+export const metadata: Metadata = { title: "Crear cuenta | TrazFlow" };
 
 export default async function RegisterPage({
   searchParams,
@@ -13,6 +12,8 @@ export default async function RegisterPage({
   searchParams: Promise<{ error?: string }>;
 }) {
   const { error } = await searchParams;
+  const supabase = await createClient();
+  const { data: companies } = await supabase.rpc("get_registration_companies");
 
   return (
     <main className="flex min-h-dvh items-center justify-center bg-stone-50 px-5 py-12 sm:px-8">
@@ -24,23 +25,7 @@ export default async function RegisterPage({
         </div>
 
         <div className="surface p-6 sm:p-8">
-          <form className="space-y-6" action={signUp}>
-            {error && <p className="text-sm text-red-600">{error}</p>}
-
-            <div>
-              <label htmlFor="email" className="block text-sm font-semibold text-stone-600">Email</label>
-              <input id="email" name="email" type="email" autoComplete="email" required
-                placeholder="nombre@empresa.com" className="form-control mt-1" />
-            </div>
-
-            <div>
-              <label htmlFor="password" className="block text-sm font-semibold text-stone-600">Contraseña</label>
-              <input id="password" name="password" type="password" autoComplete="new-password"
-                required minLength={8} placeholder="Mínimo 8 caracteres" className="form-control mt-1" />
-            </div>
-
-            <button type="submit" className="button-primary w-full">Crear cuenta</button>
-          </form>
+          <RegisterWizard companies={companies ?? []} error={error} />
         </div>
 
         <p className="text-center text-sm text-stone-500">
