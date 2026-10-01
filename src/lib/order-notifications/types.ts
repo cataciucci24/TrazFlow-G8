@@ -1,5 +1,5 @@
 /**
- * Tipos de inconsistencia que hoy escriben los RPCs de despacho en
+ * Tipos de inconsistencia que escriben los RPCs de despacho y recepción en
  * `order_notifications` (US18/TRZ-20). Es texto libre en la base para no
  * tener que migrar un enum por cada tipo nuevo, pero acá se listan los
  * valores conocidos para poder tipar el label en la UI.
