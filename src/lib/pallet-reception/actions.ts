@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { hasRole, requireUserProfile } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import type {
+  ReceptionDiscrepancyType,
   PalletReceptionResult,
   ReceptionOutcome,
 } from "@/lib/pallet-reception/types";
@@ -30,6 +31,7 @@ const MESSAGES: Record<ReceptionOutcome, string> = {
   order_not_found: "La orden de despacho no existe.",
   invalid_status: "La orden no está en tránsito o ya no admite recepciones.",
   invalid_pallet_status: "El pallet no se encuentra en tránsito.",
+  invalid_discrepancy_type: "El tipo de discrepancia seleccionado no es válido.",
   forbidden: "No tenés permisos para registrar esta recepción.",
   invalid_input: "El código QR leído no es válido.",
   error: "No se pudo registrar la recepción. Intentá nuevamente.",
@@ -39,6 +41,7 @@ const MESSAGES: Record<ReceptionOutcome, string> = {
 export async function receivePallet(
   orderId: string,
   scannedCode: string,
+  discrepancyType: ReceptionDiscrepancyType | null,
 ): Promise<PalletReceptionResult> {
   const profile = await requireUserProfile();
 
@@ -59,6 +62,7 @@ export async function receivePallet(
   const { data, error } = await supabase.rpc("receive_order_pallet", {
     p_order_id: orderId,
     p_qr_code: qrCode,
+    p_discrepancy_type: discrepancyType,
   });
 
   if (error) {
@@ -70,7 +74,7 @@ export async function receivePallet(
     return { outcome: "error", message: MESSAGES.error, pallet: null };
   }
 
-  if (row.outcome === "received") {
+  if (row.outcome === "received" || row.outcome === "wrong_order") {
     revalidatePath(`/dashboard/orders/${orderId}`);
   }
 

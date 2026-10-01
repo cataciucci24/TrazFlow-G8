@@ -6,7 +6,9 @@
  */
 export type OrderNotificationEventType =
   | "dispatch_wrong_pallet"
-  | "dispatch_missing_pallets";
+  | "dispatch_missing_pallets"
+  | "reception_wrong_pallet"
+  | "reception_reported_discrepancy";
 
 /** Fila del log de notificaciones de una orden, visible por rol vía RLS. */
 export type OrderNotification = {
