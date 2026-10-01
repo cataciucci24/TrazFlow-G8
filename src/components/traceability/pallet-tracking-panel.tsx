@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { PalletQrButton } from "@/components/pallets/pallet-qr-button";
 import { useMemo, useState } from "react";
 
 import { PalletActions } from "@/components/pallets/pallet-actions";
@@ -88,7 +89,7 @@ export function PalletTrackingPanel({
           <table className="data-table min-w-[780px]">
             <thead><tr><th>Código</th><th>Producto</th><th>Lote</th><th>Estado</th><th>Ubicación</th><th className="text-right">Acciones</th></tr></thead>
             <tbody>
-              {visiblePallets.map((pallet) => <tr key={pallet.id}><td className="font-mono font-bold">{pallet.qrCode}</td><td className="font-medium">{pallet.productName}</td><td className="font-mono text-stone-600">{pallet.batchNumber}</td><td><PalletStatusBadge status={pallet.status} /></td><td className="text-stone-500">{pallet.currentLocation ?? "—"}</td><td className="text-right"><div className="flex items-center justify-end gap-4"><Link href={`/dashboard/traceability?qr=${encodeURIComponent(pallet.qrCode)}`} className="table-action">Ver trazabilidad</Link><PalletActions pallet={pallet} existingBatches={existingBatches} existingProducts={existingProducts} /></div></td></tr>)}
+              {visiblePallets.map((pallet) => <tr key={pallet.id}><td className="font-mono font-bold">{pallet.qrCode}</td><td className="font-medium">{pallet.productName}</td><td className="font-mono text-stone-600">{pallet.batchNumber}</td><td><PalletStatusBadge status={pallet.status} /></td><td className="text-stone-500">{pallet.currentLocation ?? "—"}</td><td className="text-right"><div className="flex items-center justify-end gap-4"><Link href={`/dashboard/traceability?qr=${encodeURIComponent(pallet.qrCode)}`} className="table-action">Ver trazabilidad</Link><PalletQrButton qrCode={pallet.qrCode} /><PalletActions pallet={pallet} existingBatches={existingBatches} existingProducts={existingProducts} /></div></td></tr>)}
               {visiblePallets.length === 0 && <tr><td colSpan={6} className="px-5 py-10 text-center text-stone-500">No hay pallets para estos filtros.</td></tr>}
             </tbody>
           </table>

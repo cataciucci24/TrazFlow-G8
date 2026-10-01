@@ -75,7 +75,7 @@ export function NewPalletForm({
       {state.success && <p role="status" className="sm:col-span-2 rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{state.success}</p>}
       <ProductField existingProducts={existingProducts} onSkuChange={setProductSku} />
       <LotField productSku={productSku} existingBatches={existingBatches} />
-      <Field label="Código QR" name="qrCode" placeholder="PAL-0001" />
+      <p className="text-sm text-stone-500 sm:col-span-2">El código QR se genera automáticamente al registrar el pallet y no se puede modificar.</p>
       <Field label="Cantidad" name="quantity" type="number" placeholder="Mayor que 0" />
       <UnitOfMeasureField />
       <div className="flex items-end justify-end gap-3 sm:col-span-2">

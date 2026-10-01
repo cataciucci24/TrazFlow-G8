@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PalletQrButton } from "@/components/pallets/pallet-qr-button";
 
 import { PALLET_STATUS_LABELS } from "@/lib/pallets/labels";
 import type { PalletTraceability as PalletTraceabilityData } from "@/lib/traceability/types";
@@ -23,6 +24,7 @@ export function PalletTraceability({
     <div className="space-y-6">
       <section className="section-stack">
         <SectionHeader title={`Pallet ${pallet.qrCode}`} description="Identificación y estado actual del pallet." />
+        <PalletQrButton qrCode={pallet.qrCode} />
         <dl className="surface grid gap-5 p-6 text-sm sm:grid-cols-2">
           <div>
             <dt className="text-slate-500">Producto</dt>
