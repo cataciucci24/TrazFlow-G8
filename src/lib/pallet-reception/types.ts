@@ -6,9 +6,20 @@ export type ReceptionOutcome =
   | "order_not_found"
   | "invalid_status"
   | "invalid_pallet_status"
+  | "invalid_discrepancy_type"
   | "forbidden"
   | "invalid_input"
   | "error";
+
+export const RECEPTION_DISCREPANCY_TYPES = [
+  "missing",
+  "surplus",
+  "damaged",
+  "wrong_order",
+] as const;
+
+export type ReceptionDiscrepancyType =
+  (typeof RECEPTION_DISCREPANCY_TYPES)[number];
 
 export type ReceptionPallet = {
   id: string;

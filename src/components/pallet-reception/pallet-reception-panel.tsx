@@ -6,6 +6,7 @@ import { QrScanner } from "@/components/pallet-validation/qr-scanner";
 import { receivePallet } from "@/lib/pallet-reception/actions";
 import type {
   OrderPalletReception,
+  ReceptionDiscrepancyType,
   PalletReceptionResult,
 } from "@/lib/pallet-reception/types";
 import type { ScanHistoryItem } from "@/lib/scans/queries";
@@ -24,17 +25,26 @@ export function PalletReceptionPanel({
   initialScanHistory,
 }: PalletReceptionPanelProps) {
   const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [pendingQrCode, setPendingQrCode] = useState<string | null>(null);
   const [result, setResult] = useState<PalletReceptionResult | null>(null);
   const [scanHistory, setScanHistory] = useState<{ code: string; message: string; success: boolean }[]>([]);
   const [isPending, startTransition] = useTransition();
 
   const receivedCount = pallets.filter((pallet) => pallet.received).length;
 
-  const handleScan = useCallback(
-    (qrCode: string) => {
-      setIsScannerOpen(false);
+  const handleScan = useCallback((qrCode: string) => {
+    setIsScannerOpen(false);
+    setPendingQrCode(qrCode);
+  }, []);
+
+  const confirmReception = useCallback(
+    (discrepancyType: ReceptionDiscrepancyType | null) => {
+      if (!pendingQrCode) return;
+
+      const qrCode = pendingQrCode;
+      setPendingQrCode(null);
       startTransition(async () => {
-        const receptionResult = await receivePallet(orderId, qrCode);
+        const receptionResult = await receivePallet(orderId, qrCode, discrepancyType);
         setResult(receptionResult);
         setScanHistory((current) => [{
           code: qrCode,
@@ -43,7 +53,7 @@ export function PalletReceptionPanel({
         }, ...current]);
       });
     },
-    [orderId],
+    [orderId, pendingQrCode],
   );
 
   const isSuccess = result?.outcome === "received";
@@ -143,6 +153,27 @@ export function PalletReceptionPanel({
           onCancel={() => setIsScannerOpen(false)}
           onScan={handleScan}
         />
+      )}
+
+      {pendingQrCode && (
+        <div className="fixed inset-0 z-50 flex items-end bg-slate-950/50 p-4 sm:items-center sm:justify-center" role="dialog" aria-modal="true" aria-labelledby="reception-choice-title">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
+            <h2 id="reception-choice-title" className="text-lg font-bold text-slate-950">Confirmar recepción</h2>
+            <p className="mt-2 text-sm text-stone-600">¿El pallet <span className="font-mono font-semibold text-slate-950">{pendingQrCode}</span> llegó conforme?</p>
+            <div className="mt-5 grid gap-2 sm:grid-cols-2">
+              <button type="button" className="button-primary" disabled={isPending} onClick={() => confirmReception(null)}>OK</button>
+              {([
+                ["missing", "Faltante"],
+                ["surplus", "Sobrante"],
+                ["damaged", "Dañado"],
+                ["wrong_order", "No corresponde al pedido"],
+              ] as const).map(([type, label]) => (
+                <button key={type} type="button" className="button-secondary text-left" disabled={isPending} onClick={() => confirmReception(type)}>{label}</button>
+              ))}
+            </div>
+            <button type="button" className="mt-5 text-sm font-medium text-stone-500 hover:text-slate-950" disabled={isPending} onClick={() => setPendingQrCode(null)}>Cancelar</button>
+          </div>
+        </div>
       )}
     </div>
   );
