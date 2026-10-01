@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import { login } from "@/lib/auth/actions";
 import { BrandLogo } from "@/components/brand-mark";
+import { LoginForm } from "@/app/login/login-form";
 import Link from "next/link";
 
 export const metadata: Metadata = {
@@ -31,56 +31,7 @@ export default function LoginPage() {
         </div>
 
         <div className="surface p-6 sm:p-8">
-          <form className="space-y-6" action={login}>
-            <div>
-              <label
-                htmlFor="email"
-                className="block text-sm font-semibold text-stone-600"
-              >
-                Email
-              </label>
-              <div className="mt-1">
-                <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  autoComplete="email"
-                  required
-                  placeholder="nombre@empresa.com"
-                  className="form-control mt-1"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label
-                htmlFor="password"
-                className="block text-sm font-semibold text-stone-600"
-              >
-                Contraseña
-              </label>
-              <div className="mt-1">
-                <input
-                  id="password"
-                  name="password"
-                  type="password"
-                  autoComplete="current-password"
-                  required
-                  placeholder="••••••••"
-                  className="form-control mt-1"
-                />
-              </div>
-            </div>
-
-            <div>
-              <button
-                type="submit"
-                className="button-primary w-full"
-              >
-                Ingresar
-              </button>
-            </div>
-          </form>
+          <LoginForm />
         </div>
 
       <p className="text-center text-sm text-stone-500">
