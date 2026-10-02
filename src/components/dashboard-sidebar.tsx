@@ -37,6 +37,7 @@ export function DashboardSidebar({ role }: DashboardSidebarProps) {
         { href: "/dashboard/pallets", label: "Pallets", icon: <PalletIcon />, active: isPallets },
         { href: "/dashboard/lots", label: "Lotes", icon: <LotIcon />, active: isLots },
         { href: "/dashboard/stagnant", label: "Mercadería inmovilizada", icon: <StagnantIcon />, active: isStagnant },
+        { href: "/dashboard/access-requests", label: "Solicitudes de acceso", icon: <OrdersIcon />, active: pathname.startsWith("/dashboard/access-requests") },
       ]
     : role === "distributor_operator"
       ? [

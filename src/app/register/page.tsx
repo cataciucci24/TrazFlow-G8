@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { BrandLogo } from "@/components/brand-mark";
-import { createClient } from "@/lib/supabase/server"; // el mismo helper que usa actions.ts
+import { getRegistrationCompanies } from "@/lib/registration/queries";
 import { RegisterWizard } from "./register-wizard";
 
 export const metadata: Metadata = { title: "Crear cuenta | TrazFlow" };
@@ -12,8 +12,7 @@ export default async function RegisterPage({
   searchParams: Promise<{ error?: string }>;
 }) {
   const { error } = await searchParams;
-  const supabase = await createClient();
-  const { data: companies } = await supabase.rpc("get_registration_companies");
+  const companies = await getRegistrationCompanies();
 
   return (
     <main className="flex min-h-dvh items-center justify-center bg-stone-50 px-5 py-12 sm:px-8">

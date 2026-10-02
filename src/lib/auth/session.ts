@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 
 import { createClient } from "@/lib/supabase/server";
+import { getAccessRequest } from "@/lib/access-requests/queries";
 import type { UserProfile, UserRole } from "@/lib/types";
 
 /**
@@ -77,14 +78,18 @@ export async function requireUser(): Promise<User> {
 
 /**
  * Igual que getUserProfile(), pero exige sesión + perfil cargado.
- * Si hay sesión pero falta la fila en `users`, mandamos al login con un error
- * explicativo (usuario creado en Supabase Auth pero sin dar de alta acá).
+ * Sin perfil operativo, una solicitud permite consultar su estado, no entrar
+ * al dashboard. Sin solicitud se conserva el error de perfil incompleto.
  */
 export async function requireUserProfile(): Promise<UserProfile> {
-  await requireUser();
+  const user = await requireUser();
 
   const profile = await getUserProfile();
-  if (!profile) redirect("/login?error=perfil-incompleto");
+  if (!profile) {
+    const request = await getAccessRequest(user.id);
+    if (request) redirect("/access-status");
+    redirect("/login?error=perfil-incompleto");
+  }
 
   return profile;
 }
