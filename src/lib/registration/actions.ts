@@ -6,14 +6,23 @@ import { getUserProfile, requireUser } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { isRequestedRole } from "./options";
 import { getRegistrationCompanies, hasRegistrationRequest } from "./queries";
+import { normalizeName } from "./name";
 
 export async function completeRegistration(formData: FormData) {
   const user = await requireUser();
   if (await getUserProfile()) redirect("/dashboard");
+  const existing = await hasRegistrationRequest(user.id);
+  // La recuperación solo completa nombres faltantes; no es edición de perfil.
+  if (existing && normalizeName(user.user_metadata.name)) redirect("/dashboard");
+  const name = normalizeName(formData.get("name"));
+  if (!name) redirect("/complete-registration?error=invalid-selection");
 
   let destination = "/dashboard";
   try {
-    if (!(await hasRegistrationRequest(user.id))) {
+    const supabaseAuth = await createClient();
+    const { error: nameError } = await supabaseAuth.auth.updateUser({ data: { name } });
+    if (nameError) throw new Error("No se pudo guardar el nombre.", { cause: nameError });
+    if (!existing) {
       const companyId = String(formData.get("companyId") ?? "");
       const role = String(formData.get("role") ?? "");
       const companies = await getRegistrationCompanies();

@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { isRequestedRole } from "@/lib/registration/options";
 import { getRegistrationCompanies } from "@/lib/registration/queries";
+import { normalizeName } from "@/lib/registration/name";
 
 /**
  * Login con email + contraseña.
@@ -45,6 +46,7 @@ export async function logout() {
 
 
 export async function signUp(formData: FormData) {
+  const name = normalizeName(formData.get("name"));
   // Acción pública: no lleva requireUserProfile(), el usuario todavía no existe.
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
@@ -53,7 +55,7 @@ export async function signUp(formData: FormData) {
 
   // Validar todo en el server: lo que manda el cliente no es confiable
   if (
-    !email ||
+    !name || !email ||
     password.length < 8 ||
     !companyId ||
     !isRequestedRole(role)
@@ -75,7 +77,7 @@ export async function signUp(formData: FormData) {
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signUp({
     email, password,
-    options: { data: { company_id: companyId, requested_role: role } },
+    options: { data: { name, company_id: companyId, requested_role: role } },
   });
   if (error || !data.user) {
     console.error("Error creando cuenta", { code: error?.code, status: error?.status });

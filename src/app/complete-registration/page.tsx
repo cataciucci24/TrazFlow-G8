@@ -7,6 +7,7 @@ import { getUserProfile, requireUser } from "@/lib/auth/session";
 import { completeRegistration } from "@/lib/registration/actions";
 import { isRequestedRole, type RegistrationCompany } from "@/lib/registration/options";
 import { getRegistrationCompanies, hasRegistrationRequest } from "@/lib/registration/queries";
+import { NAME_MAX_LENGTH, normalizeName } from "@/lib/registration/name";
 
 export const metadata: Metadata = { title: "Completar solicitud | TrazFlow" };
 
@@ -26,7 +27,8 @@ export default async function CompleteRegistrationPage({ searchParams }: {
     console.error("Error cargando la finalización del registro", cause);
     failed = true;
   }
-  if (existing) redirect("/dashboard");
+  const name = normalizeName(user.user_metadata.name);
+  if (existing && name) redirect("/dashboard");
 
   // La metadata es entrada del usuario: únicamente prellena opciones válidas.
   const companyId = companies.some((company) => company.id === user.user_metadata.company_id)
@@ -46,12 +48,18 @@ export default async function CompleteRegistrationPage({ searchParams }: {
           <p className="break-words text-sm text-stone-500">{user.email}</p>
           {failed ? <p role="alert" className="feedback feedback-danger">No pudimos cargar los datos. Volvé a intentar.</p> : (
             <form action={completeRegistration} className="space-y-6">
+              {existing && <p className="text-sm text-stone-600">Tu solicitud ya existe. Completá únicamente tu nombre para que puedan aprobarla.</p>}
+              <div>
+                <label htmlFor="name" className="block text-sm font-semibold text-stone-600">Nombre completo</label>
+                <input id="name" name="name" autoComplete="name" required maxLength={NAME_MAX_LENGTH}
+                  defaultValue={name ?? ""} className="form-control mt-1" />
+              </div>
               {error && <p role="alert" className="feedback feedback-danger">{error === "invalid-selection"
-                ? "Elegí una empresa y un rol disponibles."
+                ? "Ingresá un nombre válido y, si corresponde, una empresa y un rol disponibles."
                 : "No pudimos completar el envío de la solicitud. Tu cuenta sigue creada; podés volver a intentar."}</p>}
-              <RegistrationFields companies={companies} companyId={companyId} role={role} />
-              {companies.length === 0 && <p className="feedback feedback-warning">No hay empresas disponibles para solicitar acceso.</p>}
-              <button type="submit" className="button-primary w-full" disabled={companies.length === 0}>Enviar solicitud</button>
+              {!existing && <RegistrationFields companies={companies} companyId={companyId} role={role} />}
+              {!existing && companies.length === 0 && <p className="feedback feedback-warning">No hay empresas disponibles para solicitar acceso.</p>}
+              <button type="submit" className="button-primary w-full" disabled={!existing && companies.length === 0}>{existing ? "Guardar nombre y continuar" : "Enviar solicitud"}</button>
             </form>
           )}
           <div className="flex flex-wrap gap-3">

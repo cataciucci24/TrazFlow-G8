@@ -3,12 +3,13 @@
 import { useState } from "react";
 import { signUp } from "@/lib/auth/actions";
 import { RegistrationFields } from "@/components/registration-fields";
+import { NAME_MAX_LENGTH, normalizeName } from "@/lib/registration/name";
 
 type Props = { companies: { id: string; name: string }[]; error?: string };
 
 export function RegisterWizard({ companies, error }: Props) {
   const [step, setStep] = useState(1);
-  const [data, setData] = useState({ email: "", password: "", companyId: "", role: "" });
+  const [data, setData] = useState({ name: "", email: "", password: "", companyId: "", role: "" });
 
   const set = (k: keyof typeof data) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
@@ -19,6 +20,7 @@ export function RegisterWizard({ companies, error }: Props) {
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       <input type="hidden" name="email" value={data.email} />
+      <input type="hidden" name="name" value={data.name} />
       <input type="hidden" name="password" value={data.password} />
       <input type="hidden" name="companyId" value={data.companyId} />
       <input type="hidden" name="role" value={data.role} />
@@ -27,6 +29,11 @@ export function RegisterWizard({ companies, error }: Props) {
 
       {step === 1 && (
         <>
+          <div>
+            <label htmlFor="name" className="block text-sm font-semibold text-stone-600">Nombre completo</label>
+            <input id="name" autoComplete="name" required maxLength={NAME_MAX_LENGTH} value={data.name}
+              onChange={set("name")} className="form-control mt-1" />
+          </div>
           <div>
             <label htmlFor="email" className="block text-sm font-semibold text-stone-600">Email</label>
             <input id="email" type="email" autoComplete="email" value={data.email}
@@ -38,7 +45,7 @@ export function RegisterWizard({ companies, error }: Props) {
               onChange={set("password")} placeholder="Mínimo 8 caracteres" className="form-control mt-1" />
           </div>
           <button type="button" className="button-primary w-full"
-            disabled={!data.email.includes("@") || data.password.length < 8}
+            disabled={!normalizeName(data.name) || !data.email.includes("@") || data.password.length < 8}
             onClick={() => setStep(2)}>
             Siguiente
           </button>
