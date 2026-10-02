@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { signUp } from "@/lib/auth/actions";
+import { RegistrationFields } from "@/components/registration-fields";
 
 type Props = { companies: { id: string; name: string }[]; error?: string };
 
@@ -46,26 +47,14 @@ export function RegisterWizard({ companies, error }: Props) {
 
       {step === 2 && (
         <>
-          <div>
-            <label htmlFor="company" className="block text-sm font-semibold text-stone-600">Empresa</label>
-            <select id="company" value={data.companyId} onChange={set("companyId")} className="form-control mt-1">
-              <option value="">Elegí tu empresa</option>
-              {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-          </div>
-          <div>
-            <label htmlFor="role" className="block text-sm font-semibold text-stone-600">Rol que solicitás</label>
-            <select id="role" value={data.role} onChange={set("role")} className="form-control mt-1">
-              <option value="">Elegí un rol</option>
-              <option value="warehouse_operator">Operador de depósito</option>
-              <option value="distributor_operator">Operador de distribución</option>
-            </select>
-          </div>
+          <RegistrationFields companies={companies} companyId={data.companyId} role={data.role}
+            onCompanyChange={set("companyId")} onRoleChange={set("role")} />
+          <p className="text-sm text-stone-500">Primero confirmarás tu email. Después de iniciar sesión podrás enviar la solicitud.</p>
           <div className="flex gap-3">
             <button type="button" className="w-1/3 text-sm font-semibold text-stone-600 underline"
               onClick={() => setStep(1)}>Volver</button>
             <button type="submit" className="button-primary w-2/3"
-              disabled={!data.companyId || !data.role}>Enviar solicitud</button>
+              disabled={!data.companyId || !data.role}>Crear cuenta</button>
           </div>
         </>
       )}

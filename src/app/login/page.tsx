@@ -7,7 +7,10 @@ export const metadata: Metadata = {
   title: "Ingresar | TrazFlow",
 };
 
-export default function LoginPage() {
+export default async function LoginPage({ searchParams }: {
+  searchParams: Promise<{ "verify-email"?: string; registered?: string }>;
+}) {
+  const params = await searchParams;
   return (
     <main className="relative grid min-h-dvh overflow-hidden bg-stone-50 lg:grid-cols-[1.1fr_0.9fr]">
       <section className="hidden bg-stone-950 p-12 text-white lg:flex lg:flex-col lg:justify-between">
@@ -31,6 +34,13 @@ export default function LoginPage() {
         </div>
 
         <div className="surface p-6 sm:p-8">
+          {params["verify-email"] === "1" && <p role="status" className="feedback feedback-success mb-6">
+            Revisá tu correo para confirmar tu email. Después podrás iniciar sesión y completar tu solicitud de acceso.
+            Si ya tenías cuenta, ingresá con tus credenciales. Todavía no se envió una nueva solicitud.
+          </p>}
+          {params.registered === "1" && <p role="status" className="feedback feedback-success mb-6">
+            Registro completado. Iniciá sesión para completar tu solicitud de acceso.
+          </p>}
           <LoginForm />
         </div>
 

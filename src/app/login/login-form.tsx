@@ -22,12 +22,14 @@ export function LoginForm() {
     });
 
     if (signInError) {
-      setError("El email o la contraseña no son correctos.");
+      setError(signInError.code === "email_not_confirmed"
+        ? "Confirmá tu email desde el correo recibido antes de iniciar sesión."
+        : "El email o la contraseña no son correctos.");
       setIsPending(false);
       return;
     }
 
-    router.replace("/dashboard");
+    router.replace("/complete-registration");
     router.refresh();
   }
 
