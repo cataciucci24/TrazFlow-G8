@@ -33,7 +33,7 @@ export function LotField({
 
   return (
     <div className="grid gap-2">
-      <label className="block text-xs font-bold uppercase tracking-wide text-stone-500">
+      <label className="form-label">
         Lote
         <select
           required

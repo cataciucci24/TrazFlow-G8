@@ -49,7 +49,7 @@ export function ProductField({
   return (
     <>
       <div className="grid gap-2">
-        <label className="block text-xs font-bold uppercase tracking-wide text-stone-500">
+        <label className="form-label">
           SKU
           <select
             required
@@ -66,6 +66,7 @@ export function ProductField({
           <input
             required
             name="productSku"
+            aria-label="SKU del producto nuevo"
             placeholder="SKU-001"
             value={freeSku}
             onChange={(event) => {
@@ -78,7 +79,7 @@ export function ProductField({
           <input type="hidden" name="productSku" value={selectValue} />
         )}
       </div>
-      <label className="block text-xs font-bold uppercase tracking-wide text-stone-500">
+      <label className="form-label">
         Producto
         {isNew ? (
           <input
@@ -94,7 +95,7 @@ export function ProductField({
             <input
               readOnly
               value={matchingProduct?.name ?? ""}
-              className={`${fieldClass} cursor-not-allowed text-stone-500`}
+              className={fieldClass}
             />
             <input type="hidden" name="productName" value={matchingProduct?.name ?? ""} />
           </>

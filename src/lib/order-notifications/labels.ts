@@ -4,4 +4,6 @@ import type { OrderNotificationEventType } from "@/lib/order-notifications/types
 export const ORDER_NOTIFICATION_LABELS: Record<OrderNotificationEventType, string> = {
   dispatch_wrong_pallet: "Pallet incorrecto",
   dispatch_missing_pallets: "Pallets sin validar",
+  reception_wrong_pallet: "Pallet incorrecto en recepción",
+  reception_reported_discrepancy: "Discrepancia en recepción",
 };

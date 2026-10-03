@@ -1,11 +1,16 @@
 "use client";
 
+import { InlineAlert } from "@/components/ui/design-system";
+
+import { useFeedback } from "@/components/ui/feedback";
+
 import { UnitOfMeasureField } from "@/components/pallets/unit-of-measure-field";
 import { LotField } from "@/components/pallets/lot-field";
 import { ProductField } from "@/components/pallets/product-field";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 
+import { ConfirmationDialog, Modal } from "@/components/ui/modal";
 import { deletePallet, updatePallet, type UpdatePalletState } from "@/lib/pallets/actions";
 import type { ExistingProduct, Pallet, ProductBatch } from "@/lib/types";
 
@@ -20,51 +25,84 @@ export function PalletActions({
   existingBatches: ProductBatch[];
   existingProducts: ExistingProduct[];
 }) {
+  const notify = useFeedback();
   const [state, setState] = useState(INITIAL_STATE);
   const [isPending, startTransition] = useTransition();
   const [isOpen, setIsOpen] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
   const [productSku, setProductSku] = useState(pallet.productSku);
   const [deleteState, setDeleteState] = useState<{ error: string | null; success: string | null } | null>(null);
   const [isDeleting, startDeleting] = useTransition();
-  const detailsRef = useRef<HTMLDetailsElement>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
   const mayDelete = pallet.status === "in_warehouse";
 
   function handleDelete() {
-    if (!window.confirm(`¿Eliminar el pallet ${pallet.qrCode}? Esta acción no se puede deshacer.`)) return;
-    startDeleting(async () => setDeleteState(await deletePallet(pallet.id)));
+    if (isDeleting || !mayDelete) return;
+    startDeleting(async () => {
+      try {
+        const nextState = await deletePallet(pallet.id);
+        setDeleteState(nextState);
+        if (nextState.success) { notify(nextState.success); setDeleteOpen(false); }
+      } catch {
+        setDeleteState({ error: "No se pudo eliminar el pallet. Intentá nuevamente.", success: null });
+      }
+    });
   }
 
   function handleSubmitEdit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isPending) return;
     const form = event.currentTarget;
     startTransition(async () => {
-      const nextState = await updatePallet(pallet.id, state, new FormData(form));
-      setState(nextState);
-      if (nextState.success) setIsOpen(false);
+      try {
+        const nextState = await updatePallet(pallet.id, state, new FormData(form));
+        setState(nextState);
+        if (nextState.success) { notify(nextState.success); setIsOpen(false); }
+      } catch {
+        setState({ error: "No se pudo guardar el pallet. Intentá nuevamente.", success: null });
+      }
     });
   }
 
   function closeForm() {
     setIsOpen(false);
+    setIsDirty(false);
     formRef.current?.reset();
     setProductSku(pallet.productSku);
     setState(INITIAL_STATE);
   }
 
-  useEffect(() => {
-    if (!isOpen) return;
-    function handleClickOutside(event: MouseEvent) {
-      if (detailsRef.current && !detailsRef.current.contains(event.target as Node)) {
-        closeForm();
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen]);
-
-  return <div className="inline-flex flex-col items-end gap-2"><details ref={detailsRef} open={isOpen} onToggle={(event) => { const open = event.currentTarget.open; setIsOpen(open); if (open) setState(INITIAL_STATE); }} className="relative text-left"><summary className="filter-chip list-none [&::-webkit-details-marker]:hidden">Editar</summary><form ref={formRef} onSubmit={handleSubmitEdit} className="surface absolute right-0 z-20 mt-2 grid w-80 gap-3 p-4 shadow-xl"><div><h3 className="font-bold">Editar pallet</h3><p className="mt-1 text-xs text-stone-500">Actualizá su identificación, lote o ubicación.</p></div>{state.error && <p role="alert" className="feedback feedback-danger text-xs">{state.error}</p>}{state.success && <p role="status" className="feedback feedback-success text-xs">{state.success}</p>}<ProductField existingProducts={existingProducts} defaultSku={productSku} defaultName={pallet.productName} onSkuChange={setProductSku} /><LotField productSku={productSku} existingBatches={existingBatches} defaultValue={pallet.batchNumber} /><PalletField label="Código QR" name="qrCode" defaultValue={pallet.qrCode} /><PalletField label="Cantidad" name="quantity" type="number" defaultValue={pallet.quantity === null ? "" : String(pallet.quantity)} /><UnitOfMeasureField defaultValue={pallet.unitOfMeasure} /><PalletField label="Ubicación" name="currentLocation" defaultValue={pallet.currentLocation ?? "Depósito"} required={false} /><div className="flex justify-end gap-2"><button type="button" onClick={closeForm} className="button-secondary text-xs">Cancelar</button><button disabled={isPending} className="button-primary text-xs disabled:opacity-60">{isPending ? "Guardando..." : "Guardar cambios"}</button></div></form></details>{mayDelete ? <button type="button" disabled={isDeleting} onClick={handleDelete} className="min-h-11 text-xs font-bold text-red-600 hover:text-red-700 disabled:opacity-60">{isDeleting ? "Eliminando..." : "Eliminar"}</button> : <span title="Solo se pueden eliminar pallets en depósito" className="text-xs text-stone-400">No eliminable</span>}{deleteState?.error && <span role="alert" className="max-w-36 text-right text-xs text-red-600">{deleteState.error}</span>}</div>;
+  return (
+    <div className="inline-flex flex-col items-end gap-2">
+      <button type="button" onClick={() => { setState(INITIAL_STATE); setProductSku(pallet.productSku); setIsDirty(false); setIsOpen(true); }} className="button-secondary">Editar</button>
+      <Modal open={isOpen} onClose={closeForm} title="Editar pallet"
+        description="Actualizá su producto, lote o ubicación. Cerrá o cancelá para descartar los datos sin guardar."
+        busy={isPending} dismissOnBackdrop={false} dismissOnEscape={!isDirty}>
+        <form ref={formRef} onSubmit={handleSubmitEdit} onChange={() => setIsDirty(true)} aria-busy={isPending}>
+          <fieldset disabled={isPending} className="grid min-w-0 gap-4">
+            {state.error && <InlineAlert variant="danger">{state.error}</InlineAlert>}
+            {state.success && <InlineAlert variant="success">{state.success}</InlineAlert>}
+            <ProductField existingProducts={existingProducts} defaultSku={productSku} defaultName={pallet.productName} onSkuChange={setProductSku} />
+            <LotField productSku={productSku} existingBatches={existingBatches} defaultValue={pallet.batchNumber} />
+            <p className="break-all text-xs text-stone-500">Código QR (no editable): <span className="font-mono">{pallet.qrCode}</span></p>
+            <PalletField label="Cantidad" name="quantity" type="number" defaultValue={pallet.quantity === null ? "" : String(pallet.quantity)} />
+            <UnitOfMeasureField defaultValue={pallet.unitOfMeasure} />
+            <PalletField label="Ubicación" name="currentLocation" defaultValue={pallet.currentLocation ?? "Depósito"} required={false} />
+            <div className="flex flex-wrap justify-end gap-3">
+              <button type="button" onClick={closeForm} className="button-secondary">Cancelar</button>
+              <button disabled={isPending} aria-busy={isPending} className="button-primary">{isPending ? "Guardando..." : "Guardar cambios"}</button>
+            </div>
+          </fieldset>
+        </form>
+      </Modal>
+      {mayDelete ? <button type="button" disabled={isDeleting} aria-busy={isDeleting} onClick={() => { setDeleteState(null); setDeleteOpen(true); }} className="button-danger">Eliminar</button> : <span title="Solo se pueden eliminar pallets en depósito" className="text-xs text-stone-400">No eliminable</span>}
+      <ConfirmationDialog open={deleteOpen} onClose={() => setDeleteOpen(false)} onConfirm={handleDelete}
+        title="Eliminar pallet" description={<>Vas a eliminar el pallet <strong className="break-all font-mono">{pallet.qrCode}</strong>. Esta acción no se puede deshacer.</>}
+        confirmLabel="Eliminar pallet" danger busy={isDeleting} blocked={!mayDelete} error={deleteState?.error} />
+      {deleteState?.error && !deleteOpen && <InlineAlert variant="danger" className="max-w-64">{deleteState.error}</InlineAlert>}
+    </div>
+  );
 }
 
 function PalletField({ label, name, defaultValue, type = "text", required = true, onChange }: { label: string; name: string; defaultValue: string; type?: string; required?: boolean; onChange?: (value: string) => void }) {

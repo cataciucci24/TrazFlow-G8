@@ -1,6 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { InlineAlert } from "@/components/ui/design-system";
+
+import { useState, type ReactNode } from "react";
+import { useFormStatus } from "react-dom";
+import { registrationErrorMessage } from "@/components/ui/feedback-messages";
 import { signUp } from "@/lib/auth/actions";
 
 type Props = { companies: { id: string; name: string }[]; error?: string };
@@ -15,13 +19,14 @@ export function RegisterWizard({ companies, error }: Props) {
 
   return (
     <form className="space-y-6" action={signUp}>
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <InlineAlert variant="danger">{registrationErrorMessage(error)}</InlineAlert>}
 
       <input type="hidden" name="email" value={data.email} />
       <input type="hidden" name="password" value={data.password} />
       <input type="hidden" name="companyId" value={data.companyId} />
       <input type="hidden" name="role" value={data.role} />
 
+      <RegistrationFields>
       <p className="text-xs font-semibold text-stone-500">Paso {step} de 2</p>
 
       {step === 1 && (
@@ -64,11 +69,21 @@ export function RegisterWizard({ companies, error }: Props) {
           <div className="flex gap-3">
             <button type="button" className="w-1/3 text-sm font-semibold text-stone-600 underline"
               onClick={() => setStep(1)}>Volver</button>
-            <button type="submit" className="button-primary w-2/3"
-              disabled={!data.companyId || !data.role}>Enviar solicitud</button>
+            <RegistrationSubmit disabled={!data.companyId || !data.role} />
           </div>
         </>
       )}
+      </RegistrationFields>
     </form>
   );
+}
+
+function RegistrationFields({ children }: { children: ReactNode }) {
+  const { pending } = useFormStatus();
+  return <fieldset disabled={pending} aria-busy={pending} className="min-w-0 space-y-6">{children}</fieldset>;
+}
+
+function RegistrationSubmit({ disabled }: { disabled: boolean }) {
+  const { pending } = useFormStatus();
+  return <button type="submit" className="button-primary w-2/3" disabled={disabled || pending} aria-busy={pending}>{pending ? "Enviando…" : "Enviar solicitud"}</button>;
 }
