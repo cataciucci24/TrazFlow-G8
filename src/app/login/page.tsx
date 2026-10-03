@@ -2,12 +2,14 @@ import type { Metadata } from "next";
 import { BrandLogo } from "@/components/brand-mark";
 import { LoginForm } from "@/app/login/login-form";
 import Link from "next/link";
+import { InlineAlert } from "@/components/ui/design-system";
 
 export const metadata: Metadata = {
   title: "Ingresar | TrazFlow",
 };
 
-export default function LoginPage() {
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ registered?: string }> }) {
+  const { registered } = await searchParams;
   return (
     <main className="relative grid min-h-dvh overflow-hidden bg-stone-50 lg:grid-cols-[1.1fr_0.9fr]">
       <section className="hidden bg-stone-950 p-12 text-white lg:flex lg:flex-col lg:justify-between">
@@ -31,6 +33,7 @@ export default function LoginPage() {
         </div>
 
         <div className="surface p-6 sm:p-8">
+          {registered === "1" && <InlineAlert variant="success" className="mb-6">Solicitud de acceso enviada. Podrás ingresar cuando sea aprobada.</InlineAlert>}
           <LoginForm />
         </div>
 

@@ -1,5 +1,8 @@
 "use client";
 
+import { actionErrorMessage } from "@/components/ui/feedback-messages";
+import { InlineAlert } from "@/components/ui/design-system";
+
 import { useActionState, useState } from "react";
 import Link from "next/link";
 
@@ -38,12 +41,7 @@ export function NewDispatchOrderForm({
       className="space-y-5"
     >
       {state.errors.form && (
-        <p
-          role="alert"
-          className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
-        >
-          {state.errors.form}
-        </p>
+        <InlineAlert variant="danger">{actionErrorMessage(state.errors.form)}</InlineAlert>
       )}
 
       <div className="space-y-1">
@@ -55,6 +53,8 @@ export function NewDispatchOrderForm({
         </label>
         <select
           id="distributorId"
+          aria-invalid={Boolean(state.errors.distributorId)}
+          aria-describedby={state.errors.distributorId ? "distributorId-error" : undefined}
           name="distributorId"
           value={values.distributorId}
           onChange={(event) => setValues((current) => ({ ...current, distributorId: event.target.value }))}
@@ -69,14 +69,14 @@ export function NewDispatchOrderForm({
           ))}
         </select>
         {state.errors.distributorId && (
-          <p className="text-xs text-red-600">{state.errors.distributorId}</p>
+          <InlineAlert id="distributorId-error" variant="danger">{state.errors.distributorId}</InlineAlert>
         )}
       </div>
 
-      <fieldset className="space-y-2">
+      <fieldset className="space-y-2" aria-describedby={state.errors.palletIds ? "palletIds-error" : undefined}>
         <legend className="text-sm font-semibold uppercase tracking-wide text-stone-500">Pallets de la orden</legend>
-        {pallets.length === 0 ? <p className="feedback feedback-warning">No hay pallets disponibles en depósito. Primero registrá uno desde Seguimiento.</p> : <div className="max-h-56 divide-y divide-stone-200 overflow-y-auto rounded-xl border border-stone-200 px-4">{pallets.map((pallet) => <label key={pallet.id} className="flex min-h-11 cursor-pointer items-center gap-3 py-3 text-sm"><input name="palletIds" type="checkbox" value={pallet.id} checked={selectedPalletIds.includes(pallet.id)} onChange={(event) => setSelectedPalletIds((current) => event.target.checked ? [...current, pallet.id] : current.filter((id) => id !== pallet.id))} disabled={isPending} className="size-4 rounded border-stone-300 text-[var(--brand)] focus:ring-[var(--focus)]" /><span className="font-mono font-semibold">{pallet.qrCode}</span><span className="text-stone-500">{pallet.productName} · lote {pallet.batchNumber}</span></label>)}</div>}
-        {state.errors.palletIds && <p className="text-xs text-red-600">{state.errors.palletIds}</p>}
+        {pallets.length === 0 ? <InlineAlert variant="warning">No hay pallets disponibles en depósito. Primero registrá uno desde Seguimiento.</InlineAlert> : <div className="max-h-56 divide-y divide-stone-200 overflow-y-auto rounded-xl border border-stone-200 px-4">{pallets.map((pallet) => <label key={pallet.id} className="flex min-h-11 cursor-pointer items-center gap-3 py-3 text-sm"><input name="palletIds" type="checkbox" value={pallet.id} checked={selectedPalletIds.includes(pallet.id)} onChange={(event) => setSelectedPalletIds((current) => event.target.checked ? [...current, pallet.id] : current.filter((id) => id !== pallet.id))} disabled={isPending} className="form-check" /><span className="font-mono font-semibold">{pallet.qrCode}</span><span className="text-stone-500">{pallet.productName} · lote {pallet.batchNumber}</span></label>)}</div>}
+        {state.errors.palletIds && <InlineAlert id="palletIds-error" variant="danger">{state.errors.palletIds}</InlineAlert>}
       </fieldset>
 
       <div className="space-y-1">
@@ -88,6 +88,8 @@ export function NewDispatchOrderForm({
         </label>
         <input
           id="estimatedDispatchDate"
+          aria-invalid={Boolean(state.errors.estimatedDispatchDate)}
+          aria-describedby={state.errors.estimatedDispatchDate ? "estimatedDispatchDate-error" : undefined}
           name="estimatedDispatchDate"
           type="date"
           value={values.estimatedDispatchDate}
@@ -97,9 +99,7 @@ export function NewDispatchOrderForm({
           className="form-control"
         />
         {state.errors.estimatedDispatchDate && (
-          <p className="text-xs text-red-600">
-            {state.errors.estimatedDispatchDate}
-          </p>
+          <InlineAlert id="estimatedDispatchDate-error" variant="danger">{state.errors.estimatedDispatchDate}</InlineAlert>
         )}
       </div>
 
@@ -130,8 +130,8 @@ export function NewDispatchOrderForm({
         </Link>
         <button
           type="submit"
-          disabled={isPending}
-          className="button-primary disabled:cursor-not-allowed disabled:opacity-60"
+          disabled={isPending} aria-busy={isPending}
+          className="button-primary"
         >
           {isPending ? "Creando..." : "Crear orden"}
         </button>

@@ -6,7 +6,6 @@ import { hasRole, requireUserProfile } from "@/lib/auth/session";
 import { getDispatchOrderDetail } from "@/lib/orders/queries";
 import { getAvailablePallets, getPalletsForOrder } from "@/lib/pallets/queries";
 import { ORDER_STATUS_LABELS } from "@/lib/orders/labels";
-import { PALLET_STATUS_LABELS } from "@/lib/pallets/labels";
 import { AssociatePalletsForm } from "@/components/orders/associate-pallets-form";
 import { ConfirmDispatchButton } from "@/components/orders/confirm-dispatch-button";
 import { DissociatePalletButton } from "@/components/orders/dissociate-pallet-button";
@@ -20,7 +19,7 @@ import {
 import { getOrderPalletReceptions } from "@/lib/pallet-reception/queries";
 import { getOrderScanHistory } from "@/lib/scans/queries";
 import { getOrderNotifications } from "@/lib/order-notifications/queries";
-import { OrderStatusBadge, PageHeader, SectionHeader, TableShell } from "@/components/ui/design-system";
+import { OrderStatusBadge, EmptyState, InlineAlert, PageHeader, PalletStatusBadge, SectionHeader, TableShell } from "@/components/ui/design-system";
 
 export const metadata: Metadata = {
   title: "Detalle de orden | TrazFlow",
@@ -140,7 +139,7 @@ export default async function DispatchOrderDetailPage({
           </p>
         </div>
         {order.notes && (
-          <div className="col-span-2 border-t border-stone-200 pt-2">
+          <div className="sm:col-span-2 border-t border-stone-200 pt-2">
             <p className="text-stone-500">Observaciones</p>
             <p className="font-medium">{order.notes}</p>
           </div>
@@ -185,36 +184,35 @@ export default async function DispatchOrderDetailPage({
         <SectionHeader title="Pallets asociados" description="Mercadería vinculada actualmente a esta orden." />
 
         {associatedPallets.length === 0 ? (
-          <p className="surface p-6 text-sm text-stone-500">
-            Todavía no hay pallets asociados a esta orden.
-          </p>
+          <div className="surface"><EmptyState title="Orden sin pallets asociados" description="Los pallets incorporados a esta orden aparecerán acá con su estado." /></div>
         ) : (
           <TableShell label="Pallets asociados a la orden">
-            <table className="data-table min-w-[700px]">
+            <table className="data-table min-w-[560px]">
               <thead>
-                <tr className="border-b border-stone-200 text-stone-500">
-                  <th className="py-3 font-medium">QR</th>
-                  <th className="py-3 font-medium">Producto</th>
-                  <th className="py-3 font-medium">Lote</th>
-                  <th className="py-3 font-medium">Estado</th>
+                <tr>
+                  <th scope="col">QR</th>
+                  <th scope="col">Producto</th>
+                  <th scope="col" className="table-secondary-column">Lote</th>
+                  <th scope="col">Estado</th>
                   {canAssociate && (
-                    <th className="py-3 font-medium text-right">Acciones</th>
+                    <th scope="col" className="text-right">Acciones</th>
                   )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-200">
                 {associatedPallets.map((pallet) => (
-                  <tr key={pallet.id} className="transition-colors hover:bg-[var(--brand-soft)]">
-                    <td className="py-3 font-mono font-semibold">{pallet.qrCode}</td>
-                    <td className="py-3">
+                  <tr key={pallet.id}>
+                    <td className="font-mono font-semibold">{pallet.qrCode}</td>
+                    <td>
                       {pallet.productName} ({pallet.productSku})
+                      <span className="table-secondary block md:hidden">Lote {pallet.batchNumber}</span>
                     </td>
-                    <td className="py-3 text-stone-600">{pallet.batchNumber}</td>
-                    <td className="py-3 text-stone-600">
-                      {PALLET_STATUS_LABELS[pallet.status]}
+                    <td className="table-secondary-column text-stone-600">{pallet.batchNumber}</td>
+                    <td>
+                      <PalletStatusBadge status={pallet.status} />
                     </td>
                     {canAssociate && (
-                      <td className="py-3 text-right">
+                      <td className="text-right">
                         <DissociatePalletButton
                           orderId={order.id}
                           palletId={pallet.id}
@@ -235,18 +233,16 @@ export default async function DispatchOrderDetailPage({
           <SectionHeader title="Asociar pallets disponibles" description="Seleccioná pallets en depósito para incorporarlos a la orden." />
 
           {availablePallets.length === 0 ? (
-            <p className="surface p-6 text-sm text-stone-500">
-              No hay pallets en depósito disponibles para asociar.
-            </p>
+            <div className="surface"><EmptyState title="Sin pallets disponibles" description="No hay pallets en depósito disponibles para incorporar a esta orden." /></div>
           ) : (
             <div className="surface p-6"><AssociatePalletsForm orderId={order.id} pallets={availablePallets} /></div>
           )}
         </section>
       ) : isLogisticsManager ? (
-        <div className="feedback border-slate-200 bg-slate-50 text-slate-600">
+        <InlineAlert>
           Esta orden ya no admite asociar pallets (estado:{" "}
           <span className="font-medium text-slate-950">{ORDER_STATUS_LABELS[order.status]}</span>).
-        </div>
+        </InlineAlert>
       ) : null}
     </div>
   );

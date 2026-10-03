@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 
@@ -18,7 +19,32 @@ const roleDetails = {
 export function DashboardSidebar({ role }: DashboardSidebarProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
   const roleDetail = roleDetails[role];
+
+  // Also close on browser history / query-string navigation and desktop resize.
+  useEffect(() => {
+    dialogRef.current?.close();
+  }, [pathname, searchParams]);
+
+  useEffect(() => {
+    const desktop = window.matchMedia("(min-width: 1024px)");
+    const closeOnDesktop = () => {
+      if (desktop.matches) dialogRef.current?.close();
+    };
+    desktop.addEventListener("change", closeOnDesktop);
+    return () => desktop.removeEventListener("change", closeOnDesktop);
+  }, []);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, [menuOpen]);
+
+  const closeMenu = () => dialogRef.current?.close();
   const isOrders = pathname.startsWith("/dashboard/orders");
   const traceabilityShowsLots = pathname.startsWith("/dashboard/traceability") && searchParams.get("view") === "lotes";
   const isPallets = pathname.startsWith("/dashboard/pallets") || (pathname.startsWith("/dashboard/traceability") && !traceabilityShowsLots);
@@ -45,38 +71,77 @@ export function DashboardSidebar({ role }: DashboardSidebarProps) {
         ]
       : [{ href: "/dashboard", label: detailTitle, icon: <ScanIcon />, active: pathname === "/dashboard" || pathname.startsWith("/dashboard/orders/") }];
 
-  return (
-    <aside className="flex w-full shrink-0 flex-col border-b border-stone-200 bg-white lg:sticky lg:top-0 lg:h-dvh lg:w-[272px] lg:border-r lg:border-b-0">
-      <div className="flex h-[72px] shrink-0 items-center justify-between gap-3 border-b border-stone-200 px-5 lg:px-6">
-        <Link href="/dashboard" className="flex h-full min-h-11 items-center">
-          <BrandLogo />
-        </Link>
-        <div className="shrink-0 lg:hidden">
-          <LogoutButton className="flex min-h-11 items-center gap-2 text-sm font-medium text-slate-600 transition-colors hover:text-slate-950">
-            <LogoutIcon /> Cerrar sesión
-          </LogoutButton>
-        </div>
-      </div>
-      <div className="border-b border-stone-200 px-5 py-4 lg:px-6">
-        <p className="mb-2 text-[11px] font-bold tracking-[0.12em] text-slate-500">ROL ACTIVO</p>
-        <div className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold ${roleDetail.tone}`}>
-          <span className={`size-2.5 rounded-full ${roleDetail.color}`} />{roleDetail.label}
-        </div>
-      </div>
-      <nav className="flex gap-1 overflow-x-auto px-2 py-3 lg:block lg:px-3 lg:py-5" aria-label="Navegación principal">
+  const navigation = (
+    <nav className="px-3 py-5" aria-label="Navegación principal">
+      <p className="mb-3 px-3 text-[11px] font-bold tracking-[0.12em] text-[var(--muted)]">NAVEGACIÓN</p>
+      <ul className="space-y-1.5">
         {links.map((link) => (
-          <Link key={link.href} href={link.href} aria-current={link.active ? "page" : undefined} className={`flex min-h-11 min-w-max items-center gap-3 rounded-xl border px-3 py-2.5 text-sm font-semibold transition-colors lg:mb-1 ${link.active ? "border-[var(--brand-border)] bg-[var(--brand-soft)] text-[var(--brand-hover)]" : "border-transparent text-stone-600 hover:bg-stone-50 hover:text-stone-900"}`}>
-            <span className={`grid size-5 place-items-center ${link.active ? "text-[var(--brand)]" : "text-stone-500"}`}>{link.icon}</span>{link.label}
-          </Link>
+          <li key={link.href}>
+            <Link href={link.href} onNavigate={closeMenu} aria-current={link.active ? "page" : undefined}
+              className={`relative flex min-h-12 items-center gap-3 rounded-xl border px-3 py-3 text-sm leading-5 transition-colors ${link.active ? "border-[var(--brand-border)] bg-[var(--brand-soft)] font-bold text-[var(--brand-hover)] shadow-[var(--shadow)] before:absolute before:inset-y-3 before:left-0 before:w-1 before:rounded-r-full before:bg-[var(--brand)]" : "border-transparent font-medium text-stone-600 hover:bg-stone-100 hover:text-stone-950"}`}>
+              <span className={`grid size-8 shrink-0 place-items-center rounded-lg ${link.active ? "bg-white text-[var(--brand)]" : "text-stone-500"}`}>{link.icon}</span>
+              <span>{link.label}</span>
+            </Link>
+          </li>
         ))}
-      </nav>
-      <div className="hidden flex-1 lg:block" />
-      <div className="hidden border-t border-stone-200 px-5 py-4 lg:block">
-        <LogoutButton className="flex min-h-11 items-center gap-3 text-sm font-semibold text-slate-600 transition-colors hover:text-slate-950">
-          <LogoutIcon /> Cerrar sesión
-        </LogoutButton>
+      </ul>
+    </nav>
+  );
+
+  const account = (
+    <div className="mt-auto shrink-0 border-t border-[var(--border)] bg-[var(--surface-subtle)] px-5 py-5">
+      <p className="mb-3 text-[11px] font-bold tracking-[0.12em] text-[var(--muted)]">TU SESIÓN</p>
+      <div className="mb-4 flex items-center gap-3">
+        <span className={`grid size-10 shrink-0 place-items-center rounded-xl ${roleDetail.tone}`}><ScanIcon /></span>
+        <div>
+          <p className="text-sm font-semibold text-stone-900">{roleDetail.label}</p>
+          <p className="text-xs text-[var(--muted)]">Rol activo</p>
+        </div>
       </div>
-    </aside>
+      <LogoutButton className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-stone-600 transition-colors hover:bg-stone-100 hover:text-stone-950">
+        <LogoutIcon /> Cerrar sesión
+      </LogoutButton>
+    </div>
+  );
+
+  return (
+    <>
+      <header className="sticky top-0 z-20 flex h-[76px] items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--surface)] px-5 lg:hidden">
+        <Link href="/dashboard" aria-label="TrazFlow, inicio" className="rounded-lg"><BrandLogo /></Link>
+        <button type="button" aria-expanded={menuOpen} aria-controls="dashboard-mobile-menu" aria-haspopup="dialog"
+          className="button-secondary gap-2"
+          onClick={() => { dialogRef.current?.showModal(); setMenuOpen(true); }}>
+          <MenuIcon /> Menú
+        </button>
+      </header>
+      <aside className="sticky top-0 hidden h-dvh w-[288px] shrink-0 flex-col border-r border-[var(--border)] bg-[var(--surface)] lg:flex">
+        <div className="flex h-[76px] shrink-0 items-center border-b border-[var(--border)] px-6">
+          <Link href="/dashboard" aria-label="TrazFlow, inicio" className="rounded-lg"><BrandLogo /></Link>
+        </div>
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+          {navigation}
+          {account}
+        </div>
+      </aside>
+      <dialog ref={dialogRef} id="dashboard-mobile-menu" aria-labelledby="dashboard-menu-title" aria-modal="true"
+        onClose={() => setMenuOpen(false)}
+        onClick={(event) => { if (event.target === event.currentTarget) closeMenu(); }}
+        className="fixed inset-y-0 left-0 m-0 h-dvh max-h-dvh w-[min(320px,calc(100%-2rem))] max-w-none overflow-hidden border-0 bg-[var(--surface)] p-0 text-stone-950 shadow-xl backdrop:bg-stone-950/40">
+        <div className="flex h-full flex-col">
+          <div className="flex min-h-[76px] shrink-0 items-center justify-between gap-3 border-b border-[var(--border)] px-5">
+            <Link href="/dashboard" onNavigate={closeMenu} aria-label="TrazFlow, inicio" className="rounded-lg"><BrandLogo /></Link>
+            <button type="button" autoFocus onClick={closeMenu} aria-label="Cerrar menú" className="grid size-11 shrink-0 place-items-center rounded-xl text-stone-600 hover:bg-stone-100 hover:text-stone-950">
+              <CloseIcon />
+            </button>
+          </div>
+          <h2 id="dashboard-menu-title" className="sr-only">Menú de navegación de TrazFlow</h2>
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
+            {navigation}
+            {account}
+          </div>
+        </div>
+      </dialog>
+    </>
   );
 }
 
@@ -110,4 +175,12 @@ function StagnantIcon() {
 
 function LogoutIcon() {
   return <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5 fill-none stroke-current" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 17l5-5-5-5M15 12H3" /><path d="M15 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4" /></svg>;
+}
+
+function MenuIcon() {
+  return <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5 fill-none stroke-current" strokeWidth="2" strokeLinecap="round"><path d="M4 6h16M4 12h16M4 18h16" /></svg>;
+}
+
+function CloseIcon() {
+  return <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5 fill-none stroke-current" strokeWidth="2" strokeLinecap="round"><path d="m6 6 12 12M18 6 6 18" /></svg>;
 }

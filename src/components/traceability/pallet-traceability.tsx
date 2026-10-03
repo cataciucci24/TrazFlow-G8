@@ -1,9 +1,8 @@
 import Link from "next/link";
 import { PalletQrButton } from "@/components/pallets/pallet-qr-button";
 
-import { PALLET_STATUS_LABELS } from "@/lib/pallets/labels";
 import type { PalletTraceability as PalletTraceabilityData } from "@/lib/traceability/types";
-import { SectionHeader } from "@/components/ui/design-system";
+import { EmptyState, PalletStatusBadge, SectionHeader } from "@/components/ui/design-system";
 
 type PalletTraceabilityProps = {
   traceability: PalletTraceabilityData;
@@ -21,7 +20,7 @@ export function PalletTraceability({
   const { pallet, movements } = traceability;
 
   return (
-    <div className="space-y-6">
+    <div className="list-content space-y-6">
       <section className="section-stack">
         <SectionHeader title={`Pallet ${pallet.qrCode}`} description="Identificación y estado actual del pallet." />
         <PalletQrButton qrCode={pallet.qrCode} />
@@ -38,7 +37,7 @@ export function PalletTraceability({
           </div>
           <div>
             <dt className="text-slate-500">Estado actual</dt><dd className="font-semibold text-slate-950">
-              {PALLET_STATUS_LABELS[pallet.status]}
+              <PalletStatusBadge status={pallet.status} />
             </dd>
           </div>
           <div className="sm:col-span-2">
@@ -54,9 +53,7 @@ export function PalletTraceability({
         <div className="surface p-5 sm:p-6">
 
         {movements.length === 0 ? (
-          <p className="text-sm text-slate-500">
-            Este pallet todavía no registra movimientos.
-          </p>
+          <EmptyState title="Sin movimientos registrados" description="El recorrido del pallet aparecerá acá a medida que se registren sus movimientos." />
         ) : (
           <ol className="space-y-3">
             {movements.map((movement, index) => (
@@ -68,7 +65,7 @@ export function PalletTraceability({
                   {index + 1}. {DATE_FORMATTER.format(new Date(movement.createdAt))}
                 </p>
 
-                <div className="my-3 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+                <div className="my-3 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3">
                   <span className="text-slate-600">
                     {movement.originLocation ?? "Origen no registrado"}
                   </span>
@@ -81,14 +78,14 @@ export function PalletTraceability({
                 </div>
 
                 <dl className="space-y-1 text-slate-500">
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     <dt>Estado:</dt>
                     <dd className="text-slate-950">
-                      {PALLET_STATUS_LABELS[movement.resultingStatus]}
+                      <PalletStatusBadge status={movement.resultingStatus} />
                     </dd>
                   </div>
                   {movement.orderId && (
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                       <dt>Orden:</dt>
                       <dd>
                         <Link

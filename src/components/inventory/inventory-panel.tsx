@@ -4,11 +4,10 @@ import { useState } from "react";
 import { PALLET_STATUS_LABELS } from "@/lib/pallets/labels";
 import type { Pallet } from "@/lib/types";
 import { PALLET_UNITS } from "@/lib/pallets/units";
-import { CompactSummaryCard, EmptyState, PalletStatusBadge, SectionHeader } from "@/components/ui/design-system";
+import { FilterPanel, CompactSummaryCard, EmptyState, PalletStatusBadge, SectionHeader, TableShell } from "@/components/ui/design-system";
 
 const formatQuantity = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 20 });
 
-const fieldClass = "form-control mt-2";
 
 function normalize(value: string) {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es-AR");
@@ -48,41 +47,33 @@ export function InventoryPanel({ pallets, initialSearch = "" }: { pallets: Palle
 
   return (
     <div className="space-y-10">
-      <section aria-label="Filtros de stock" className="surface p-5">
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-[2fr_1fr_1fr]">
-          <label className="text-sm font-semibold md:col-span-2 xl:col-span-1">
-            Buscar pallets
-            <input type="search" value={search} onChange={(event) => setSearch(event.target.value)}
-              placeholder="Producto, SKU, lote o código QR" className={fieldClass} />
-          </label>
-          <label className="min-w-0 text-sm font-semibold">
-            Ubicación
-            <select value={location} onChange={(event) => setLocation(event.target.value)} className={fieldClass}>
-              <option value="">Todas las ubicaciones</option>
-              {locations.map((value) => (
-                <option key={JSON.stringify(value)} value={JSON.stringify(value)}>
-                  {value ?? "Sin ubicación registrada"}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="text-sm font-semibold">
-            Estado
-            <select value={status} onChange={(event) => setStatus(event.target.value)} className={fieldClass}>
-              <option value="">Todos los estados</option>
-              {Object.entries(PALLET_STATUS_LABELS).map(([value, label]) => (
-                <option key={value} value={value}>{label}</option>
-              ))}
-            </select>
-          </label>
-        </div>
-        {hasFilters && (
-          <button type="button" onClick={clearFilters}
-            className="button-secondary mt-4">
-            Limpiar filtros
-          </button>
-        )}
-      </section>
+      <FilterPanel label="Filtros de stock" onClear={hasFilters ? clearFilters : undefined}>
+        <label className="form-label">
+          Buscar pallets
+          <input type="search" value={search} onChange={(event) => setSearch(event.target.value)}
+            placeholder="Producto, SKU, lote o código QR" className="form-control mt-2" />
+        </label>
+        <label className="form-label">
+          Ubicación
+          <select value={location} onChange={(event) => setLocation(event.target.value)} className="form-control mt-2">
+            <option value="">Todas las ubicaciones</option>
+            {locations.map((value) => (
+              <option key={JSON.stringify(value)} value={JSON.stringify(value)}>
+                {value ?? "Sin ubicación registrada"}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="form-label">
+          Estado
+          <select value={status} onChange={(event) => setStatus(event.target.value)} className="form-control mt-2">
+            <option value="">Todos los estados</option>
+            {Object.entries(PALLET_STATUS_LABELS).map(([value, label]) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
+          </select>
+        </label>
+      </FilterPanel>
 
       <section aria-label="Resumen de stock" className="grid gap-4 sm:grid-cols-2">
         <CompactSummaryCard label="Total de pallets" value={pallets.length} tone="brand" />
@@ -98,10 +89,11 @@ export function InventoryPanel({ pallets, initialSearch = "" }: { pallets: Palle
         {visiblePallets.length === 0 ? (
         <div className="surface">
           <EmptyState
-            title={pallets.length === 0 ? "Todavía no hay pallets" : "No hay resultados"}
+            title={pallets.length === 0 ? "Todavía no hay pallets" : "Sin resultados para estos filtros"}
             description={pallets.length === 0
               ? "Los pallets registrados para tu empresa aparecerán acá."
               : "Probá con otra búsqueda o cambiá los filtros de ubicación y estado."}
+            action={pallets.length > 0 && hasFilters ? <button type="button" onClick={clearFilters} className="button-secondary">Limpiar filtros</button> : undefined}
           />
         </div>
         ) : locations.filter((value) => groups.has(value)).map((value) => {
@@ -115,7 +107,7 @@ export function InventoryPanel({ pallets, initialSearch = "" }: { pallets: Palle
         }).filter(({ total }) => total > 0);
         const label = value ?? "Sin ubicación registrada";
         return (
-          <section key={JSON.stringify(value)} aria-label={`Pallets: ${label}`} className="section-stack">
+          <section key={JSON.stringify(value)} aria-label={`Pallets: ${label}`} className="section-stack [&_.section-title]:break-words">
             <SectionHeader title={label} description={`${group.length} ${group.length === 1 ? "pallet" : "pallets"} en esta ubicación.`} />
             <div className="surface overflow-hidden">
             <div className="space-y-2 border-b border-stone-200 px-5 py-4 text-sm">
@@ -129,13 +121,13 @@ export function InventoryPanel({ pallets, initialSearch = "" }: { pallets: Palle
               ) : <p className="text-stone-500">Stock aún no cuantificado</p>}
               {undefinedCount > 0 && <p className="text-amber-800">{undefinedCount} {undefinedCount === 1 ? "pallet" : "pallets"} sin cantidad</p>}
             </div>
-            <div className="overflow-x-auto" tabIndex={0} role="region" aria-label={`Detalle de stock: ${label}`}>
-              <table className="data-table min-w-[900px]">
+            <TableShell label={`Detalle de stock: ${label}`} className="table-embedded">
+              <table className="data-table min-w-[640px]">
                 <caption className="sr-only">Pallets en {label}</caption>
                 <thead>
                   <tr>
                     {["Código QR", "Producto", "SKU", "Lote", "Cantidad", "Estado", "Ubicación"].map((heading) => (
-                      <th key={heading} scope="col">{heading}</th>
+                      <th key={heading} scope="col" className={["SKU", "Lote"].includes(heading) ? "table-secondary-column" : heading === "Cantidad" ? "text-right" : undefined}>{heading}</th>
                     ))}
                   </tr>
                 </thead>
@@ -143,10 +135,10 @@ export function InventoryPanel({ pallets, initialSearch = "" }: { pallets: Palle
                   {group.map((pallet) => (
                     <tr key={pallet.id}>
                       <td className="max-w-64 break-words font-mono font-bold">{pallet.qrCode}</td>
-                      <td className="max-w-64 break-words font-medium">{pallet.productName}</td>
-                      <td className="max-w-48 break-words font-mono text-slate-600">{pallet.productSku}</td>
-                      <td className="max-w-48 break-words font-mono text-slate-600">{pallet.batchNumber}</td>
-                      <td className="tabular-nums">{pallet.quantity === null || pallet.unitOfMeasure === null ? "Sin definir" : `${formatQuantity.format(pallet.quantity)} ${pallet.unitOfMeasure}`}</td>
+                      <td className="max-w-64 break-words font-medium">{pallet.productName}<span className="table-secondary block md:hidden">SKU {pallet.productSku} · Lote {pallet.batchNumber}</span></td>
+                      <td className="table-secondary-column max-w-48 break-words font-mono text-slate-600">{pallet.productSku}</td>
+                      <td className="table-secondary-column max-w-48 break-words font-mono text-slate-600">{pallet.batchNumber}</td>
+                      <td className="text-right tabular-nums">{pallet.quantity === null || pallet.unitOfMeasure === null ? "Sin definir" : `${formatQuantity.format(pallet.quantity)} ${pallet.unitOfMeasure}`}</td>
                       <td>
                         <PalletStatusBadge status={pallet.status} />
                       </td>
@@ -155,7 +147,7 @@ export function InventoryPanel({ pallets, initialSearch = "" }: { pallets: Palle
                   ))}
                 </tbody>
               </table>
-            </div>
+            </TableShell>
             </div>
           </section>
         );

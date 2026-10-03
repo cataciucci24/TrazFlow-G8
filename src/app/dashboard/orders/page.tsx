@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { requireUserProfile, hasRole } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
-import { OrderStatusBadge, PageHeader, TableShell } from "@/components/ui/design-system";
+import { EmptyState, OrderStatusBadge, PageHeader, TableShell } from "@/components/ui/design-system";
 import type { OrderStatus } from "@/lib/types";
 
 export const metadata: Metadata = {
@@ -40,50 +40,45 @@ export default async function OrdersPage() {
         ) : undefined}
       />
 
-      <TableShell label="Órdenes de despacho registradas">
-        {!orders || orders.length === 0 ? (
-          <p className="py-12 text-center text-sm text-stone-500">
-            No hay órdenes de despacho registradas en el sistema.
-          </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="data-table min-w-[780px]">
-              <thead>
-                <tr>
-                  <th>Código</th><th>Distribuidora</th><th>Fecha despacho</th><th>Estado</th><th>Observaciones</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-stone-200">
-                {orders.map((order) => {
-                  const distributor = Array.isArray(order.distributors)
-                    ? order.distributors[0]
-                    : order.distributors;
+      {!orders || orders.length === 0 ? <div className="surface"><EmptyState title="Todavía no hay órdenes"
+        description="Los envíos registrados para tu empresa aparecerán acá."
+        action={isLogisticsManager ? <Link href="/dashboard/orders/new" className="button-primary">Nueva orden</Link> : undefined}
+      /></div> : <TableShell label="Órdenes de despacho registradas" mobileLayout="rows">
+          <table role="table" aria-label="Órdenes de despacho registradas" className="data-table min-w-[780px]">
+            <thead role="rowgroup">
+              <tr role="row">
+                <th role="columnheader" scope="col">Código</th><th role="columnheader" scope="col">Distribuidora</th><th role="columnheader" scope="col">Fecha despacho</th><th role="columnheader" scope="col">Estado</th><th role="columnheader" scope="col">Observaciones</th>
+              </tr>
+            </thead>
+            <tbody role="rowgroup" className="divide-y divide-stone-200">
+              {orders.map((order) => {
+                const distributor = Array.isArray(order.distributors)
+                  ? order.distributors[0]
+                  : order.distributors;
 
-                  return (
-                    <tr key={order.id}>
-                      <td className="font-mono font-bold text-slate-950">
-                        <Link href={`/dashboard/orders/${order.id}`} className="table-action">{order.id.slice(0, 8).toUpperCase()}</Link>
-                      </td>
-                      <td className="font-medium text-slate-950">
-                        {distributor?.name ?? "—"}
-                      </td>
-                      <td className="text-slate-600">
-                        {order.estimated_dispatch_date ? new Date(`${order.estimated_dispatch_date}T00:00:00`).toLocaleDateString("es-AR") : "—"}
-                      </td>
-                      <td>
-                        <OrderStatusBadge status={order.status as OrderStatus} />
-                      </td>
-                      <td className="max-w-72 truncate text-slate-500">
-                        {order.notes ?? "—"}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </TableShell>
+                return (
+                  <tr role="row" key={order.id}>
+                    <td role="cell" data-label="Código" className="mobile-primary font-mono font-bold text-slate-950">
+                      <Link href={`/dashboard/orders/${order.id}`} title={order.id} className="button-secondary">{order.id.slice(0, 8).toUpperCase()}</Link>
+                    </td>
+                    <td role="cell" data-label="Distribuidora" className="font-medium text-slate-950">
+                      {distributor?.name ?? "—"}
+                    </td>
+                    <td role="cell" data-label="Fecha despacho" className="mobile-priority text-slate-600">
+                      {order.estimated_dispatch_date ? new Date(`${order.estimated_dispatch_date}T00:00:00`).toLocaleDateString("es-AR") : "—"}
+                    </td>
+                    <td role="cell" data-label="Estado" className="mobile-priority">
+                      <OrderStatusBadge status={order.status as OrderStatus} />
+                    </td>
+                    <td role="cell" data-label="Observaciones" className="mobile-wide max-w-72 text-slate-500">
+                      {order.notes ?? "—"}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+      </TableShell>}
     </div>
   );
 }
