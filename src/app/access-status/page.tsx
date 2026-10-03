@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
 import { BrandLogo } from "@/components/brand-mark";
 import { LogoutButton } from "@/components/logout-button";
 import { getAccessRequest, getRequestedCompanyName } from "@/lib/access-requests/queries";
 import type { AccessRequest, AccessRequestStatus, RequestedRole } from "@/lib/access-requests/types";
-import { requireUser } from "@/lib/auth/session";
+import { getUserProfile, requireUser } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Estado de solicitud | TrazFlow" };
 
@@ -36,16 +37,27 @@ export default async function AccessStatusPage() {
   const user = await requireUser();
   let request: AccessRequest | null = null;
   let companyName = "";
+  let hasActiveProfile = false;
+  let revoked = false;
   let failed = false;
   try {
-    request = await getAccessRequest(user.id);
-    if (request) companyName = await getRequestedCompanyName(request.companyId);
+    const profile = await getUserProfile();
+    hasActiveProfile = profile !== null && !profile.revokedAt;
+    revoked = Boolean(profile?.revokedAt);
+    if (!profile) {
+      request = await getAccessRequest(user.id);
+      if (request) companyName = await getRequestedCompanyName(request.companyId);
+    }
   } catch (error) {
     console.error("Error al cargar el estado de acceso", error);
     failed = true;
   }
+  // Aprobado o restaurado: no hay nada que esperar en esta página.
+  if (hasActiveProfile) redirect("/dashboard");
 
   const status = request ? statuses[request.status] : null;
+  // Solo tiene sentido volver a consultar mientras la solicitud está pendiente.
+  const canRefresh = failed || request?.status === "pending";
 
   return (
     <main className="flex min-h-dvh items-center justify-center bg-stone-50 px-5 py-12 sm:px-8">
@@ -60,6 +72,11 @@ export default async function AccessStatusPage() {
             <p role="alert" className="feedback feedback-danger">
               No pudimos consultar los datos de tu solicitud. Intentá nuevamente.
             </p>
+          ) : revoked ? (
+            <div className="feedback feedback-danger">
+              <h2 className="font-bold">Acceso revocado</h2>
+              <p className="mt-2 text-sm">El responsable logístico de tu empresa revocó tu acceso. Si creés que es un error, comunicate con él.</p>
+            </div>
           ) : request && status ? (
             <>
               <div className={`feedback ${status.style}`}>
@@ -76,7 +93,7 @@ export default async function AccessStatusPage() {
             <p className="text-sm text-stone-600">No encontramos una solicitud de acceso asociada a tu cuenta.</p>
           )}
           <div className="flex flex-wrap gap-3">
-            <a href="/access-status" className="button-secondary">Actualizar estado</a>
+            {canRefresh && <a href="/access-status" className="button-secondary">Actualizar estado</a>}
             <LogoutButton />
           </div>
         </section>
