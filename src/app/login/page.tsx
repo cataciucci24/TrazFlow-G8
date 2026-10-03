@@ -35,11 +35,10 @@ export default async function LoginPage({ searchParams }: {
 
         <div className="surface p-6 sm:p-8">
           {params["verify-email"] === "1" && <p role="status" className="feedback feedback-success mb-6">
-            Revisá tu correo para confirmar tu email. Después podrás iniciar sesión y completar tu solicitud de acceso.
-            Si ya tenías cuenta, ingresá con tus credenciales. Todavía no se envió una nueva solicitud.
+            Después de verificar tu mail, iniciá sesión para completar tu solicitud de acceso.
           </p>}
           {params.registered === "1" && <p role="status" className="feedback feedback-success mb-6">
-            Registro completado. Iniciá sesión para completar tu solicitud de acceso.
+            Cuenta creada. Iniciá sesión para completar tu solicitud de acceso.
           </p>}
           <LoginForm />
         </div>

@@ -32,6 +32,6 @@ export async function approveAccessRequest(_previous: { error: string | null }, 
   } catch {
     return { error: "No pudimos confirmar la aprobación. Actualizá el listado antes de reintentar." };
   }
-  revalidatePath("/dashboard/access-requests");
-  redirect("/dashboard/access-requests?approved=1");
+  revalidatePath("/dashboard/operators");
+  redirect("/dashboard/operators?tab=solicitudes&done=approved");
 }

@@ -42,7 +42,7 @@ export const getUserProfile = cache(async (): Promise<UserProfile | null> => {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("users")
-    .select("id, company_id, name, email, role")
+    .select("id, company_id, name, email, role, revoked_at")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -62,6 +62,7 @@ export const getUserProfile = cache(async (): Promise<UserProfile | null> => {
     name: data.name,
     email: data.email,
     role: data.role as UserRole,
+    revokedAt: data.revoked_at,
   };
 });
 
@@ -80,6 +81,8 @@ export async function requireUser(): Promise<User> {
  * Igual que getUserProfile(), pero exige sesión + perfil cargado.
  * Sin perfil operativo, una solicitud permite consultar su estado, no entrar
  * al dashboard. Sin solicitud se conserva el error de perfil incompleto.
+ * Un perfil revocado (TRZ-38) tampoco entra: RLS ya le bloquea los datos, y
+ * /access-status le explica por qué.
  */
 export async function requireUserProfile(): Promise<UserProfile> {
   const user = await requireUser();
@@ -90,6 +93,7 @@ export async function requireUserProfile(): Promise<UserProfile> {
     if (request) redirect("/access-status");
     redirect("/login?error=perfil-incompleto");
   }
+  if (profile.revokedAt) redirect("/access-status");
 
   return profile;
 }

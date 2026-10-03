@@ -13,6 +13,8 @@ export type UserProfile = {
   name: string;
   email: string;
   role: UserRole;
+  /** Fecha de revocación del acceso (TRZ-38); null si el acceso está vigente. */
+  revokedAt: string | null;
 };
 
 /** Estados de una orden de despacho, espejo del enum `order_status` de Postgres. */
