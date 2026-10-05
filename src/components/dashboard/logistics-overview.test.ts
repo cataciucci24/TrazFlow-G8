@@ -35,6 +35,14 @@ function harness(role: UserRole = "logistics_manager", stockData: StockAlertsRes
     in: (...args: unknown[]) => { calls.push({ name: "in", args }); return query; },
     data: [{ id: "order-1", status: role === "warehouse_operator" ? "draft" : "confirmed", distributors: { name: "Destino" }, order_pallets: [{ validated_at: null }] }],
   };
+  const distributorLinkQuery = {
+    select: (...args: unknown[]) => { calls.push({ name: "select", args }); return distributorLinkQuery; },
+    eq: (...args: unknown[]) => { calls.push({ name: "eq", args }); return distributorLinkQuery; },
+    maybeSingle: async () => {
+      calls.push({ name: "maybeSingle", args: [] });
+      return { data: { distributor_id: "distributor-1" }, error: null };
+    },
+  };
   function load(file: string): unknown {
     if (cache.has(file)) return cache.get(file)!.exports;
     const compiledModule = { exports: {} };
@@ -44,12 +52,12 @@ function harness(role: UserRole = "logistics_manager", stockData: StockAlertsRes
     }).outputText;
     new Function("require", "module", "exports", code)((name: string) => {
       if (name === "@/lib/auth/session") return {
-        requireUserProfile: async () => ({ role, companyId: "company-1" }),
+        requireUserProfile: async () => ({ id: "user-1", role, companyId: "company-1" }),
         hasRole: (profile: { role: UserRole }, ...roles: UserRole[]) => roles.includes(profile.role),
       };
       if (name === "@/lib/pallets/queries") return { getExpirationAlerts: async (...args: unknown[]) => { calls.push({ name: "expiration", args }); return [expiration]; } };
       if (name === "@/lib/stock-alerts/queries") return { getDistributorStockAlerts: async (...args: unknown[]) => { calls.push({ name: "stock", args }); return stockData; } };
-      if (name === "@/lib/supabase/server") return { createClient: async () => ({ from: (...args: unknown[]) => { calls.push({ name: "from", args }); return query; } }) };
+      if (name === "@/lib/supabase/server") return { createClient: async () => ({ from: (...args: unknown[]) => { calls.push({ name: "from", args }); return args[0] === "distributor_users" ? distributorLinkQuery : query; } }) };
       if (name === "next/link") return function TestLink({ children, href, ...props }: { children: ReactNode; href: string }) { return createElement("a", { ...props, href }, children); };
       if (name === "next/form") return function TestForm({ children, ...props }: { children: ReactNode }) { return createElement("form", props, children); };
       if (name.startsWith("@/")) {
@@ -117,7 +125,15 @@ for (const role of ["warehouse_operator", "distributor_operator"] as const) {
     assert.match(html, role === "warehouse_operator" ? /Confirmar despacho/ : /Confirmar recepción/);
     assert.match(html, /href="\/dashboard\/orders\/order-1"/);
     assert.doesNotMatch(html, /Resumen operativo|Continuar la operación|Orden de despacho creada correctamente/);
-    assert.equal(calls.filter((call) => call.name === "from").length, 1);
+    assert.equal(calls.filter((call) => call.name === "from" && call.args[0] === "dispatch_orders").length, 1);
+    if (role === "distributor_operator") {
+      assert.deepEqual(calls.slice(-4), [
+        { name: "from", args: ["distributor_users"] },
+        { name: "select", args: ["distributor_id"] },
+        { name: "eq", args: ["user_id", "user-1"] },
+        { name: "maybeSingle", args: [] },
+      ]);
+    }
     assert.equal(calls.filter((call) => call.name === "expiration" || call.name === "stock").length, 0);
     assert.ok(calls.some((call) => call.name === "eq" && call.args[0] === (role === "warehouse_operator" ? "company_id" : "status") && call.args[1] === (role === "warehouse_operator" ? "company-1" : "confirmed")));
   });
