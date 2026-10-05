@@ -1,8 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { InlineAlert } from "@/components/ui/design-system";
+
+import { useState, type ReactNode } from "react";
+import { useFormStatus } from "react-dom";
+import { registrationErrorMessage } from "@/components/ui/feedback-messages";
 import { signUp } from "@/lib/auth/actions";
-import { RegistrationFields } from "@/components/registration-fields";
+import { RegistrationFields as RegistrationOptions } from "@/components/registration-fields";
 import { NAME_MAX_LENGTH, normalizeName } from "@/lib/registration/name";
 
 type Props = { companies: { id: string; name: string }[]; error?: string };
@@ -17,7 +21,7 @@ export function RegisterWizard({ companies, error }: Props) {
 
   return (
     <form className="space-y-6" action={signUp}>
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <InlineAlert variant="danger">{registrationErrorMessage(error)}</InlineAlert>}
 
       <input type="hidden" name="email" value={data.email} />
       <input type="hidden" name="name" value={data.name} />
@@ -25,6 +29,7 @@ export function RegisterWizard({ companies, error }: Props) {
       <input type="hidden" name="companyId" value={data.companyId} />
       <input type="hidden" name="role" value={data.role} />
 
+      <RegistrationFields>
       <p className="text-xs font-semibold text-stone-500">Paso {step} de 2</p>
 
       {step === 1 && (
@@ -54,17 +59,27 @@ export function RegisterWizard({ companies, error }: Props) {
 
       {step === 2 && (
         <>
-          <RegistrationFields companies={companies} companyId={data.companyId} role={data.role}
+          <RegistrationOptions companies={companies} companyId={data.companyId} role={data.role}
             onCompanyChange={set("companyId")} onRoleChange={set("role")} />
           <p className="text-sm text-stone-500">Primero confirmarás tu email. Después de iniciar sesión podrás enviar la solicitud.</p>
           <div className="flex gap-3">
             <button type="button" className="w-1/3 text-sm font-semibold text-stone-600 underline"
               onClick={() => setStep(1)}>Volver</button>
-            <button type="submit" className="button-primary w-2/3"
-              disabled={!data.companyId || !data.role}>Crear cuenta</button>
+            <RegistrationSubmit disabled={!data.companyId || !data.role} />
           </div>
         </>
       )}
+      </RegistrationFields>
     </form>
   );
+}
+
+function RegistrationFields({ children }: { children: ReactNode }) {
+  const { pending } = useFormStatus();
+  return <fieldset disabled={pending} aria-busy={pending} className="min-w-0 space-y-6">{children}</fieldset>;
+}
+
+function RegistrationSubmit({ disabled }: { disabled: boolean }) {
+  const { pending } = useFormStatus();
+  return <button type="submit" className="button-primary w-2/3" disabled={disabled || pending} aria-busy={pending}>{pending ? "Creando cuenta…" : "Crear cuenta"}</button>;
 }

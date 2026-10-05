@@ -7,7 +7,7 @@ import { useMemo, useState } from "react";
 import { PalletActions } from "@/components/pallets/pallet-actions";
 import { PALLET_STATUS_LABELS } from "@/lib/pallets/labels";
 import type { ExistingProduct, Pallet, ProductBatch } from "@/lib/types";
-import { CompactSummaryCard, PalletStatusBadge, SectionHeader, TableShell } from "@/components/ui/design-system";
+import { EmptyState, FilterPanel, CompactSummaryCard, PalletStatusBadge, SectionHeader, TableShell } from "@/components/ui/design-system";
 
 const statusDetails = [
   { value: "in_warehouse", label: "En depósito", tone: "sky" },
@@ -16,7 +16,6 @@ const statusDetails = [
   { value: "received", label: "Entregados", tone: "green" },
 ] as const;
 
-const fieldClass = "form-control mt-2";
 
 function normalize(value: string) {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es-AR");
@@ -52,26 +51,23 @@ export function PalletTrackingPanel({
 
   return (
     <section className="space-y-10" aria-label="Seguimiento de pallets">
-      <section aria-label="Filtros de pallets" className="surface p-5">
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-[2fr_1fr_1fr]">
-            <label className="text-sm font-semibold md:col-span-2 xl:col-span-1">Buscar
-              <input value={search} onChange={(event) => setSearch(event.target.value)} type="search" placeholder="Código QR, producto, SKU o lote" className={fieldClass} />
-            </label>
-            <label className="text-sm font-semibold">Ubicación
-              <select value={location} onChange={(event) => setLocation(event.target.value)} className={fieldClass}>
-                <option value="">Todas las ubicaciones</option>
-                {locations.map((value) => <option key={value || "none"} value={value}>{value || "Sin ubicación registrada"}</option>)}
-              </select>
-            </label>
-            <label className="text-sm font-semibold">Estado
-              <select value={status} onChange={(event) => setStatus(event.target.value)} className={fieldClass}>
-                <option value="">Todos los estados</option>
-                {Object.entries(PALLET_STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-              </select>
-            </label>
-        </div>
-        {hasFilters && <button type="button" onClick={clearFilters} className="button-secondary mt-4">Limpiar filtros</button>}
-      </section>
+      <FilterPanel label="Filtros de pallets" onClear={hasFilters ? clearFilters : undefined}>
+        <label className="form-label">Buscar
+          <input value={search} onChange={(event) => setSearch(event.target.value)} type="search" placeholder="Código QR, producto, SKU o lote" className="form-control mt-2" />
+        </label>
+        <label className="form-label">Ubicación
+          <select value={location} onChange={(event) => setLocation(event.target.value)} className="form-control mt-2">
+            <option value="">Todas las ubicaciones</option>
+            {locations.map((value) => <option key={value || "none"} value={value}>{value || "Sin ubicación registrada"}</option>)}
+          </select>
+        </label>
+        <label className="form-label">Estado
+          <select value={status} onChange={(event) => setStatus(event.target.value)} className="form-control mt-2">
+            <option value="">Todos los estados</option>
+            {Object.entries(PALLET_STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
+        </label>
+      </FilterPanel>
 
       <section aria-label="Resumen de pallets" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {statusDetails.map((detail) => {
@@ -85,15 +81,18 @@ export function PalletTrackingPanel({
           title="Pallets registrados"
           action={<p role="status" className="text-sm text-stone-500">Mostrando {visiblePallets.length} de {pallets.length}</p>}
         />
-        <TableShell label="Pallets registrados">
-          <table className="data-table min-w-[780px]">
-            <thead><tr><th>Código</th><th>Producto</th><th>Lote</th><th>Estado</th><th>Ubicación</th><th className="text-right">Acciones</th></tr></thead>
-            <tbody>
-              {visiblePallets.map((pallet) => <tr key={pallet.id}><td className="font-mono font-bold">{pallet.qrCode}</td><td className="font-medium">{pallet.productName}</td><td className="font-mono text-stone-600">{pallet.batchNumber}</td><td><PalletStatusBadge status={pallet.status} /></td><td className="text-stone-500">{pallet.currentLocation ?? "—"}</td><td className="text-right"><div className="flex items-center justify-end gap-4"><Link href={`/dashboard/traceability?qr=${encodeURIComponent(pallet.qrCode)}`} className="table-action">Ver trazabilidad</Link><PalletQrButton qrCode={pallet.qrCode} /><PalletActions pallet={pallet} existingBatches={existingBatches} existingProducts={existingProducts} /></div></td></tr>)}
-              {visiblePallets.length === 0 && <tr><td colSpan={6} className="px-5 py-10 text-center text-stone-500">No hay pallets para estos filtros.</td></tr>}
+        {visiblePallets.length === 0 ? <div className="surface"><EmptyState
+          title={pallets.length === 0 ? "Todavía no hay pallets" : "Sin resultados para estos filtros"}
+          description={pallets.length === 0 ? "Los pallets registrados para tu empresa aparecerán acá." : "Cambiá la búsqueda o los filtros para encontrar otros pallets."}
+          action={pallets.length > 0 && hasFilters ? <button type="button" onClick={clearFilters} className="button-secondary">Limpiar filtros</button> : undefined}
+        /></div> : <TableShell label="Pallets registrados" mobileLayout="rows">
+          <table role="table" aria-label="Pallets registrados" className="data-table min-w-[780px]">
+            <thead role="rowgroup"><tr role="row"><th role="columnheader" scope="col">Código</th><th role="columnheader" scope="col">Producto</th><th role="columnheader" scope="col">Lote</th><th role="columnheader" scope="col">Estado</th><th role="columnheader" scope="col">Ubicación</th><th role="columnheader" scope="col" className="text-right">Acciones</th></tr></thead>
+            <tbody role="rowgroup">
+              {visiblePallets.map((pallet) => <tr role="row" key={pallet.id}><td role="cell" data-label="Código" className="mobile-primary font-mono font-bold">{pallet.qrCode}</td><td role="cell" data-label="Producto" className="font-medium">{pallet.productName}</td><td role="cell" data-label="Lote" className="font-mono text-stone-600">{pallet.batchNumber}</td><td role="cell" data-label="Estado" className="mobile-priority"><PalletStatusBadge status={pallet.status} /></td><td role="cell" data-label="Ubicación" className="mobile-priority text-stone-500">{pallet.currentLocation ?? "—"}</td><td role="cell" data-label="Acciones" className="mobile-actions text-right"><div className="table-row-actions"><Link href={`/dashboard/traceability?qr=${encodeURIComponent(pallet.qrCode)}`} className="button-secondary">Ver trazabilidad</Link><PalletQrButton qrCode={pallet.qrCode} /><PalletActions pallet={pallet} existingBatches={existingBatches} existingProducts={existingProducts} /></div></td></tr>)}
             </tbody>
           </table>
-        </TableShell>
+        </TableShell>}
       </div>
     </section>
   );

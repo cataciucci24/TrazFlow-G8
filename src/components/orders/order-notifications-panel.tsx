@@ -4,7 +4,7 @@ import { useId, useState } from "react";
 
 import type { OrderNotification } from "@/lib/order-notifications/types";
 import { ORDER_NOTIFICATION_LABELS } from "@/lib/order-notifications/labels";
-import { SectionHeader } from "@/components/ui/design-system";
+import { Badge, EmptyState, SectionHeader } from "@/components/ui/design-system";
 
 type OrderNotificationsPanelProps = {
   notifications: OrderNotification[];
@@ -19,10 +19,10 @@ const FILTERS = [
 type NotificationFilter = (typeof FILTERS)[number]["value"];
 
 const TYPE_DETAILS = {
-  dispatch: { label: "Despacho", className: "bg-amber-50 text-amber-800", iconClassName: "stroke-amber-600" },
-  reception: { label: "Recepción", className: "bg-sky-50 text-sky-800", iconClassName: "stroke-sky-600" },
-  other: { label: "Otro evento", className: "bg-stone-100 text-stone-700", iconClassName: "stroke-stone-500" },
-};
+  dispatch: { label: "Despacho", tone: "warning", iconClassName: "stroke-amber-600" },
+  reception: { label: "Recepción", tone: "info", iconClassName: "stroke-sky-600" },
+  other: { label: "Otro evento", tone: "neutral", iconClassName: "stroke-stone-500" },
+} as const;
 
 function notificationType(eventType: string) {
   if (eventType.startsWith("dispatch_")) return "dispatch";
@@ -51,15 +51,15 @@ export function OrderNotificationsPanel({ notifications }: OrderNotificationsPan
   };
 
   return (
-    <section aria-labelledby={titleId} className="section-stack">
+    <section aria-labelledby={titleId} className="list-content section-stack">
       <SectionHeader
         id={titleId}
         title="Notificaciones"
         description="Discrepancias de despacho y recepción de esta orden, en un mismo lugar."
       />
       <div className="surface p-4 sm:p-6">
-        <fieldset className="flex flex-wrap items-center gap-2">
-          <legend className="mb-2 text-xs font-bold uppercase tracking-wider text-stone-500">
+        <fieldset className="filter-group">
+          <legend className="filter-legend">
             Tipo de discrepancia
           </legend>
           {FILTERS.map((option) => (
@@ -81,11 +81,11 @@ export function OrderNotificationsPanel({ notifications }: OrderNotificationsPan
 
         <div id={listId} className="mt-2">
           {filteredNotifications.length === 0 ? (
-            <p className="py-4 text-sm text-stone-500">
-              {notifications.length === 0
-                ? "No hay inconsistencias registradas para esta orden."
-                : `No hay discrepancias de ${filter === "dispatch" ? "despacho" : "recepción"} registradas para esta orden.`}
-            </p>
+            <EmptyState
+              title={notifications.length === 0 ? "Sin inconsistencias registradas" : "Sin resultados para este filtro"}
+              description={notifications.length === 0 ? "Las discrepancias detectadas en despacho o recepción aparecerán acá." : `No hay discrepancias de ${filter === "dispatch" ? "despacho" : "recepción"} registradas para esta orden.`}
+              action={notifications.length > 0 ? <button type="button" className="button-secondary" onClick={() => setFilter("all")}>Ver todas</button> : undefined}
+            />
           ) : (
             <ul className="divide-y divide-stone-200">
               {filteredNotifications.map((notification) => {
@@ -97,7 +97,7 @@ export function OrderNotificationsPanel({ notifications }: OrderNotificationsPan
                     </svg>
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <span className={`status-badge ${detail.className}`}>{detail.label}</span>
+                        <Badge tone={detail.tone}>{detail.label}</Badge>
                         <time dateTime={notification.createdAt} className="text-xs text-stone-500">
                           {DATE_FORMATTER.format(new Date(notification.createdAt))}
                         </time>

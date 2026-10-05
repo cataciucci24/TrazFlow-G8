@@ -4,9 +4,8 @@ import { useMemo, useState } from "react";
 
 import { LotsTable } from "@/components/traceability/lots-table";
 import type { Lot, Pallet } from "@/lib/types";
-import { CompactSummaryCard, SectionHeader } from "@/components/ui/design-system";
+import { EmptyState, FilterPanel, CompactSummaryCard, SectionHeader } from "@/components/ui/design-system";
 
-const fieldClass = "form-control mt-2";
 const DAY = 86_400_000;
 
 function normalize(value: string) {
@@ -46,20 +45,17 @@ export function LotTrackingPanel({ lots, pallets }: { lots: Lot[]; pallets: Pall
 
   return (
     <section className="space-y-10" aria-label="Seguimiento de lotes">
-      <section aria-label="Filtros de lotes" className="surface p-5">
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-[2fr_1fr_1fr]">
-            <label className="text-sm font-semibold md:col-span-2 xl:col-span-1">Buscar
-              <input value={search} onChange={(event) => setSearch(event.target.value)} type="search" placeholder="Número de lote, producto o SKU" className={fieldClass} />
-            </label>
-            <label className="text-sm font-semibold">Vencimiento
-              <select value={expiration} onChange={(event) => setExpiration(event.target.value)} className={fieldClass}><option value="">Todos los vencimientos</option><option value="critical">Hasta 30 días</option><option value="warning">31 a 60 días</option><option value="upcoming">61 a 90 días</option><option value="later">Más de 90 días</option><option value="none">Sin fecha</option></select>
-            </label>
-            <label className="text-sm font-semibold">Estado
-              <select value={status} onChange={(event) => setStatus(event.target.value)} className={fieldClass}><option value="">Todos los lotes</option><option value="with_pallets">Con pallets</option><option value="without_pallets">Sin pallets</option></select>
-            </label>
-        </div>
-        {hasFilters && <button type="button" onClick={clearFilters} className="button-secondary mt-4">Limpiar filtros</button>}
-      </section>
+      <FilterPanel label="Filtros de lotes" onClear={hasFilters ? clearFilters : undefined}>
+        <label className="form-label">Buscar
+          <input value={search} onChange={(event) => setSearch(event.target.value)} type="search" placeholder="Número de lote, producto o SKU" className="form-control mt-2" />
+        </label>
+        <label className="form-label">Vencimiento
+          <select value={expiration} onChange={(event) => setExpiration(event.target.value)} className="form-control mt-2"><option value="">Todos los vencimientos</option><option value="critical">Hasta 30 días</option><option value="warning">31 a 60 días</option><option value="upcoming">61 a 90 días</option><option value="later">Más de 90 días</option><option value="none">Sin fecha</option></select>
+        </label>
+        <label className="form-label">Estado
+          <select value={status} onChange={(event) => setStatus(event.target.value)} className="form-control mt-2"><option value="">Todos los lotes</option><option value="with_pallets">Con pallets</option><option value="without_pallets">Sin pallets</option></select>
+        </label>
+      </FilterPanel>
 
       <section aria-label="Resumen de lotes" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <CompactSummaryCard label="Total de lotes" value={lots.length} tone="brand" />
@@ -73,7 +69,11 @@ export function LotTrackingPanel({ lots, pallets }: { lots: Lot[]; pallets: Pall
           title="Lotes registrados"
           action={<p role="status" className="text-sm text-stone-500">Mostrando {visibleLots.length} de {lots.length}</p>}
         />
-        <LotsTable lots={visibleLots} pallets={pallets} />
+        {visibleLots.length === 0 ? <div className="surface"><EmptyState
+          title={lots.length === 0 ? "Todavía no hay lotes" : "Sin resultados para estos filtros"}
+          description={lots.length === 0 ? "Los lotes registrados para tu empresa aparecerán acá." : "Cambiá la búsqueda o los filtros para encontrar otros lotes."}
+          action={lots.length > 0 && hasFilters ? <button type="button" onClick={clearFilters} className="button-secondary">Limpiar filtros</button> : undefined}
+        /></div> : <LotsTable lots={visibleLots} pallets={pallets} />}
       </div>
     </section>
   );

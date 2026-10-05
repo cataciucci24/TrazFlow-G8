@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { InlineAlert } from "@/components/ui/design-system";
+
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/client";
@@ -8,33 +10,45 @@ import { createClient } from "@/lib/supabase/client";
 /** Inicia sesión en el navegador para que Supabase persista la cookie de sesión. */
 export function LoginForm() {
   const router = useRouter();
+  const submitLocked = useRef(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
 
   async function handleSubmit(formData: FormData) {
+    if (submitLocked.current) return;
+    submitLocked.current = true;
     setError(null);
     setIsPending(true);
 
-    const supabase = createClient();
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email: String(formData.get("email") ?? "").trim(),
-      password: String(formData.get("password") ?? ""),
-    });
+    try {
+      const supabase = createClient();
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: String(formData.get("email") ?? "").trim(),
+        password: String(formData.get("password") ?? ""),
+      });
 
-    if (signInError) {
-      setError(signInError.code === "email_not_confirmed"
-        ? "Confirmá tu email desde el correo recibido antes de iniciar sesión."
-        : "El email o la contraseña no son correctos.");
+      if (signInError) {
+        setError(signInError.code === "email_not_confirmed"
+          ? "Confirmá tu email desde el correo recibido antes de iniciar sesión."
+          : "El email o la contraseña no son correctos.");
+        submitLocked.current = false;
+        setIsPending(false);
+        return;
+      }
+
+      router.replace("/complete-registration");
+      router.refresh();
+    } catch {
+      setError("No se pudo ingresar. Revisá tu conexión e intentá nuevamente.");
+      submitLocked.current = false;
       setIsPending(false);
-      return;
     }
-
-    router.replace("/complete-registration");
-    router.refresh();
   }
 
   return (
-    <form action={handleSubmit} className="space-y-6">
+    <form action={handleSubmit} className="space-y-6" aria-busy={isPending}>
       <div>
         <label htmlFor="email" className="block text-sm font-semibold text-stone-600">
           Email
@@ -43,8 +57,11 @@ export function LoginForm() {
           <input
             id="email"
             name="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
             type="email"
             autoComplete="email"
+            disabled={isPending}
             required
             placeholder="nombre@empresa.com"
             className="form-control mt-1"
@@ -60,8 +77,11 @@ export function LoginForm() {
           <input
             id="password"
             name="password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
             type="password"
             autoComplete="current-password"
+            disabled={isPending}
             required
             placeholder="••••••••"
             className="form-control mt-1"
@@ -69,9 +89,9 @@ export function LoginForm() {
         </div>
       </div>
 
-      {error && <p role="alert" className="feedback border-red-200 bg-red-50 text-red-700">{error}</p>}
+      {error && <InlineAlert variant="danger">{error}</InlineAlert>}
 
-      <button type="submit" className="button-primary w-full" disabled={isPending}>
+      <button type="submit" className="button-primary w-full" disabled={isPending} aria-busy={isPending}>
         {isPending ? "Ingresando…" : "Ingresar"}
       </button>
     </form>

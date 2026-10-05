@@ -2,15 +2,19 @@ import type { Metadata } from "next";
 import { BrandLogo } from "@/components/brand-mark";
 import { LoginForm } from "@/app/login/login-form";
 import Link from "next/link";
+import { InlineAlert } from "@/components/ui/design-system";
 
 export const metadata: Metadata = {
   title: "Ingresar | TrazFlow",
 };
 
-export default async function LoginPage({ searchParams }: {
-  searchParams: Promise<{ "verify-email"?: string; registered?: string }>;
-}) {
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ "verify-email"?: string; registered?: string }> }) {
   const params = await searchParams;
+  const successMessage = params["verify-email"] === "1"
+    ? "Después de verificar tu mail, iniciá sesión para completar tu solicitud de acceso."
+    : params.registered === "1"
+      ? "Cuenta creada. Iniciá sesión para completar tu solicitud de acceso."
+      : null;
   return (
     <main className="relative grid min-h-dvh overflow-hidden bg-stone-50 lg:grid-cols-[1.1fr_0.9fr]">
       <section className="hidden bg-stone-950 p-12 text-white lg:flex lg:flex-col lg:justify-between">
@@ -34,12 +38,7 @@ export default async function LoginPage({ searchParams }: {
         </div>
 
         <div className="surface p-6 sm:p-8">
-          {params["verify-email"] === "1" && <p role="status" className="feedback feedback-success mb-6">
-            Después de verificar tu mail, iniciá sesión para completar tu solicitud de acceso.
-          </p>}
-          {params.registered === "1" && <p role="status" className="feedback feedback-success mb-6">
-            Cuenta creada. Iniciá sesión para completar tu solicitud de acceso.
-          </p>}
+          {successMessage && <InlineAlert variant="success" className="mb-6">{successMessage}</InlineAlert>}
           <LoginForm />
         </div>
 

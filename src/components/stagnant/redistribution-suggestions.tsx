@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { EmptyState, SectionHeader, StatusBadge, TableShell } from "@/components/ui/design-system";
+import { EmptyState, InlineAlert, SectionHeader, StatusBadge, TableShell } from "@/components/ui/design-system";
 import type { RedistributionSuggestion } from "@/lib/redistribution/suggest";
 
 const NUMBER_FORMATTER = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 1 });
@@ -21,14 +21,14 @@ export function RedistributionSuggestions({
       />
 
       {!stockSourceAvailable ? (
-        <div role="status" className="feedback feedback-warning">Las sugerencias estarán disponibles cuando se aplique la migración de stock en Supabase.</div>
+        <InlineAlert variant="warning">Las sugerencias de redistribución no están disponibles por el momento.</InlineAlert>
       ) : suggestions.length === 0 ? (
         <div className="surface">
           <EmptyState title="Sin sugerencias por ahora" description="Ninguna distribuidora tiene faltante de productos con pallets inmovilizados en tus depósitos para este umbral." />
         </div>
       ) : (
         <TableShell label="Sugerencias de distribución">
-          <table className="data-table min-w-[980px]">
+          <table className="data-table min-w-[760px]">
             <thead>
               <tr>
                 <th scope="col">Distribuidora</th>

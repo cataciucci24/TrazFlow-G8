@@ -6,7 +6,7 @@ import { LotTraceability } from "@/components/traceability/lot-traceability";
 import { PalletTraceability } from "@/components/traceability/pallet-traceability";
 import { hasRole, requireUserProfile } from "@/lib/auth/session";
 import { getLotTraceability, getPalletTraceability } from "@/lib/traceability/queries";
-import { PageHeader } from "@/components/ui/design-system";
+import { EmptyState, InlineAlert, PageHeader } from "@/components/ui/design-system";
 
 export const metadata: Metadata = { title: "Trazabilidad | TrazFlow" };
 
@@ -39,9 +39,9 @@ function TraceabilityLayout({ backHref, backLabel, title, children }: { backHref
 }
 
 function TooLongMessage() {
-  return <p role="alert" className="feedback feedback-danger">El código de búsqueda no puede superar los 512 caracteres.</p>;
+  return <InlineAlert variant="danger">El código de búsqueda no puede superar los 512 caracteres.</InlineAlert>;
 }
 
 function NotFoundMessage({ entity }: { entity: string }) {
-  return <p role="status" className="feedback feedback-warning">No se encontró ningún {entity} con ese código.</p>;
+  return <div className="surface"><EmptyState title={`No se encontró el ${entity}`} description="Revisá el código consultado o volvé al listado para seleccionar otro registro." /></div>;
 }
