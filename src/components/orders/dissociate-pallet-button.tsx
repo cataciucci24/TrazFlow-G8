@@ -1,7 +1,10 @@
 "use client";
 
+import { useFeedback } from "@/components/ui/feedback";
+
 import { useState, useTransition } from "react";
 
+import { ConfirmationDialog } from "@/components/ui/modal";
 import { dissociatePallet } from "@/lib/orders/actions";
 
 type DissociatePalletButtonProps = {
@@ -15,15 +18,25 @@ export function DissociatePalletButton({
   palletId,
   disabled,
 }: DissociatePalletButtonProps) {
+  const notify = useFeedback();
+  const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const handleClick = () => {
+    if (disabled || isPending) return;
     setError(null);
     startTransition(async () => {
-      const result = await dissociatePallet(orderId, palletId);
-      if (result.outcome !== "dissociated") {
-        setError(result.message);
+      try {
+        const result = await dissociatePallet(orderId, palletId);
+        if (result.outcome !== "dissociated") {
+          setError(result.message);
+        } else {
+          notify(result.message);
+          setOpen(false);
+        }
+      } catch {
+        setError("No se pudo quitar el pallet. Intentá nuevamente.");
       }
     });
   };
@@ -33,12 +46,15 @@ export function DissociatePalletButton({
       <button
         type="button"
         disabled={disabled || isPending}
-        onClick={handleClick}
-        className="filter-chip disabled:cursor-not-allowed disabled:opacity-60"
+        onClick={() => { setError(null); setOpen(true); }}
+        className="button-danger"
       >
         {isPending ? "Quitando..." : "Quitar"}
       </button>
-      {error && <p className="text-xs text-red-600">{error}</p>}
+      <ConfirmationDialog open={open} onClose={() => setOpen(false)} onConfirm={handleClick}
+        title="Quitar pallet de la orden"
+        description={<>Vas a quitar el pallet <strong className="break-all font-mono">{palletId}</strong> de la orden <strong className="break-all font-mono">{orderId}</strong>. El pallet volverá a depósito; no se elimina. Podés volver a asociarlo mientras la orden admita cambios.</>}
+        confirmLabel="Quitar pallet" danger busy={isPending} blocked={disabled} error={error} />
     </div>
   );
 }

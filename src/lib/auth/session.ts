@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 
 import { createClient } from "@/lib/supabase/server";
+import { getAccessRequest } from "@/lib/access-requests/queries";
 import type { UserProfile, UserRole } from "@/lib/types";
 
 /**
@@ -41,7 +42,7 @@ export const getUserProfile = cache(async (): Promise<UserProfile | null> => {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("users")
-    .select("id, company_id, name, email, role")
+    .select("id, company_id, name, email, role, revoked_at")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -61,6 +62,7 @@ export const getUserProfile = cache(async (): Promise<UserProfile | null> => {
     name: data.name,
     email: data.email,
     role: data.role as UserRole,
+    revokedAt: data.revoked_at,
   };
 });
 
@@ -77,14 +79,21 @@ export async function requireUser(): Promise<User> {
 
 /**
  * Igual que getUserProfile(), pero exige sesión + perfil cargado.
- * Si hay sesión pero falta la fila en `users`, mandamos al login con un error
- * explicativo (usuario creado en Supabase Auth pero sin dar de alta acá).
+ * Sin perfil operativo, una solicitud permite consultar su estado, no entrar
+ * al dashboard. Sin solicitud se conserva el error de perfil incompleto.
+ * Un perfil revocado (TRZ-38) tampoco entra: RLS ya le bloquea los datos, y
+ * /access-status le explica por qué.
  */
 export async function requireUserProfile(): Promise<UserProfile> {
-  await requireUser();
+  const user = await requireUser();
 
   const profile = await getUserProfile();
-  if (!profile) redirect("/login?error=perfil-incompleto");
+  if (!profile) {
+    const request = await getAccessRequest(user.id);
+    if (request) redirect("/access-status");
+    redirect("/login?error=perfil-incompleto");
+  }
+  if (profile.revokedAt) redirect("/access-status");
 
   return profile;
 }

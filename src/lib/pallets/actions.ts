@@ -85,15 +85,14 @@ export async function createPallet(
     return { error: "Solo logística puede registrar pallets.", success: null };
   }
 
-  const qrCode = String(formData.get("qrCode") ?? "").trim();
   const productName = String(formData.get("productName") ?? "").trim();
   const productSku = String(formData.get("productSku") ?? "").trim();
   const batchNumber = String(formData.get("batchNumber") ?? "").trim();
   const quantity = Number(formData.get("quantity") ?? 0);
   const unitOfMeasure = String(formData.get("unitOfMeasure") ?? "");
 
-  if (!qrCode || !productName || !productSku || !batchNumber || !Number.isFinite(quantity) || quantity <= 0 || !isPalletUnit(unitOfMeasure)) {
-    return { error: "Completá código QR, producto, SKU, lote, una cantidad mayor que 0 y una unidad válida.", success: null };
+  if (!productName || !productSku || !batchNumber || !Number.isFinite(quantity) || quantity <= 0 || !isPalletUnit(unitOfMeasure)) {
+    return { error: "Completá producto, SKU, lote, una cantidad mayor que 0 y una unidad válida.", success: null };
   }
 
   const supabase = await createClient();
@@ -112,16 +111,15 @@ export async function createPallet(
     .single();
   if (batchError || !batch) return { error: "El lote seleccionado no existe para ese producto. Crealo primero desde la sección Lotes.", success: null };
 
-  const { error: palletError } = await supabase.from("pallets").insert({
+  const { data: pallet, error: palletError } = await supabase.from("pallets").insert({
     company_id: profile.companyId,
     batch_id: batch.id,
-    qr_code: qrCode,
     quantity,
     unit_of_measure: unitOfMeasure,
     current_location: "Depósito",
-  });
-  if (palletError) {
-    return { error: palletError.code === "23505" ? "Ya existe un pallet con ese código QR." : INITIAL_ERROR, success: null };
+  }).select("qr_code").single();
+  if (palletError || !pallet) {
+    return { error: INITIAL_ERROR, success: null };
   }
 
   revalidatePath("/dashboard/inventory");
@@ -130,10 +128,10 @@ export async function createPallet(
   revalidatePath("/dashboard/pallets");
   revalidatePath("/dashboard/lots");
   revalidatePath("/dashboard/alerts");
-  return { error: null, success: `Pallet ${qrCode} registrado en depósito.` };
+  return { error: null, success: `Pallet ${pallet.qr_code} registrado en depósito.` };
 }
 
-/** Actualiza la identificación y la información logística de un pallet. */
+/** Actualiza la información logística sin modificar la identidad del pallet. */
 export async function updatePallet(
   palletId: string,
   _previousState: UpdatePalletState,
@@ -144,7 +142,6 @@ export async function updatePallet(
     return { error: "Solo logística puede editar pallets.", success: null };
   }
 
-  const qrCode = String(formData.get("qrCode") ?? "").trim();
   const productName = String(formData.get("productName") ?? "").trim();
   const productSku = String(formData.get("productSku") ?? "").trim();
   const batchNumber = String(formData.get("batchNumber") ?? "").trim();
@@ -152,14 +149,14 @@ export async function updatePallet(
   const quantity = Number(formData.get("quantity") ?? 0);
   const unitOfMeasure = String(formData.get("unitOfMeasure") ?? "");
 
-  if (!qrCode || !productName || !productSku || !batchNumber || !Number.isFinite(quantity) || quantity <= 0 || !isPalletUnit(unitOfMeasure)) {
-    return { error: "Completá código QR, producto, SKU, lote, una cantidad mayor que 0 y una unidad válida.", success: null };
+  if (!productName || !productSku || !batchNumber || !Number.isFinite(quantity) || quantity <= 0 || !isPalletUnit(unitOfMeasure)) {
+    return { error: "Completá producto, SKU, lote, una cantidad mayor que 0 y una unidad válida.", success: null };
   }
 
   const supabase = await createClient();
   const { data: existingPallet, error: palletLookupError } = await supabase
     .from("pallets")
-    .select("id")
+    .select("id, qr_code")
     .eq("id", palletId)
     .eq("company_id", profile.companyId)
     .maybeSingle();
@@ -182,10 +179,10 @@ export async function updatePallet(
 
   const { error: updateError } = await supabase
     .from("pallets")
-    .update({ qr_code: qrCode, batch_id: batch.id, quantity, unit_of_measure: unitOfMeasure, current_location: currentLocation || null })
+    .update({ batch_id: batch.id, quantity, unit_of_measure: unitOfMeasure, current_location: currentLocation || null })
     .eq("id", palletId)
     .eq("company_id", profile.companyId);
-  if (updateError) return { error: updateError.code === "23505" ? "Ya existe un pallet con ese código QR." : INITIAL_ERROR, success: null };
+  if (updateError) return { error: INITIAL_ERROR, success: null };
 
   revalidatePath("/dashboard/inventory");
   revalidatePath("/dashboard/traceability");
@@ -193,7 +190,7 @@ export async function updatePallet(
   revalidatePath("/dashboard/pallets");
   revalidatePath("/dashboard/lots");
   revalidatePath("/dashboard/alerts");
-  return { error: null, success: `Pallet ${qrCode} actualizado.` };
+  return { error: null, success: `Pallet ${existingPallet.qr_code} actualizado.` };
 }
 
 /** Elimina solo pallets que todavía están disponibles en depósito. */

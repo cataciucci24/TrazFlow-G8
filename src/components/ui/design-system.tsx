@@ -50,10 +50,18 @@ export function Surface({ children, className = "" }: { children: ReactNode; cla
   return <div className={`surface ${className}`}>{children}</div>;
 }
 
-export function TableShell({ children, label }: { children: ReactNode; label: string }) {
+export function TableShell({ children, label, mobileLayout = "table", className = "" }: {
+  children: ReactNode;
+  label: string;
+  mobileLayout?: "table" | "rows";
+  className?: string;
+}) {
   return (
-    <div className="table-shell" role="region" aria-label={label} tabIndex={0}>
-      {children}
+    <div className="table-container">
+      {mobileLayout === "table" ? <p className="table-scroll-hint">Deslizá horizontalmente para ver todas las columnas.</p> : null}
+      <div className={`table-shell ${mobileLayout === "rows" ? "table-shell-rows" : ""} ${className}`} role="region" aria-label={label} tabIndex={0}>
+        {children}
+      </div>
     </div>
   );
 }
@@ -77,29 +85,44 @@ export function AlertTypeBadge({ type }: { type: AlertType }) {
   );
 }
 
-const palletStatusClasses: Record<PalletStatus, string> = {
-  in_warehouse: "bg-sky-50 text-sky-700",
-  assigned: "bg-violet-50 text-violet-700",
-  in_transit: "bg-amber-50 text-amber-700",
-  received: "bg-emerald-50 text-emerald-700",
-  discrepancy: "bg-red-50 text-red-700",
+export type BadgeTone = "neutral" | "info" | "assigned" | "warning" | "success" | "danger";
+
+export function Badge({ tone = "neutral", children }: { tone?: BadgeTone; children: ReactNode }) {
+  return <span className={`status-badge badge-${tone}`}>{children}</span>;
+}
+
+export function FilterPanel({ label, children, onClear }: { label: string; children: ReactNode; onClear?: () => void }) {
+  return (
+    <section aria-label={label} className="filter-panel">
+      <div className="filter-grid">{children}</div>
+      {onClear ? <button type="button" onClick={onClear} className="button-ghost mt-3">Limpiar filtros</button> : null}
+    </section>
+  );
+}
+
+const palletStatusClasses: Record<PalletStatus, BadgeTone> = {
+  in_warehouse: "info",
+  assigned: "assigned",
+  in_transit: "warning",
+  received: "success",
+  discrepancy: "danger",
 };
 
 export function PalletStatusBadge({ status }: { status: PalletStatus }) {
-  return <span className={`status-badge ${palletStatusClasses[status]}`}>{PALLET_STATUS_LABELS[status]}</span>;
+  return <Badge tone={palletStatusClasses[status]}>{PALLET_STATUS_LABELS[status]}</Badge>;
 }
 
-const orderStatusClasses: Record<OrderStatus, string> = {
-  draft: "bg-slate-100 text-slate-700",
-  validating: "bg-sky-50 text-sky-700",
-  has_discrepancy: "bg-red-50 text-red-700",
-  confirmed: "bg-emerald-50 text-emerald-700",
-  received: "bg-emerald-50 text-emerald-700",
-  received_with_discrepancy: "bg-red-50 text-red-700",
+const orderStatusClasses: Record<OrderStatus, BadgeTone> = {
+  draft: "neutral",
+  validating: "info",
+  has_discrepancy: "danger",
+  confirmed: "warning",
+  received: "success",
+  received_with_discrepancy: "danger",
 };
 
 export function OrderStatusBadge({ status }: { status: OrderStatus }) {
-  return <span className={`status-badge ${orderStatusClasses[status]}`}>{ORDER_STATUS_LABELS[status]}</span>;
+  return <Badge tone={orderStatusClasses[status]}>{ORDER_STATUS_LABELS[status]}</Badge>;
 }
 
 export function SummaryCard({
@@ -139,11 +162,36 @@ export function CompactSummaryCard({
   );
 }
 
-export function EmptyState({ title, description }: { title: string; description: string }) {
+export function EmptyState({ title, description, action }: { title: string; description: string; action?: ReactNode }) {
   return (
     <div className="empty-state">
       <h3>{title}</h3>
       <p>{description}</p>
+      {action ? <div className="mt-4 flex flex-wrap justify-center gap-3">{action}</div> : null}
+    </div>
+  );
+}
+
+export function InlineAlert({ variant = "info", children, className = "", id, announce = true }: {
+  variant?: "danger" | "success" | "warning" | "info";
+  children: ReactNode;
+  className?: string;
+  id?: string;
+  announce?: boolean;
+}) {
+  return <div id={id} role={announce ? variant === "danger" ? "alert" : "status" : undefined} aria-atomic="true" className={`feedback feedback-${variant} ${className}`}>{children}</div>;
+}
+
+export function LoadingState({ label = "Cargando…", skeleton = false }: { label?: string; skeleton?: boolean }) {
+  return (
+    <div role="status" aria-live="polite" aria-busy="true" aria-atomic="true" className={skeleton ? "space-y-6" : "flex items-center gap-3 text-sm text-[var(--muted)]"}>
+      <span>{label}</span>
+      {skeleton ? (
+        <div aria-hidden="true" className="space-y-6 animate-pulse motion-reduce:animate-none">
+          <div className="space-y-3"><div className="h-8 w-2/3 max-w-sm rounded-lg bg-stone-200" /><div className="h-4 w-5/6 max-w-lg rounded-lg bg-stone-200" /></div>
+          <div className="surface space-y-4 p-5">{[0, 1, 2].map((row) => <div key={row} className="space-y-2"><div className="h-5 w-1/2 rounded bg-stone-200" /><div className="h-4 w-full rounded bg-stone-100" /></div>)}</div>
+        </div>
+      ) : <span aria-hidden="true" className="size-4 shrink-0 animate-spin rounded-full border-2 border-[var(--brand-border)] border-t-[var(--brand)] motion-reduce:animate-none" />}
     </div>
   );
 }

@@ -4,7 +4,7 @@ import { PALLET_UNITS } from "@/lib/pallets/units";
 import type { Lot, Pallet } from "@/lib/types";
 import { TableShell } from "@/components/ui/design-system";
 
-const DATE_FORMATTER = new Intl.DateTimeFormat("es-AR", { dateStyle: "medium" });
+const DATE_FORMATTER = new Intl.DateTimeFormat("es-AR", { dateStyle: "short" });
 const formatQuantity = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 20 });
 
 function lotKey(productSku: string, batchNumber: string) {
@@ -28,11 +28,11 @@ export function LotsTable({ lots, pallets }: LotsTableProps) {
 
   return (
     <TableShell label="Lotes registrados">
-      <table className="data-table min-w-[820px]">
+      <table className="data-table min-w-[640px]">
         <thead>
           <tr>
             {["Lote", "Producto", "SKU", "Vencimiento", "Pallets", "Cantidad total", "Acciones"].map((heading) => (
-              <th key={heading} scope="col">{heading}</th>
+              <th key={heading} scope="col" className={heading === "SKU" ? "table-secondary-column" : ["Pallets", "Cantidad total"].includes(heading) ? "text-right" : undefined}>{heading}</th>
             ))}
           </tr>
         </thead>
@@ -47,17 +47,17 @@ export function LotsTable({ lots, pallets }: LotsTableProps) {
             return (
               <tr key={lot.id}>
                 <td className="max-w-48 break-words font-mono font-bold">{lot.batchNumber}</td>
-                <td className="max-w-64 break-words font-medium">{lot.productName}</td>
-                <td className="max-w-48 break-words font-mono text-slate-600">{lot.productSku}</td>
-                <td className="text-slate-500">{lot.expirationDate ? DATE_FORMATTER.format(new Date(lot.expirationDate)) : "—"}</td>
-                <td className="tabular-nums">{lotPallets.length}</td>
-                <td>
+                <td className="max-w-64 break-words font-medium">{lot.productName}<span className="table-secondary block font-mono md:hidden">SKU {lot.productSku}</span></td>
+                <td className="table-secondary-column max-w-48 break-words font-mono text-slate-600">{lot.productSku}</td>
+                <td className="text-slate-500">{lot.expirationDate ? DATE_FORMATTER.format(new Date(`${lot.expirationDate}T00:00:00`)) : "—"}</td>
+                <td className="text-right tabular-nums">{lotPallets.length}</td>
+                <td className="text-right tabular-nums">
                   {totals.length > 0 ? totals.map(({ unit, total }) => `${formatQuantity.format(total)} ${unit}`).join(", ") : "Sin definir"}
                 </td>
                 <td className="text-right">
                   <Link
                     href={`/dashboard/traceability?view=lotes&lote=${encodeURIComponent(lot.batchNumber)}`}
-                    className="table-action"
+                    className="button-secondary"
                   >
                     Ver trazabilidad
                   </Link>
@@ -66,7 +66,7 @@ export function LotsTable({ lots, pallets }: LotsTableProps) {
             );
           })}
           {lots.length === 0 && (
-            <tr><td colSpan={7} className="py-10 text-center text-slate-500">Todavía no hay lotes registrados.</td></tr>
+            <tr><td colSpan={7} className="table-empty">Todavía no hay lotes registrados.</td></tr>
           )}
         </tbody>
       </table>

@@ -1,6 +1,9 @@
 "use client";
 
-import { useActionState } from "react";
+import { actionErrorMessage } from "@/components/ui/feedback-messages";
+import { InlineAlert } from "@/components/ui/design-system";
+
+import { useActionState, useState } from "react";
 
 import {
   associatePallets,
@@ -20,6 +23,7 @@ export function AssociatePalletsForm({
   orderId,
   pallets,
 }: AssociatePalletsFormProps) {
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const associatePalletsForOrder = associatePallets.bind(null, orderId);
   const [state, formAction, isPending] = useActionState(
     associatePalletsForOrder,
@@ -29,21 +33,11 @@ export function AssociatePalletsForm({
   return (
     <form action={formAction} className="space-y-4">
       {state.error && (
-        <p
-          role="alert"
-          className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
-        >
-          {state.error}
-        </p>
+        <InlineAlert variant="danger">{actionErrorMessage(state.error)}</InlineAlert>
       )}
 
       {state.success && (
-        <p
-          role="status"
-          className="rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700"
-        >
-          {state.success}
-        </p>
+        <InlineAlert variant="success">{state.success}</InlineAlert>
       )}
 
       <ul className="divide-y divide-stone-200 rounded-xl border border-stone-200 px-4">
@@ -54,8 +48,10 @@ export function AssociatePalletsForm({
               name="palletIds"
               type="checkbox"
               value={pallet.id}
+              checked={selectedIds.includes(pallet.id)}
+              onChange={(event) => setSelectedIds((current) => event.target.checked ? [...current, pallet.id] : current.filter((id) => id !== pallet.id))}
               disabled={isPending}
-              className="h-4 w-4 rounded border-stone-300 text-[var(--brand)] focus:ring-[var(--focus)]"
+              className="form-check"
             />
             <label htmlFor={`pallet-${pallet.id}`} className="flex-1">
               <span className="font-mono font-semibold text-slate-950">{pallet.qrCode}</span>{" "}
@@ -74,8 +70,8 @@ export function AssociatePalletsForm({
       <div className="flex justify-end">
         <button
           type="submit"
-          disabled={isPending}
-          className="button-primary disabled:cursor-not-allowed disabled:opacity-60"
+          disabled={isPending} aria-busy={isPending}
+          className="button-primary"
         >
           {isPending ? "Asociando..." : "Asociar pallets seleccionados"}
         </button>

@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import {
   AlertTypeBadge,
   EmptyState,
+  InlineAlert,
   SectionHeader,
   StatusBadge,
   SummaryCard,
@@ -115,7 +116,7 @@ export function AlertsCenter({
           action={<p className="text-sm text-slate-500">{pluralizeAlert(filteredAlerts.length)}</p>}
         />
 
-        <div className="surface flex flex-col gap-4 p-4 sm:p-5">
+        <div className="filter-panel flex flex-col gap-4">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
             <FilterGroup
               label="Tipo de alerta"
@@ -141,45 +142,49 @@ export function AlertsCenter({
           </div>
 
           {!inventorySourceAvailable ? (
-            <p role="status" className="feedback feedback-warning">
-              Las alertas de stock estarán disponibles cuando se aplique la migración de inventario en Supabase. Las alertas de vencimiento siguen visibles.
-            </p>
+            <InlineAlert variant="warning">
+              Las alertas de stock no están disponibles por el momento. Las alertas de vencimiento siguen visibles.
+            </InlineAlert>
           ) : null}
 
           {filteredAlerts.length === 0 ? (
-            <EmptyState title="No hay alertas para estos filtros" description="Probá con otro tipo o estado para consultar las situaciones activas." />
+            <EmptyState
+              title={alerts.length === 0 ? "Sin alertas activas disponibles" : "Sin resultados para estos filtros"}
+              description={alerts.length === 0 ? "No hay situaciones registradas que requieran atención en las fuentes disponibles." : "Probá con otro tipo o estado para consultar las situaciones activas."}
+              action={alerts.length > 0 ? <button type="button" className="button-secondary" onClick={() => { setTypeFilter("all"); setStatusFilter("all"); }}>Limpiar filtros</button> : undefined}
+            />
           ) : (
-            <TableShell label="Listado unificado de alertas activas">
-              <table className="data-table min-w-[960px]">
+            <TableShell label="Listado unificado de alertas activas" mobileLayout="rows">
+              <table role="table" aria-label="Alertas activas" className="data-table min-w-[960px]">
                 <caption className="sr-only">Alertas activas de stock y vencimiento</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">Tipo</th>
-                    <th scope="col">Producto</th>
-                    <th scope="col">Ubicación</th>
-                    <th scope="col">Situación</th>
-                    <th scope="col">Estado</th>
-                    <th scope="col" className="text-right">Acción</th>
+                <thead role="rowgroup">
+                  <tr role="row">
+                    <th role="columnheader" scope="col">Tipo</th>
+                    <th role="columnheader" scope="col">Producto</th>
+                    <th role="columnheader" scope="col">Ubicación</th>
+                    <th role="columnheader" scope="col">Situación</th>
+                    <th role="columnheader" scope="col">Estado</th>
+                    <th role="columnheader" scope="col" className="text-right">Acción</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody role="rowgroup">
                   {filteredAlerts.map((alert) => (
-                    <tr key={alert.id} className={`alert-row-${alert.status}`}>
-                      <td><AlertTypeBadge type={alert.type} /></td>
-                      <td>
+                    <tr role="row" key={alert.id} className={`alert-row-${alert.status}`}>
+                      <td role="cell" data-label="Tipo"><AlertTypeBadge type={alert.type} /></td>
+                      <td role="cell" data-label="Producto" className="mobile-primary">
                         <p className="font-semibold text-slate-950">{alert.productName}</p>
                         <p className="table-secondary font-mono">
                           {alert.productSku}{alert.batchNumber ? ` · Lote ${alert.batchNumber}` : ""}
                         </p>
                       </td>
-                      <td className="max-w-56 text-slate-600">{alert.location}</td>
-                      <td>
+                      <td role="cell" data-label="Ubicación" className="mobile-priority max-w-56 text-slate-600">{alert.location}</td>
+                      <td role="cell" data-label="Situación" className="mobile-wide">
                         <p className="font-semibold text-slate-900">{alert.situation}</p>
                         <p className="table-secondary">{alert.supportingDetail}</p>
                       </td>
-                      <td><StatusBadge status={alert.status} /></td>
-                      <td className="text-right">
-                        <Link href={alert.href} className="table-action">
+                      <td role="cell" data-label="Estado" className="mobile-priority"><StatusBadge status={alert.status} /></td>
+                      <td role="cell" data-label="Acción" className="mobile-actions text-right">
+                        <Link href={alert.href} className="button-secondary">
                           Ver detalle
                         </Link>
                       </td>
@@ -207,8 +212,8 @@ function FilterGroup<T extends string>({
   options: { value: T; label: string }[];
 }) {
   return (
-    <fieldset className="flex flex-wrap items-center gap-2">
-      <legend className="mr-1 text-xs font-bold uppercase tracking-wider text-slate-500 sm:float-left sm:py-2">
+    <fieldset className="filter-group">
+      <legend className="filter-legend">
         {label}
       </legend>
       {options.map((option) => (
