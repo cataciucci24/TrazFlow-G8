@@ -6,12 +6,14 @@ import { useState, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
 import { registrationErrorMessage } from "@/components/ui/feedback-messages";
 import { signUp } from "@/lib/auth/actions";
+import { RegistrationFields as RegistrationOptions } from "@/components/registration-fields";
+import { NAME_MAX_LENGTH, normalizeName } from "@/lib/registration/name";
 
 type Props = { companies: { id: string; name: string }[]; error?: string };
 
 export function RegisterWizard({ companies, error }: Props) {
   const [step, setStep] = useState(1);
-  const [data, setData] = useState({ email: "", password: "", companyId: "", role: "" });
+  const [data, setData] = useState({ name: "", email: "", password: "", companyId: "", role: "" });
 
   const set = (k: keyof typeof data) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
@@ -22,6 +24,7 @@ export function RegisterWizard({ companies, error }: Props) {
       {error && <InlineAlert variant="danger">{registrationErrorMessage(error)}</InlineAlert>}
 
       <input type="hidden" name="email" value={data.email} />
+      <input type="hidden" name="name" value={data.name} />
       <input type="hidden" name="password" value={data.password} />
       <input type="hidden" name="companyId" value={data.companyId} />
       <input type="hidden" name="role" value={data.role} />
@@ -31,6 +34,11 @@ export function RegisterWizard({ companies, error }: Props) {
 
       {step === 1 && (
         <>
+          <div>
+            <label htmlFor="name" className="block text-sm font-semibold text-stone-600">Nombre completo</label>
+            <input id="name" autoComplete="name" required maxLength={NAME_MAX_LENGTH} value={data.name}
+              onChange={set("name")} className="form-control mt-1" />
+          </div>
           <div>
             <label htmlFor="email" className="block text-sm font-semibold text-stone-600">Email</label>
             <input id="email" type="email" autoComplete="email" value={data.email}
@@ -42,7 +50,7 @@ export function RegisterWizard({ companies, error }: Props) {
               onChange={set("password")} placeholder="Mínimo 8 caracteres" className="form-control mt-1" />
           </div>
           <button type="button" className="button-primary w-full"
-            disabled={!data.email.includes("@") || data.password.length < 8}
+            disabled={!normalizeName(data.name) || !data.email.includes("@") || data.password.length < 8}
             onClick={() => setStep(2)}>
             Siguiente
           </button>
@@ -51,21 +59,9 @@ export function RegisterWizard({ companies, error }: Props) {
 
       {step === 2 && (
         <>
-          <div>
-            <label htmlFor="company" className="block text-sm font-semibold text-stone-600">Empresa</label>
-            <select id="company" value={data.companyId} onChange={set("companyId")} className="form-control mt-1">
-              <option value="">Elegí tu empresa</option>
-              {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-          </div>
-          <div>
-            <label htmlFor="role" className="block text-sm font-semibold text-stone-600">Rol que solicitás</label>
-            <select id="role" value={data.role} onChange={set("role")} className="form-control mt-1">
-              <option value="">Elegí un rol</option>
-              <option value="warehouse_operator">Operador de depósito</option>
-              <option value="distributor_operator">Operador de distribución</option>
-            </select>
-          </div>
+          <RegistrationOptions companies={companies} companyId={data.companyId} role={data.role}
+            onCompanyChange={set("companyId")} onRoleChange={set("role")} />
+          <p className="text-sm text-stone-500">Primero confirmarás tu email. Después de iniciar sesión podrás enviar la solicitud.</p>
           <div className="flex gap-3">
             <button type="button" className="w-1/3 text-sm font-semibold text-stone-600 underline"
               onClick={() => setStep(1)}>Volver</button>
@@ -85,5 +81,5 @@ function RegistrationFields({ children }: { children: ReactNode }) {
 
 function RegistrationSubmit({ disabled }: { disabled: boolean }) {
   const { pending } = useFormStatus();
-  return <button type="submit" className="button-primary w-2/3" disabled={disabled || pending} aria-busy={pending}>{pending ? "Enviando…" : "Enviar solicitud"}</button>;
+  return <button type="submit" className="button-primary w-2/3" disabled={disabled || pending} aria-busy={pending}>{pending ? "Creando cuenta…" : "Crear cuenta"}</button>;
 }

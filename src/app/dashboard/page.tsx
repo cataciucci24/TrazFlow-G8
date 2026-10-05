@@ -20,6 +20,21 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       : query.eq("status", "confirmed");
     const { data: orders } = await query;
 
+    // TRZ-19: sin vínculo en distributor_users, RLS no le muestra ninguna orden.
+    if (hasRole(profile, "distributor_operator")) {
+      const { data: link } = await supabase.from("distributor_users").select("distributor_id").eq("user_id", profile.id).maybeSingle();
+      if (!link) {
+        return (
+          <div className="app-page">
+            <PageHeader title="Confirmar recepción" description="Recibí y validá los pallets que llegan a tu distribuidor." />
+            <p role="status" className="feedback feedback-warning">
+              Tu cuenta todavía no está vinculada a un distribuidor. Cuando el responsable logístico te asigne uno, vas a ver sus órdenes acá.
+            </p>
+          </div>
+        );
+      }
+    }
+
     const heading = hasRole(profile, "warehouse_operator") ? "Confirmar despacho" : "Confirmar recepción";
     const assignedOrders = (orders ?? []).filter((order) => (order.order_pallets ?? []).length > 0);
     return (

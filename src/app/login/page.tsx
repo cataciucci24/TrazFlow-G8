@@ -8,8 +8,13 @@ export const metadata: Metadata = {
   title: "Ingresar | TrazFlow",
 };
 
-export default async function LoginPage({ searchParams }: { searchParams: Promise<{ registered?: string }> }) {
-  const { registered } = await searchParams;
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ "verify-email"?: string; registered?: string }> }) {
+  const params = await searchParams;
+  const successMessage = params["verify-email"] === "1"
+    ? "Después de verificar tu mail, iniciá sesión para completar tu solicitud de acceso."
+    : params.registered === "1"
+      ? "Cuenta creada. Iniciá sesión para completar tu solicitud de acceso."
+      : null;
   return (
     <main className="relative grid min-h-dvh overflow-hidden bg-stone-50 lg:grid-cols-[1.1fr_0.9fr]">
       <section className="hidden bg-stone-950 p-12 text-white lg:flex lg:flex-col lg:justify-between">
@@ -33,7 +38,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         </div>
 
         <div className="surface p-6 sm:p-8">
-          {registered === "1" && <InlineAlert variant="success" className="mb-6">Solicitud de acceso enviada. Podrás ingresar cuando sea aprobada.</InlineAlert>}
+          {successMessage && <InlineAlert variant="success" className="mb-6">{successMessage}</InlineAlert>}
           <LoginForm />
         </div>
 
