@@ -22,8 +22,15 @@ export function PalletTraceability({
   return (
     <div className="list-content space-y-6">
       <section className="section-stack">
-        <SectionHeader title={`Pallet ${pallet.qrCode}`} description="Identificación y estado actual del pallet." />
-        <PalletQrButton qrCode={pallet.qrCode} />
+        <div className="section-header">
+          <div className="min-w-0">
+            <div className="flex items-center gap-5">
+              <h2 className="section-title min-w-0 break-all">Pallet {pallet.qrCode}</h2>
+              <PalletQrButton qrCode={pallet.qrCode} variant="icon" />
+            </div>
+            <p className="section-description">Identificación y estado actual del pallet.</p>
+          </div>
+        </div>
         <dl className="surface grid gap-5 p-6 text-sm sm:grid-cols-2">
           <div>
             <dt className="text-slate-500">Producto</dt>

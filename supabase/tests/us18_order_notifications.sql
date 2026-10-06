@@ -36,8 +36,8 @@ values
 insert into distributors (id, company_id, name)
 values ('31000000-0000-0000-0000-000000000001', '21000000-0000-0000-0000-000000000001', 'Distributor');
 
-insert into products (id, company_id, sku, name)
-values ('41000000-0000-0000-0000-000000000001', '21000000-0000-0000-0000-000000000001', 'SKU-US18', 'Product');
+insert into products (id, company_id, sku, name, unit_of_measure)
+values ('41000000-0000-0000-0000-000000000001', '21000000-0000-0000-0000-000000000001', 'SKU-US18', 'Product', 'unidades');
 
 insert into batches (id, product_id, batch_number, quantity)
 values ('51000000-0000-0000-0000-000000000001', '41000000-0000-0000-0000-000000000001', 'LOT-US18', 10);

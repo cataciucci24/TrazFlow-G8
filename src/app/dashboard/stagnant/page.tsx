@@ -18,7 +18,7 @@ const NUMBER_FORMATTER = new Intl.NumberFormat("es-AR", { maximumFractionDigits:
 const STATUS_FILTERS: Array<{ value: "all" | PalletStatus; label: string }> = [
   { value: "all", label: "Todos" },
   { value: "in_warehouse", label: "En depósito" },
-  { value: "assigned", label: "Asignados" },
+  { value: "assigned", label: "Asociados a orden" },
   { value: "in_transit", label: "En tránsito" },
   { value: "received", label: "Recibidos" },
 ];
@@ -47,7 +47,7 @@ export default async function StagnantInventoryPage({
   );
   const totalsByUnit = new Map<string, number>();
   for (const pallet of visiblePallets) {
-    if (pallet.quantity === null || pallet.unitOfMeasure === null) continue;
+    if (pallet.quantity === null) continue;
     totalsByUnit.set(pallet.unitOfMeasure, (totalsByUnit.get(pallet.unitOfMeasure) ?? 0) + pallet.quantity);
   }
   const totalQuantityLabel = totalsByUnit.size === 0

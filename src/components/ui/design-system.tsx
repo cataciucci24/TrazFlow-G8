@@ -67,9 +67,9 @@ export function TableShell({ children, label, mobileLayout = "table", className 
 }
 
 const alertStatusDetails: Record<AlertStatus, { label: string; className: string }> = {
-  critical: { label: "CRÍTICO", className: "status-critical" },
-  caution: { label: "PRECAUCIÓN", className: "status-caution" },
-  upcoming: { label: "PRÓXIMO", className: "status-upcoming" },
+  critical: { label: "Crítico", className: "status-critical" },
+  caution: { label: "Precaución", className: "status-caution" },
+  upcoming: { label: "Próximo", className: "status-upcoming" },
 };
 
 export function StatusBadge({ status }: { status: AlertStatus }) {
@@ -149,16 +149,27 @@ export function CompactSummaryCard({
   label,
   value,
   tone = "neutral",
+  onClick,
+  pressed,
 }: {
   label: string;
   value: number | string;
   tone?: CompactSummaryTone;
+  /** Con onClick la tarjeta se vuelve un botón de filtro; `pressed` marca el filtro activo. */
+  onClick?: () => void;
+  pressed?: boolean;
 }) {
-  return (
-    <div className="compact-summary-card">
-      <span className={`compact-summary-label compact-tone-${tone}`}>{label}</span>
+  const content = (
+    <>
+      <span className="compact-summary-label">{label}</span>
       <span className="compact-summary-value">{value}</span>
-    </div>
+    </>
+  );
+  if (!onClick) return <div className={`compact-summary-card compact-tone-${tone}`}>{content}</div>;
+  return (
+    <button type="button" onClick={onClick} aria-pressed={pressed ?? false} className={`compact-summary-card compact-tone-${tone} compact-summary-button`}>
+      {content}
+    </button>
   );
 }
 

@@ -1,5 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
+import { getExpirationThresholds } from "@/lib/expiration/queries";
+import { classifyExpiration } from "@/lib/expiration/thresholds";
+import type { ProductUnit } from "@/lib/pallets/units";
 import type { ExistingProduct, ExpirationAlert, Lot, Pallet, PalletWithHistory } from "@/lib/types";
+
+type RawProduct = { name: string; sku: string; unit_of_measure: ProductUnit };
 
 /**
  * Fila cruda que devuelve Postgrest al embeber batches/products. El cliente
@@ -14,11 +19,10 @@ type RawPalletRow = {
   status: Pallet["status"];
   current_location: string | null;
   quantity: number | null;
-  unit_of_measure: Pallet["unitOfMeasure"];
   created_at: string;
   batches:
-    | { batch_number: string; products: { name: string; sku: string } | { name: string; sku: string }[] | null }
-    | { batch_number: string; products: { name: string; sku: string } | { name: string; sku: string }[] | null }[]
+    | { batch_number: string; products: RawProduct | RawProduct[] | null }
+    | { batch_number: string; products: RawProduct | RawProduct[] | null }[]
     | null;
 };
 
@@ -45,12 +49,13 @@ function mapPalletRow(row: RawPalletRow): Pallet {
     productSku: product?.sku ?? "—",
     batchNumber: batch?.batch_number ?? "—",
     quantity: row.quantity,
-    unitOfMeasure: row.unit_of_measure,
+    // batches.product_id es obligatorio: el producto solo falta si la fila embebida no llegó.
+    unitOfMeasure: product?.unit_of_measure ?? "unidades",
   };
 }
 
 const PALLET_SELECT =
-  "id, qr_code, status, current_location, quantity, unit_of_measure, created_at, batches ( batch_number, products ( name, sku ) )";
+  "id, qr_code, status, current_location, quantity, created_at, batches ( batch_number, products ( name, sku, unit_of_measure ) )";
 
 /** Pallets de la empresa disponibles para asociar a una orden (en depósito, sin asignar). */
 export async function getAvailablePallets(companyId: string): Promise<Pallet[]> {
@@ -171,7 +176,7 @@ type RawLotRow = {
   id: string;
   batch_number: string;
   expiration_date: string | null;
-  products: { name: string; sku: string } | { name: string; sku: string }[] | null;
+  products: RawProduct | RawProduct[] | null;
 };
 
 /**
@@ -183,7 +188,7 @@ export async function getCompanyLots(): Promise<Lot[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("batches")
-    .select("id, batch_number, expiration_date, products ( name, sku )")
+    .select("id, batch_number, expiration_date, products ( name, sku, unit_of_measure )")
     .order("batch_number");
 
   if (error) {
@@ -198,6 +203,7 @@ export async function getCompanyLots(): Promise<Lot[]> {
       expirationDate: row.expiration_date,
       productName: product?.name ?? "—",
       productSku: product?.sku ?? "—",
+      unitOfMeasure: product?.unit_of_measure ?? "unidades",
     };
   });
 }
@@ -207,7 +213,7 @@ export async function getCompanyProducts(companyId: string): Promise<ExistingPro
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("products")
-    .select("name, sku")
+    .select("name, sku, unit_of_measure")
     .eq("company_id", companyId)
     .order("sku");
 
@@ -215,27 +221,39 @@ export async function getCompanyProducts(companyId: string): Promise<ExistingPro
     throw new Error(`No se pudieron leer los productos (${error.code}: ${error.message}).`, { cause: error });
   }
 
-  return (data ?? []) as ExistingProduct[];
+  return ((data ?? []) as RawProduct[]).map((product) => ({
+    sku: product.sku,
+    name: product.name,
+    unitOfMeasure: product.unit_of_measure,
+  }));
 }
+
+type RawExpirationBatch = {
+  batch_number: string;
+  expiration_date: string;
+  products: RawProduct | RawProduct[] | null;
+};
 
 type RawExpirationAlertRow = {
   id: string;
   current_location: string | null;
   quantity: number;
-  unit_of_measure: ExpirationAlert["unitOfMeasure"];
-  batches:
-    | {
-        batch_number: string;
-        expiration_date: string;
-        products: { name: string; sku: string } | { name: string; sku: string }[] | null;
-      }
-    | {
-        batch_number: string;
-        expiration_date: string;
-        products: { name: string; sku: string } | { name: string; sku: string }[] | null;
-      }[]
+  batches: RawExpirationBatch | RawExpirationBatch[] | null;
+};
+
+type RawDistributorBatchRow = {
+  id: string;
+  quantity: number;
+  batches: RawExpirationBatch | RawExpirationBatch[] | null;
+  distributor_product_stocks:
+    | { distributors: { name: string } | { name: string }[] | null }
+    | { distributors: { name: string } | { name: string }[] | null }[]
     | null;
 };
+
+function one<T>(value: T | T[] | null): T | null {
+  return Array.isArray(value) ? value[0] ?? null : value;
+}
 
 function dateAtMidnightUtc(date: string): number {
   return Date.parse(`${date}T00:00:00.000Z`);
@@ -253,48 +271,80 @@ function argentinaToday(): string {
 }
 
 /**
- * Pallets disponibles que vencen en los próximos 90 días. La fecha se filtra
- * desde Supabase y los días restantes se calculan contra el calendario local
- * de la operación para clasificar la urgencia en la interfaz.
+ * Mercadería que vence dentro del último nivel de alerta de la empresa: pallets
+ * disponibles en depósito y lotes informados por las distribuidoras (TRZ-90).
+ * La fecha se filtra desde Supabase y los días restantes se calculan contra el
+ * calendario local de la operación para clasificar la urgencia en la interfaz.
  */
 export async function getExpirationAlerts(companyId: string): Promise<ExpirationAlert[]> {
   const today = argentinaToday();
-  const maximumDate = new Date(dateAtMidnightUtc(today) + 90 * 86_400_000).toISOString().slice(0, 10);
+  const thresholds = await getExpirationThresholds();
+  const maximumDate = new Date(dateAtMidnightUtc(today) + thresholds.upcomingDays * 86_400_000).toISOString().slice(0, 10);
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("pallets")
-    .select("id, current_location, quantity, unit_of_measure, batches!inner ( batch_number, expiration_date, products ( name, sku ) )")
-    .eq("company_id", companyId)
-    .eq("status", "in_warehouse")
-    .gt("quantity", 0)
-    .gte("batches.expiration_date", today)
-    .lte("batches.expiration_date", maximumDate)
-    .order("expiration_date", { foreignTable: "batches", ascending: true });
+  const [warehouseResult, distributorResult] = await Promise.all([
+    supabase
+      .from("pallets")
+      .select("id, current_location, quantity, batches!inner ( batch_number, expiration_date, products ( name, sku, unit_of_measure ) )")
+      .eq("company_id", companyId)
+      .eq("status", "in_warehouse")
+      .gt("quantity", 0)
+      .gte("batches.expiration_date", today)
+      .lte("batches.expiration_date", maximumDate),
+    supabase
+      .from("distributor_batch_stocks")
+      .select("id, quantity, batches!inner ( batch_number, expiration_date, products ( name, sku, unit_of_measure ) ), distributor_product_stocks ( distributors ( name ) )")
+      .eq("company_id", companyId)
+      .gte("batches.expiration_date", today)
+      .lte("batches.expiration_date", maximumDate),
+  ]);
 
-  if (error) {
-    throw new Error(`No se pudieron leer las alertas de vencimiento (${error.code}: ${error.message}).`, { cause: error });
+  if (warehouseResult.error) {
+    throw new Error(`No se pudieron leer las alertas de vencimiento (${warehouseResult.error.code}: ${warehouseResult.error.message}).`, { cause: warehouseResult.error });
+  }
+  // Durante un despliegue la app puede llegar antes que la tabla de TRZ-90: se muestran solo las del depósito.
+  if (distributorResult.error && distributorResult.error.code !== "PGRST205") {
+    throw new Error(`No se pudieron leer las alertas de vencimiento de distribuidoras (${distributorResult.error.code}: ${distributorResult.error.message}).`, { cause: distributorResult.error });
   }
 
-  return ((data ?? []) as unknown as RawExpirationAlertRow[])
-    .flatMap((row): ExpirationAlert[] => {
-      const batch = Array.isArray(row.batches) ? row.batches[0] : row.batches;
-      if (!batch?.expiration_date || !row.unit_of_measure) return [];
-      const product = Array.isArray(batch.products) ? batch.products[0] : batch.products;
-      const daysRemaining = Math.round((dateAtMidnightUtc(batch.expiration_date) - dateAtMidnightUtc(today)) / 86_400_000);
-      const urgency = daysRemaining <= 30 ? "critical" : daysRemaining <= 60 ? "warning" : "upcoming";
+  function toAlert(
+    base: Pick<ExpirationAlert, "id" | "source" | "quantity" | "currentLocation">,
+    rawBatch: RawExpirationBatch | RawExpirationBatch[] | null,
+  ): ExpirationAlert[] {
+    const batch = one(rawBatch);
+    const product = batch ? one(batch.products) : null;
+    if (!batch?.expiration_date || !product) return [];
+    const daysRemaining = Math.round((dateAtMidnightUtc(batch.expiration_date) - dateAtMidnightUtc(today)) / 86_400_000);
+    const urgency = classifyExpiration(daysRemaining, thresholds);
+    if (!urgency) return [];
+    return [{
+      ...base,
+      productName: product.name,
+      productSku: product.sku,
+      unitOfMeasure: product.unit_of_measure,
+      batchNumber: batch.batch_number,
+      expirationDate: batch.expiration_date,
+      daysRemaining,
+      urgency,
+    }];
+  }
 
-      return [{
-        palletId: row.id,
-        productName: product?.name ?? "—",
-        productSku: product?.sku ?? "—",
-        batchNumber: batch.batch_number,
-        quantity: row.quantity,
-        unitOfMeasure: row.unit_of_measure,
-        currentLocation: row.current_location,
-        expirationDate: batch.expiration_date,
-        daysRemaining,
-        urgency,
-      }];
-    })
-    .sort((a, b) => a.expirationDate.localeCompare(b.expirationDate));
+  const warehouse = ((warehouseResult.data ?? []) as unknown as RawExpirationAlertRow[]).flatMap((row) => toAlert({
+    id: `warehouse-${row.id}`,
+    source: "warehouse",
+    quantity: row.quantity,
+    currentLocation: row.current_location,
+  }, row.batches));
+
+  const distributors = ((distributorResult.data ?? []) as unknown as RawDistributorBatchRow[]).flatMap((row) => {
+    const stock = one(row.distributor_product_stocks);
+    if (!stock) return [];
+    return toAlert({
+      id: `distributor-${row.id}`,
+      source: "distributor",
+      quantity: row.quantity,
+      currentLocation: one(stock.distributors)?.name ?? "Distribuidora",
+    }, row.batches);
+  });
+
+  return [...warehouse, ...distributors].sort((a, b) => a.expirationDate.localeCompare(b.expirationDate));
 }

@@ -1,6 +1,6 @@
 "use server";
 
-import { isPalletUnit } from "@/lib/pallets/units";
+import { isProductUnit, isValidQuantity, type ProductUnit } from "@/lib/pallets/units";
 
 import { revalidatePath } from "next/cache";
 
@@ -21,6 +21,50 @@ const UPDATE_ERROR = "No se pudieron guardar los cambios del pallet. Intentá nu
 const NOT_EDITABLE_ERROR = "Solo se pueden editar pallets en depósito.";
 const DELETE_ERROR = "No se pudo eliminar el pallet. Intentá nuevamente.";
 const HAS_HISTORY_ERROR = "No se puede eliminar un pallet con historial de trazabilidad.";
+const QUANTITY_ERROR = "Ingresá una cantidad mayor que 0: entera en unidades o cajas, con hasta dos decimales en kilogramos.";
+
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
+type ResolvedProduct = { id: string; unitOfMeasure: ProductUnit };
+
+/**
+ * Busca el producto por SKU. Si no existe lo crea con la unidad elegida en el formulario;
+ * si ya existe conserva su nombre y su unidad, que no se cambian desde acá.
+ */
+async function resolveProduct(
+  supabase: SupabaseClient,
+  companyId: string,
+  formData: FormData,
+): Promise<ResolvedProduct | { error: string }> {
+  const sku = String(formData.get("productSku") ?? "").trim();
+  const name = String(formData.get("productName") ?? "").trim();
+  const unit = String(formData.get("unitOfMeasure") ?? "");
+
+  const findProduct = () => supabase
+    .from("products")
+    .select("id, unit_of_measure")
+    .eq("company_id", companyId)
+    .eq("sku", sku)
+    .maybeSingle();
+
+  const { data: existing, error: lookupError } = await findProduct();
+  if (lookupError) return { error: "No se pudo identificar el producto." };
+  if (existing) return { id: existing.id, unitOfMeasure: existing.unit_of_measure };
+
+  if (!isProductUnit(unit)) return { error: "Elegí la unidad de medida del producto nuevo." };
+  const { data: created, error: insertError } = await supabase
+    .from("products")
+    .insert({ company_id: companyId, sku, name, unit_of_measure: unit })
+    .select("id, unit_of_measure")
+    .single();
+  if (created) return { id: created.id, unitOfMeasure: created.unit_of_measure };
+
+  // Otro usuario lo creó al mismo tiempo: se usa ese.
+  if (insertError?.code === "23505") {
+    const { data: concurrent } = await findProduct();
+    if (concurrent) return { id: concurrent.id, unitOfMeasure: concurrent.unit_of_measure };
+  }
+  return { error: "No se pudo registrar el producto." };
+}
 
 /** Registra un lote sin exigir que ya tenga pallets asociados. */
 export async function createLot(
@@ -48,14 +92,8 @@ export async function createLot(
   }
 
   const supabase = await createClient();
-  const { data: product, error: productError } = await supabase
-    .from("products")
-    .upsert({ company_id: profile.companyId, sku: productSku, name: productName }, { onConflict: "company_id,sku" })
-    .select("id")
-    .single();
-  if (productError || !product) {
-    return { error: "No se pudo identificar el producto del lote.", success: null };
-  }
+  const product = await resolveProduct(supabase, profile.companyId, formData);
+  if ("error" in product) return { error: product.error, success: null };
 
   const { error: lotError } = await supabase.from("batches").insert({
     product_id: product.id,
@@ -93,19 +131,15 @@ export async function createPallet(
   const productSku = String(formData.get("productSku") ?? "").trim();
   const batchNumber = String(formData.get("batchNumber") ?? "").trim();
   const quantity = Number(formData.get("quantity") ?? 0);
-  const unitOfMeasure = String(formData.get("unitOfMeasure") ?? "");
 
-  if (!productName || !productSku || !batchNumber || !Number.isFinite(quantity) || quantity <= 0 || !isPalletUnit(unitOfMeasure)) {
-    return { error: "Completá producto, SKU, lote, una cantidad mayor que 0 y una unidad válida.", success: null };
+  if (!productName || !productSku || !batchNumber) {
+    return { error: "Completá producto, SKU y lote.", success: null };
   }
 
   const supabase = await createClient();
-  const { data: product, error: productError } = await supabase
-    .from("products")
-    .upsert({ company_id: profile.companyId, sku: productSku, name: productName }, { onConflict: "company_id,sku" })
-    .select("id")
-    .single();
-  if (productError || !product) return { error: INITIAL_ERROR, success: null };
+  const product = await resolveProduct(supabase, profile.companyId, formData);
+  if ("error" in product) return { error: product.error, success: null };
+  if (!isValidQuantity(quantity, product.unitOfMeasure)) return { error: QUANTITY_ERROR, success: null };
 
   const { data: batch, error: batchError } = await supabase
     .from("batches")
@@ -119,7 +153,6 @@ export async function createPallet(
     company_id: profile.companyId,
     batch_id: batch.id,
     quantity,
-    unit_of_measure: unitOfMeasure,
     current_location: "Depósito",
   }).select("qr_code").single();
   if (palletError || !pallet) {
@@ -151,10 +184,9 @@ export async function updatePallet(
   const batchNumber = String(formData.get("batchNumber") ?? "").trim();
   const currentLocation = String(formData.get("currentLocation") ?? "").trim();
   const quantity = Number(formData.get("quantity") ?? 0);
-  const unitOfMeasure = String(formData.get("unitOfMeasure") ?? "");
 
-  if (!productName || !productSku || !batchNumber || !Number.isFinite(quantity) || quantity <= 0 || !isPalletUnit(unitOfMeasure)) {
-    return { error: "Completá producto, SKU, lote, una cantidad mayor que 0 y una unidad válida.", success: null };
+  if (!productName || !productSku || !batchNumber) {
+    return { error: "Completá producto, SKU y lote.", success: null };
   }
 
   const supabase = await createClient();
@@ -167,12 +199,9 @@ export async function updatePallet(
   if (palletLookupError || !existingPallet) return { error: "El pallet no existe o no pertenece a tu empresa.", success: null };
   if (existingPallet.status !== "in_warehouse") return { error: NOT_EDITABLE_ERROR, success: null };
 
-  const { data: product, error: productError } = await supabase
-    .from("products")
-    .upsert({ company_id: profile.companyId, sku: productSku, name: productName }, { onConflict: "company_id,sku" })
-    .select("id")
-    .single();
-  if (productError || !product) return { error: UPDATE_ERROR, success: null };
+  const product = await resolveProduct(supabase, profile.companyId, formData);
+  if ("error" in product) return { error: product.error, success: null };
+  if (!isValidQuantity(quantity, product.unitOfMeasure)) return { error: QUANTITY_ERROR, success: null };
 
   const { data: batch, error: batchError } = await supabase
     .from("batches")
@@ -186,7 +215,7 @@ export async function updatePallet(
   // orden entre la lectura de arriba y este UPDATE.
   const { data: updated, error: updateError } = await supabase
     .from("pallets")
-    .update({ batch_id: batch.id, quantity, unit_of_measure: unitOfMeasure, current_location: currentLocation || null })
+    .update({ batch_id: batch.id, quantity, current_location: currentLocation || null })
     .eq("id", palletId)
     .eq("company_id", profile.companyId)
     .eq("status", "in_warehouse")

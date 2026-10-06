@@ -103,8 +103,8 @@ export default async function OperatorsPage({ searchParams }: {
         <div className="surface"><EmptyState title="Todavía no hay operadores" description="Los operadores aparecen acá cuando aprobás su solicitud de acceso." /></div>
       ) : (
         <TableShell label="Operadores de la empresa">
-          <table className="data-table min-w-[860px]">
-            <thead><tr><th scope="col">Operador</th><th scope="col">Rol</th><th scope="col">Distribuidor</th><th scope="col">Acceso</th></tr></thead>
+          <table className="data-table min-w-[960px]">
+            <thead><tr><th scope="col">Operador</th><th scope="col">Rol</th><th scope="col">Distribuidor</th><th scope="col">Acceso</th><th scope="col" className="text-center">Estado</th></tr></thead>
             <tbody className="divide-y divide-stone-200">{operators.map((operator) => (
               <tr key={operator.userId}>
                 <td>
@@ -117,18 +117,21 @@ export default async function OperatorsPage({ searchParams }: {
                     : operator.revokedAt ? <span className="text-sm text-stone-500">Sin distribuidor (acceso revocado)</span>
                     : (
                       <div className="space-y-2">
-                        {!operator.distributorId && <span className="inline-block rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800">Sin distribuidor</span>}
                         <AssignDistributorForm operator={operator} distributors={distributors} />
+                        {!operator.distributorId && (
+                          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-800">
+                            <svg viewBox="0 0 20 20" aria-hidden="true" className="size-4" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round"><circle cx="10" cy="10" r="7.25" /><path d="M10 6.5v4.25M10 13.5v.01" /></svg>
+                            Sin asignación
+                          </span>
+                        )}
                       </div>
                     )}
                 </td>
                 <td>
-                  <div className="space-y-2">
-                    {operator.revokedAt
-                      ? <span className="inline-block rounded-full bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700">Revocado</span>
-                      : <span className="inline-block rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">Activo</span>}
-                    <OperatorAccessAction operator={operator} />
-                  </div>
+                  <OperatorAccessAction operator={operator} />
+                </td>
+                <td className="text-center">
+                  <AccessStatusIcon revoked={operator.revokedAt !== null} />
                 </td>
               </tr>
             ))}</tbody>
@@ -136,5 +139,18 @@ export default async function OperatorsPage({ searchParams }: {
         </TableShell>
       )}
     </div>
+  );
+}
+
+/** Estado de acceso como círculo: verde con tilde (activo) o rojo con cruz (revocado). */
+function AccessStatusIcon({ revoked }: { revoked: boolean }) {
+  const label = revoked ? "Acceso revocado" : "Acceso activo";
+  return (
+    <span role="img" aria-label={label} title={label}
+      className={`inline-flex size-5 shrink-0 items-center justify-center rounded-full text-white ${revoked ? "bg-red-600" : "bg-emerald-600"}`}>
+      <svg viewBox="0 0 20 20" aria-hidden="true" className="size-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        {revoked ? <path d="m6 6 8 8M14 6l-8 8" /> : <path d="m5 10.5 3.25 3.25L15 7" />}
+      </svg>
+    </span>
   );
 }

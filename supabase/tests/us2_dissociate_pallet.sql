@@ -37,8 +37,8 @@ values
 insert into distributors (id, company_id, name)
 values ('30000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001', 'Distributor');
 
-insert into products (id, company_id, sku, name)
-values ('40000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001', 'SKU-1', 'Product');
+insert into products (id, company_id, sku, name, unit_of_measure)
+values ('40000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001', 'SKU-1', 'Product', 'unidades');
 
 insert into batches (id, product_id, batch_number, quantity)
 values ('50000000-0000-0000-0000-000000000001', '40000000-0000-0000-0000-000000000001', 'LOT-1', 10);
@@ -90,6 +90,19 @@ select pg_temp.assert_true(
 select pg_temp.assert_true(
   (select status from pallets where id = '60000000-0000-0000-0000-000000000001') = 'in_warehouse',
   'el pallet debe volver a in_warehouse'
+);
+
+select pg_temp.assert_true(
+  exists (
+    select 1 from traceability_events
+    where order_id = '70000000-0000-0000-0000-000000000001'
+      and pallet_id = '60000000-0000-0000-0000-000000000001'
+      and event_type = 'pallet_dissociated'
+      and user_id = '10000000-0000-0000-0000-000000000001'
+      and company_id = '20000000-0000-0000-0000-000000000001'
+      and details ->> 'qr_code' = 'PAL-1'
+  ),
+  'la desasociación debe registrar un traceability_event pallet_dissociated'
 );
 
 -- --- pallet ya validado: no se puede sacar ----------------------------------

@@ -1,29 +1,36 @@
 "use client";
 
 import { useState } from "react";
+
+import { UnitOfMeasureField } from "@/components/pallets/unit-of-measure-field";
+import type { ProductUnit } from "@/lib/pallets/units";
 import type { ExistingProduct } from "@/lib/types";
 
 const fieldClass = "form-control mt-2 font-normal";
 
 const NEW_PRODUCT = "__new__";
 
+/** SKU elegido y su unidad (la del producto existente o la elegida para el nuevo; null si falta). */
+export type ProductSelection = { sku: string; unitOfMeasure: ProductUnit | null };
+
 /**
  * Mismo problema que resolvía LotField pero para productos: tipear el SKU
  * de un producto existente con otro nombre pisaba silenciosamente el nombre
  * real (upsert por company_id+sku). Acá se obliga a elegir un SKU ya
  * registrado (el nombre queda de solo lectura) o a declarar explícitamente
- * un producto nuevo.
+ * un producto nuevo. La unidad de medida sigue la misma regla: se elige solo
+ * para un producto nuevo y en uno existente se muestra la suya, fija.
  */
 export function ProductField({
   existingProducts,
   defaultSku = "",
   defaultName = "",
-  onSkuChange,
+  onChange,
 }: {
   existingProducts: ExistingProduct[];
   defaultSku?: string;
   defaultName?: string;
-  onSkuChange?: (sku: string) => void;
+  onChange?: (selection: ProductSelection) => void;
 }) {
   const uniqueProducts = Array.from(
     new Map(existingProducts.map((product) => [product.sku, product])).values(),
@@ -33,6 +40,7 @@ export function ProductField({
   const [touched, setTouched] = useState(defaultSku !== "");
   const [freeSku, setFreeSku] = useState(defaultSku);
   const [freeName, setFreeName] = useState(defaultName);
+  const [freeUnit, setFreeUnit] = useState<ProductUnit | "">("");
 
   const matchingProduct = uniqueProducts.find((product) => product.sku === selection);
   const knownSelection = touched && selection !== NEW_PRODUCT && Boolean(matchingProduct);
@@ -43,7 +51,9 @@ export function ProductField({
     setTouched(true);
     setSelection(value);
     const product = uniqueProducts.find((candidate) => candidate.sku === value);
-    onSkuChange?.(product ? product.sku : freeSku);
+    onChange?.(product
+      ? { sku: product.sku, unitOfMeasure: product.unitOfMeasure }
+      : { sku: freeSku, unitOfMeasure: freeUnit || null });
   }
 
   return (
@@ -71,7 +81,7 @@ export function ProductField({
             value={freeSku}
             onChange={(event) => {
               setFreeSku(event.target.value);
-              onSkuChange?.(event.target.value);
+              onChange?.({ sku: event.target.value, unitOfMeasure: freeUnit || null });
             }}
             className={fieldClass}
           />
@@ -101,6 +111,15 @@ export function ProductField({
           </>
         )}
       </label>
+      <UnitOfMeasureField
+        fixedUnit={isNew ? null : matchingProduct?.unitOfMeasure ?? null}
+        awaitingProduct={!isNew && !matchingProduct}
+        value={freeUnit}
+        onChange={(unit) => {
+          setFreeUnit(unit);
+          onChange?.({ sku: freeSku, unitOfMeasure: unit || null });
+        }}
+      />
     </>
   );
 }
