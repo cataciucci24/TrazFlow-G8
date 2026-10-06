@@ -4,14 +4,14 @@ import { InlineAlert } from "@/components/ui/design-system";
 
 import { useFeedback } from "@/components/ui/feedback";
 
-import { UnitOfMeasureField } from "@/components/pallets/unit-of-measure-field";
 import { LotField } from "@/components/pallets/lot-field";
-import { ProductField } from "@/components/pallets/product-field";
+import { ProductField, type ProductSelection } from "@/components/pallets/product-field";
 
 import { useRef, useState, useTransition } from "react";
 
 import { ConfirmationDialog, Modal } from "@/components/ui/modal";
 import { deletePallet, updatePallet, type UpdatePalletState } from "@/lib/pallets/actions";
+import { quantityStep } from "@/lib/pallets/units";
 import type { ExistingProduct, Pallet, ProductBatch } from "@/lib/types";
 
 const INITIAL_STATE: UpdatePalletState = { error: null, success: null };
@@ -30,7 +30,8 @@ export function PalletActions({
   const [isPending, startTransition] = useTransition();
   const [isOpen, setIsOpen] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
-  const [productSku, setProductSku] = useState(pallet.productSku);
+  const palletProduct: ProductSelection = { sku: pallet.productSku, unitOfMeasure: pallet.unitOfMeasure };
+  const [product, setProduct] = useState(palletProduct);
   const [deleteState, setDeleteState] = useState<{ error: string | null; success: string | null } | null>(null);
   const [isDeleting, startDeleting] = useTransition();
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -69,13 +70,13 @@ export function PalletActions({
     setIsOpen(false);
     setIsDirty(false);
     formRef.current?.reset();
-    setProductSku(pallet.productSku);
+    setProduct(palletProduct);
     setState(INITIAL_STATE);
   }
 
   return (
     <div className="inline-flex flex-col items-end gap-2">
-      <button type="button" onClick={() => { setState(INITIAL_STATE); setProductSku(pallet.productSku); setIsDirty(false); setIsOpen(true); }} className="button-secondary button-sm">Editar</button>
+      <button type="button" onClick={() => { setState(INITIAL_STATE); setProduct(palletProduct); setIsDirty(false); setIsOpen(true); }} className="button-secondary button-sm">Editar</button>
       <Modal open={isOpen} onClose={closeForm} title="Editar pallet"
         description="Actualizá su producto, lote o ubicación. Cerrá o cancelá para descartar los datos sin guardar."
         busy={isPending} dismissOnBackdrop={false} dismissOnEscape={!isDirty}>
@@ -83,11 +84,10 @@ export function PalletActions({
           <fieldset disabled={isPending} className="grid min-w-0 gap-4">
             {state.error && <InlineAlert variant="danger">{state.error}</InlineAlert>}
             {state.success && <InlineAlert variant="success">{state.success}</InlineAlert>}
-            <ProductField existingProducts={existingProducts} defaultSku={productSku} defaultName={pallet.productName} onSkuChange={setProductSku} />
-            <LotField productSku={productSku} existingBatches={existingBatches} defaultValue={pallet.batchNumber} />
+            <ProductField existingProducts={existingProducts} defaultSku={product.sku} defaultName={pallet.productName} onChange={setProduct} />
+            <LotField productSku={product.sku} existingBatches={existingBatches} defaultValue={pallet.batchNumber} />
             <p className="break-all text-xs text-stone-500">Código QR (no editable): <span className="font-mono">{pallet.qrCode}</span></p>
-            <PalletField label="Cantidad" name="quantity" type="number" defaultValue={pallet.quantity === null ? "" : String(pallet.quantity)} />
-            <UnitOfMeasureField defaultValue={pallet.unitOfMeasure} />
+            <PalletField label={product.unitOfMeasure ? `Cantidad (${product.unitOfMeasure})` : "Cantidad"} name="quantity" type="number" step={quantityStep(product.unitOfMeasure)} defaultValue={pallet.quantity === null ? "" : String(pallet.quantity)} />
             <PalletField label="Ubicación" name="currentLocation" defaultValue={pallet.currentLocation ?? "Depósito"} required={false} />
             <div className="flex flex-wrap justify-end gap-3">
               <button type="button" onClick={closeForm} className="button-secondary">Cancelar</button>
@@ -105,7 +105,7 @@ export function PalletActions({
   );
 }
 
-function PalletField({ label, name, defaultValue, type = "text", required = true, onChange }: { label: string; name: string; defaultValue: string; type?: string; required?: boolean; onChange?: (value: string) => void }) {
+function PalletField({ label, name, defaultValue, type = "text", step, required = true, onChange }: { label: string; name: string; defaultValue: string; type?: string; step?: string; required?: boolean; onChange?: (value: string) => void }) {
   const controlled = onChange ? { value: defaultValue, onChange: (event: React.ChangeEvent<HTMLInputElement>) => onChange(event.target.value) } : { defaultValue };
-  return <label className="form-label">{label}<input required={required} name={name} type={type} min={type === "number" ? 0 : undefined} step={type === "number" ? "any" : undefined} {...controlled} className="form-control mt-1.5 font-normal" /></label>;
+  return <label className="form-label">{label}<input required={required} name={name} type={type} min={type === "number" ? step : undefined} step={type === "number" ? step ?? "any" : undefined} {...controlled} className="form-control mt-1.5 font-normal" /></label>;
 }

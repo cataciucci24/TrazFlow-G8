@@ -1,7 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
 import { getExpirationThresholds } from "@/lib/expiration/queries";
 import { classifyExpiration } from "@/lib/expiration/thresholds";
+import type { ProductUnit } from "@/lib/pallets/units";
 import type { ExistingProduct, ExpirationAlert, Lot, Pallet } from "@/lib/types";
+
+type RawProduct = { name: string; sku: string; unit_of_measure: ProductUnit };
 
 /**
  * Fila cruda que devuelve Postgrest al embeber batches/products. El cliente
@@ -16,11 +19,10 @@ type RawPalletRow = {
   status: Pallet["status"];
   current_location: string | null;
   quantity: number | null;
-  unit_of_measure: Pallet["unitOfMeasure"];
   created_at: string;
   batches:
-    | { batch_number: string; products: { name: string; sku: string } | { name: string; sku: string }[] | null }
-    | { batch_number: string; products: { name: string; sku: string } | { name: string; sku: string }[] | null }[]
+    | { batch_number: string; products: RawProduct | RawProduct[] | null }
+    | { batch_number: string; products: RawProduct | RawProduct[] | null }[]
     | null;
 };
 
@@ -47,12 +49,13 @@ function mapPalletRow(row: RawPalletRow): Pallet {
     productSku: product?.sku ?? "—",
     batchNumber: batch?.batch_number ?? "—",
     quantity: row.quantity,
-    unitOfMeasure: row.unit_of_measure,
+    // batches.product_id es obligatorio: el producto solo falta si la fila embebida no llegó.
+    unitOfMeasure: product?.unit_of_measure ?? "unidades",
   };
 }
 
 const PALLET_SELECT =
-  "id, qr_code, status, current_location, quantity, unit_of_measure, created_at, batches ( batch_number, products ( name, sku ) )";
+  "id, qr_code, status, current_location, quantity, created_at, batches ( batch_number, products ( name, sku, unit_of_measure ) )";
 
 /** Pallets de la empresa disponibles para asociar a una orden (en depósito, sin asignar). */
 export async function getAvailablePallets(companyId: string): Promise<Pallet[]> {
@@ -169,7 +172,7 @@ type RawLotRow = {
   id: string;
   batch_number: string;
   expiration_date: string | null;
-  products: { name: string; sku: string } | { name: string; sku: string }[] | null;
+  products: RawProduct | RawProduct[] | null;
 };
 
 /**
@@ -181,7 +184,7 @@ export async function getCompanyLots(): Promise<Lot[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("batches")
-    .select("id, batch_number, expiration_date, products ( name, sku )")
+    .select("id, batch_number, expiration_date, products ( name, sku, unit_of_measure )")
     .order("batch_number");
 
   if (error) {
@@ -196,6 +199,7 @@ export async function getCompanyLots(): Promise<Lot[]> {
       expirationDate: row.expiration_date,
       productName: product?.name ?? "—",
       productSku: product?.sku ?? "—",
+      unitOfMeasure: product?.unit_of_measure ?? "unidades",
     };
   });
 }
@@ -205,7 +209,7 @@ export async function getCompanyProducts(companyId: string): Promise<ExistingPro
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("products")
-    .select("name, sku")
+    .select("name, sku, unit_of_measure")
     .eq("company_id", companyId)
     .order("sku");
 
@@ -213,20 +217,23 @@ export async function getCompanyProducts(companyId: string): Promise<ExistingPro
     throw new Error(`No se pudieron leer los productos (${error.code}: ${error.message}).`, { cause: error });
   }
 
-  return (data ?? []) as ExistingProduct[];
+  return ((data ?? []) as RawProduct[]).map((product) => ({
+    sku: product.sku,
+    name: product.name,
+    unitOfMeasure: product.unit_of_measure,
+  }));
 }
 
 type RawExpirationBatch = {
   batch_number: string;
   expiration_date: string;
-  products: { name: string; sku: string } | { name: string; sku: string }[] | null;
+  products: RawProduct | RawProduct[] | null;
 };
 
 type RawExpirationAlertRow = {
   id: string;
   current_location: string | null;
   quantity: number;
-  unit_of_measure: ExpirationAlert["unitOfMeasure"];
   batches: RawExpirationBatch | RawExpirationBatch[] | null;
 };
 
@@ -235,8 +242,8 @@ type RawDistributorBatchRow = {
   quantity: number;
   batches: RawExpirationBatch | RawExpirationBatch[] | null;
   distributor_product_stocks:
-    | { unit_of_measure: ExpirationAlert["unitOfMeasure"]; distributors: { name: string } | { name: string }[] | null }
-    | { unit_of_measure: ExpirationAlert["unitOfMeasure"]; distributors: { name: string } | { name: string }[] | null }[]
+    | { distributors: { name: string } | { name: string }[] | null }
+    | { distributors: { name: string } | { name: string }[] | null }[]
     | null;
 };
 
@@ -273,7 +280,7 @@ export async function getExpirationAlerts(companyId: string): Promise<Expiration
   const [warehouseResult, distributorResult] = await Promise.all([
     supabase
       .from("pallets")
-      .select("id, current_location, quantity, unit_of_measure, batches!inner ( batch_number, expiration_date, products ( name, sku ) )")
+      .select("id, current_location, quantity, batches!inner ( batch_number, expiration_date, products ( name, sku, unit_of_measure ) )")
       .eq("company_id", companyId)
       .eq("status", "in_warehouse")
       .gt("quantity", 0)
@@ -281,7 +288,7 @@ export async function getExpirationAlerts(companyId: string): Promise<Expiration
       .lte("batches.expiration_date", maximumDate),
     supabase
       .from("distributor_batch_stocks")
-      .select("id, quantity, batches!inner ( batch_number, expiration_date, products ( name, sku ) ), distributor_product_stocks ( unit_of_measure, distributors ( name ) )")
+      .select("id, quantity, batches!inner ( batch_number, expiration_date, products ( name, sku, unit_of_measure ) ), distributor_product_stocks ( distributors ( name ) )")
       .eq("company_id", companyId)
       .gte("batches.expiration_date", today)
       .lte("batches.expiration_date", maximumDate),
@@ -296,19 +303,20 @@ export async function getExpirationAlerts(companyId: string): Promise<Expiration
   }
 
   function toAlert(
-    base: Pick<ExpirationAlert, "id" | "source" | "quantity" | "unitOfMeasure" | "currentLocation">,
+    base: Pick<ExpirationAlert, "id" | "source" | "quantity" | "currentLocation">,
     rawBatch: RawExpirationBatch | RawExpirationBatch[] | null,
   ): ExpirationAlert[] {
     const batch = one(rawBatch);
-    if (!batch?.expiration_date || !base.unitOfMeasure) return [];
-    const product = one(batch.products);
+    const product = batch ? one(batch.products) : null;
+    if (!batch?.expiration_date || !product) return [];
     const daysRemaining = Math.round((dateAtMidnightUtc(batch.expiration_date) - dateAtMidnightUtc(today)) / 86_400_000);
     const urgency = classifyExpiration(daysRemaining, thresholds);
     if (!urgency) return [];
     return [{
       ...base,
-      productName: product?.name ?? "—",
-      productSku: product?.sku ?? "—",
+      productName: product.name,
+      productSku: product.sku,
+      unitOfMeasure: product.unit_of_measure,
       batchNumber: batch.batch_number,
       expirationDate: batch.expiration_date,
       daysRemaining,
@@ -320,7 +328,6 @@ export async function getExpirationAlerts(companyId: string): Promise<Expiration
     id: `warehouse-${row.id}`,
     source: "warehouse",
     quantity: row.quantity,
-    unitOfMeasure: row.unit_of_measure,
     currentLocation: row.current_location,
   }, row.batches));
 
@@ -331,7 +338,6 @@ export async function getExpirationAlerts(companyId: string): Promise<Expiration
       id: `distributor-${row.id}`,
       source: "distributor",
       quantity: row.quantity,
-      unitOfMeasure: stock.unit_of_measure,
       currentLocation: one(stock.distributors)?.name ?? "Distribuidora",
     }, row.batches);
   });

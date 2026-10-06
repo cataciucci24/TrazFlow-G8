@@ -34,10 +34,10 @@ values
   ('32000000-0000-0000-0000-000000000001', '22000000-0000-0000-0000-000000000001', 'Distribuidor US7 A'),
   ('32000000-0000-0000-0000-000000000002', '22000000-0000-0000-0000-000000000002', 'Distribuidor US7 B');
 
-insert into products (id, company_id, sku, name)
+insert into products (id, company_id, sku, name, unit_of_measure)
 values
-  ('42000000-0000-0000-0000-000000000001', '22000000-0000-0000-0000-000000000001', 'SKU-US7-A', 'Producto US7 A'),
-  ('42000000-0000-0000-0000-000000000002', '22000000-0000-0000-0000-000000000002', 'SKU-US7-B', 'Producto US7 B');
+  ('42000000-0000-0000-0000-000000000001', '22000000-0000-0000-0000-000000000001', 'SKU-US7-A', 'Producto US7 A', 'unidades'),
+  ('42000000-0000-0000-0000-000000000002', '22000000-0000-0000-0000-000000000002', 'SKU-US7-B', 'Producto US7 B', 'unidades');
 
 insert into batches (id, product_id, batch_number, quantity)
 values

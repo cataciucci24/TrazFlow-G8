@@ -47,7 +47,7 @@ export default async function StagnantInventoryPage({
   );
   const totalsByUnit = new Map<string, number>();
   for (const pallet of visiblePallets) {
-    if (pallet.quantity === null || pallet.unitOfMeasure === null) continue;
+    if (pallet.quantity === null) continue;
     totalsByUnit.set(pallet.unitOfMeasure, (totalsByUnit.get(pallet.unitOfMeasure) ?? 0) + pallet.quantity);
   }
   const totalQuantityLabel = totalsByUnit.size === 0

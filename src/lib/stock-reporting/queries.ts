@@ -1,15 +1,15 @@
-import type { PalletUnit } from "@/lib/pallets/units";
+import type { ProductUnit } from "@/lib/pallets/units";
 import { createClient } from "@/lib/supabase/server";
 import { calculateStockDays, getStockRiskLevel } from "@/lib/stock-alerts/queries";
 import type { DistributorBatchStock, DistributorStockEntry } from "@/lib/types";
 
 export type StockReportingDistributor = { id: string; name: string };
 export type StockReportingBatch = { id: string; batchNumber: string; expirationDate: string | null };
-export type StockReportingProduct = { id: string; name: string; sku: string; batches: StockReportingBatch[] };
+export type StockReportingProduct = { id: string; name: string; sku: string; unitOfMeasure: ProductUnit; batches: StockReportingBatch[] };
 
 type RawBatch = { id: string; batch_number: string; expiration_date: string | null };
 
-type RawProduct = { id: string; name: string; sku: string; batches: RawBatch[] | null };
+type RawProduct = { id: string; name: string; sku: string; unit_of_measure: ProductUnit; batches: RawBatch[] | null };
 
 type RawBatchStock = {
   batch_id: string;
@@ -28,10 +28,9 @@ type RawStockEntry = {
   product_id: string;
   current_stock: number;
   daily_consumption: number;
-  unit_of_measure: PalletUnit;
   updated_at: string;
   distributors: { name: string } | { name: string }[] | null;
-  products: { name: string; sku: string } | { name: string; sku: string }[] | null;
+  products: Pick<RawProduct, "name" | "sku" | "unit_of_measure"> | Pick<RawProduct, "name" | "sku" | "unit_of_measure">[] | null;
   distributor_batch_stocks: RawBatchStock[] | null;
 };
 
@@ -56,12 +55,12 @@ export async function getStockReportingData(userId: string, companyId: string): 
       .eq("user_id", userId),
     supabase
       .from("products")
-      .select("id, name, sku, batches ( id, batch_number, expiration_date )")
+      .select("id, name, sku, unit_of_measure, batches ( id, batch_number, expiration_date )")
       .eq("company_id", companyId)
       .order("name"),
     supabase
       .from("distributor_product_stocks")
-      .select("id, distributor_id, product_id, current_stock, daily_consumption, unit_of_measure, updated_at, distributors ( name ), products ( name, sku ), distributor_batch_stocks ( batch_id, quantity, batches ( batch_number, expiration_date ) )")
+      .select("id, distributor_id, product_id, current_stock, daily_consumption, updated_at, distributors ( name ), products ( name, sku, unit_of_measure ), distributor_batch_stocks ( batch_id, quantity, batches ( batch_number, expiration_date ) )")
       .order("updated_at", { ascending: false }),
   ]);
 
@@ -93,7 +92,7 @@ export async function getStockReportingData(userId: string, companyId: string): 
       productSku: product?.sku ?? "—",
       currentStock: row.current_stock,
       dailyConsumption: row.daily_consumption,
-      unitOfMeasure: row.unit_of_measure,
+      unitOfMeasure: product?.unit_of_measure ?? "unidades",
       stockDays,
       riskLevel: getStockRiskLevel(stockDays),
       updatedAt: row.updated_at,
@@ -115,6 +114,7 @@ export async function getStockReportingData(userId: string, companyId: string): 
       id: product.id,
       name: product.name,
       sku: product.sku,
+      unitOfMeasure: product.unit_of_measure,
       batches: (product.batches ?? [])
         .map((batch) => ({ id: batch.id, batchNumber: batch.batch_number, expirationDate: batch.expiration_date }))
         .sort(byExpiration),

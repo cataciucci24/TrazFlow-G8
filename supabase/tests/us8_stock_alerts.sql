@@ -27,8 +27,8 @@ values ('38000000-0000-0000-0000-000000000001', '28000000-0000-0000-0000-0000000
 insert into distributor_users (distributor_id, user_id)
 values ('38000000-0000-0000-0000-000000000001', '18000000-0000-0000-0000-000000000002');
 
-insert into products (id, company_id, sku, name)
-values ('48000000-0000-0000-0000-000000000001', '28000000-0000-0000-0000-000000000001', 'SKU-US8-CRIT', 'Producto crítico'), ('48000000-0000-0000-0000-000000000002', '28000000-0000-0000-0000-000000000001', 'SKU-US8-CAUT', 'Producto precaución');
+insert into products (id, company_id, sku, name, unit_of_measure)
+values ('48000000-0000-0000-0000-000000000001', '28000000-0000-0000-0000-000000000001', 'SKU-US8-CRIT', 'Producto crítico', 'unidades'), ('48000000-0000-0000-0000-000000000002', '28000000-0000-0000-0000-000000000001', 'SKU-US8-CAUT', 'Producto precaución', 'unidades');
 
 -- 35 / 5 = 7 días (crítica) y 80 / 10 = 8 días (precaución).
 insert into distributor_product_stocks (company_id, distributor_id, product_id, current_stock, daily_consumption)

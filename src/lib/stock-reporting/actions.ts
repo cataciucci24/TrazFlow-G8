@@ -2,7 +2,6 @@
 
 import { revalidatePath } from "next/cache";
 
-import { isPalletUnit } from "@/lib/pallets/units";
 import { hasRole, requireUserProfile } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 
@@ -17,7 +16,6 @@ const RPC_MESSAGES: Record<string, string> = {
   "42501": "No tenés permisos para informar stock de una distribuidora.",
   P3902: "La distribuidora de tu cuenta no está configurada correctamente. Contactá al administrador.",
   P3903: "El producto seleccionado no está disponible para tu empresa.",
-  P3904: "Seleccioná la unidad de medida.",
   P3905: "El consumo diario debe ser un número mayor a cero.",
   P3906: "Revisá las cantidades: deben ser mayores a cero y, en unidades o cajas, enteras.",
   P3907: "Uno de los lotes no corresponde al producto seleccionado.",
@@ -36,14 +34,10 @@ export async function saveDistributorStock(
 
   const productId = String(formData.get("productId") ?? "").trim();
   const dailyConsumption = Number(formData.get("dailyConsumption"));
-  const unitOfMeasure = String(formData.get("unitOfMeasure") ?? "").trim();
   const batches = parseBatches(String(formData.get("batches") ?? ""));
 
   if (!productId) {
     return { ...EMPTY_STATE, error: "Seleccioná el producto." };
-  }
-  if (!isPalletUnit(unitOfMeasure)) {
-    return { ...EMPTY_STATE, error: "Seleccioná la unidad de medida." };
   }
   if (!Number.isFinite(dailyConsumption) || dailyConsumption <= 0) {
     return { ...EMPTY_STATE, error: "El consumo diario debe ser un número mayor a cero." };
@@ -60,14 +54,10 @@ export async function saveDistributorStock(
   if (batches.some((batch) => !Number.isFinite(batch.quantity) || batch.quantity <= 0)) {
     return { ...EMPTY_STATE, error: "La cantidad de cada lote debe ser mayor a cero." };
   }
-  if (unitOfMeasure !== "kilogramos" && batches.some((batch) => !Number.isInteger(batch.quantity))) {
-    return { ...EMPTY_STATE, error: "En unidades o cajas, la cantidad de cada lote debe ser un número entero." };
-  }
 
   const supabase = await createClient();
   const { error } = await supabase.rpc("save_distributor_stock", {
     p_product_id: productId,
-    p_unit_of_measure: unitOfMeasure,
     p_daily_consumption: dailyConsumption,
     p_batches: batches,
   });

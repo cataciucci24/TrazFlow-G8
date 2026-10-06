@@ -43,16 +43,17 @@ insert into public.distributors(id, company_id, name) values
 insert into public.distributor_users(distributor_id, user_id) values
   ('90000000-0000-0000-0002-000000000001', pg_temp.uid(2)),
   ('90000000-0000-0000-0002-000000000002', pg_temp.uid(3));
-insert into public.products(id, company_id, sku, name) values
-  ('90000000-0000-0000-0003-000000000001', '90000000-0000-0000-0001-000000000001', 'TRZ90-HAR', 'Harina'),
-  ('90000000-0000-0000-0003-000000000002', '90000000-0000-0000-0001-000000000001', 'TRZ90-ACE', 'Aceite'),
-  ('90000000-0000-0000-0003-000000000003', '90000000-0000-0000-0001-000000000002', 'TRZ90-B', 'Producto B');
+insert into public.products(id, company_id, sku, name, unit_of_measure) values
+  ('90000000-0000-0000-0003-000000000001', '90000000-0000-0000-0001-000000000001', 'TRZ90-HAR', 'Harina', 'kilogramos'),
+  ('90000000-0000-0000-0003-000000000002', '90000000-0000-0000-0001-000000000001', 'TRZ90-ACE', 'Aceite', 'unidades'),
+  ('90000000-0000-0000-0003-000000000003', '90000000-0000-0000-0001-000000000002', 'TRZ90-B', 'Producto B', 'unidades');
 insert into public.batches(id, product_id, batch_number, expiration_date, quantity) values
   ('90000000-0000-0000-0004-000000000001', '90000000-0000-0000-0003-000000000001', 'H-1', current_date + 20, 100),
   ('90000000-0000-0000-0004-000000000002', '90000000-0000-0000-0003-000000000001', 'H-2', current_date + 80, 100),
   ('90000000-0000-0000-0004-000000000003', '90000000-0000-0000-0003-000000000002', 'A-1', current_date + 40, 100);
 
-select pg_temp.assert_true(not has_function_privilege('anon', 'public.save_distributor_stock(uuid, text, numeric, jsonb)', 'EXECUTE'), 'anon sin ejecución (save)');
+select pg_temp.assert_true(not has_function_privilege('anon', 'public.save_distributor_stock(uuid, numeric, jsonb)', 'EXECUTE'), 'anon sin ejecución (save)');
+select pg_temp.assert_true(to_regprocedure('public.save_distributor_stock(uuid, text, numeric, jsonb)') is null, 'la unidad ya no es un parámetro: sale del producto');
 select pg_temp.assert_true(not has_function_privilege('anon', 'public.set_expiration_thresholds(integer, integer, integer)', 'EXECUTE'), 'anon sin ejecución (thresholds)');
 
 set local role authenticated;
@@ -60,46 +61,50 @@ set local role authenticated;
 -- ---------- Guardar stock por lote ----------
 -- Solo un operador de distribuidora.
 select pg_temp.as_user(1);
-select pg_temp.expect_failure($$select public.save_distributor_stock('90000000-0000-0000-0003-000000000001', 'cajas', 10, '[]')$$, '42501');
+select pg_temp.expect_failure($$select public.save_distributor_stock('90000000-0000-0000-0003-000000000001', 10, '[]')$$, '42501');
 select pg_temp.as_user(4);
-select pg_temp.expect_failure($$select public.save_distributor_stock('90000000-0000-0000-0003-000000000001', 'cajas', 10, '[]')$$, '42501');
+select pg_temp.expect_failure($$select public.save_distributor_stock('90000000-0000-0000-0003-000000000001', 10, '[]')$$, '42501');
 select pg_temp.as_user(5);
-select pg_temp.expect_failure($$select public.save_distributor_stock('90000000-0000-0000-0003-000000000001', 'cajas', 10, '[]')$$, 'P3902');
+select pg_temp.expect_failure($$select public.save_distributor_stock('90000000-0000-0000-0003-000000000001', 10, '[]')$$, 'P3902');
 
 select pg_temp.as_user(2);
 -- Validaciones.
-select pg_temp.expect_failure($$select public.save_distributor_stock('90000000-0000-0000-0003-000000000003', 'cajas', 10, '[]')$$, 'P3903');
-select pg_temp.expect_failure($$select public.save_distributor_stock('90000000-0000-0000-0003-000000000001', 'litros', 10, '[]')$$, 'P3904');
-select pg_temp.expect_failure($$select public.save_distributor_stock('90000000-0000-0000-0003-000000000001', 'cajas', 0, '[]')$$, 'P3905');
-select pg_temp.expect_failure($$select public.save_distributor_stock('90000000-0000-0000-0003-000000000001', 'cajas', 10, '{}')$$, 'P3906');
-select pg_temp.expect_failure($$select public.save_distributor_stock('90000000-0000-0000-0003-000000000001', 'cajas', 10, '[{"batch_id": "no-uuid", "quantity": 5}]')$$, 'P3906');
-select pg_temp.expect_failure($$select public.save_distributor_stock('90000000-0000-0000-0003-000000000001', 'cajas', 10, '[{"batch_id": "90000000-0000-0000-0004-000000000001", "quantity": 0}]')$$, 'P3906');
-select pg_temp.expect_failure($$select public.save_distributor_stock('90000000-0000-0000-0003-000000000001', 'cajas', 10, '[{"batch_id": "90000000-0000-0000-0004-000000000001", "quantity": 2.5}]')$$, 'P3906');
-select pg_temp.expect_failure($$select public.save_distributor_stock('90000000-0000-0000-0003-000000000001', 'cajas', 10, '[{"batch_id": "90000000-0000-0000-0004-000000000003", "quantity": 5}]')$$, 'P3907');
-select pg_temp.expect_failure($$select public.save_distributor_stock('90000000-0000-0000-0003-000000000001', 'cajas', 10, '[{"batch_id": "90000000-0000-0000-0004-000000000001", "quantity": 5}, {"batch_id": "90000000-0000-0000-0004-000000000001", "quantity": 3}]')$$, 'P3908');
+select pg_temp.expect_failure($$select public.save_distributor_stock('90000000-0000-0000-0003-000000000003', 10, '[]')$$, 'P3903');
+select pg_temp.expect_failure($$select public.save_distributor_stock('90000000-0000-0000-0003-000000000001', 0, '[]')$$, 'P3905');
+select pg_temp.expect_failure($$select public.save_distributor_stock('90000000-0000-0000-0003-000000000001', 10, '{}')$$, 'P3906');
+select pg_temp.expect_failure($$select public.save_distributor_stock('90000000-0000-0000-0003-000000000001', 10, '[{"batch_id": "no-uuid", "quantity": 5}]')$$, 'P3906');
+select pg_temp.expect_failure($$select public.save_distributor_stock('90000000-0000-0000-0003-000000000001', 10, '[{"batch_id": "90000000-0000-0000-0004-000000000001", "quantity": 0}]')$$, 'P3906');
+-- Aceite está en unidades: no admite decimales.
+select pg_temp.expect_failure($$select public.save_distributor_stock('90000000-0000-0000-0003-000000000002', 10, '[{"batch_id": "90000000-0000-0000-0004-000000000003", "quantity": 2.5}]')$$, 'P3906');
+select pg_temp.expect_failure($$select public.save_distributor_stock('90000000-0000-0000-0003-000000000001', 10, '[{"batch_id": "90000000-0000-0000-0004-000000000003", "quantity": 5}]')$$, 'P3907');
+select pg_temp.expect_failure($$select public.save_distributor_stock('90000000-0000-0000-0003-000000000001', 10, '[{"batch_id": "90000000-0000-0000-0004-000000000001", "quantity": 5}, {"batch_id": "90000000-0000-0000-0004-000000000001", "quantity": 3}]')$$, 'P3908');
 
 -- El total del producto es la suma de los lotes.
-select public.save_distributor_stock('90000000-0000-0000-0003-000000000001', 'cajas', 10,
+select public.save_distributor_stock('90000000-0000-0000-0003-000000000001', 10,
   '[{"batch_id": "90000000-0000-0000-0004-000000000001", "quantity": 80}, {"batch_id": "90000000-0000-0000-0004-000000000002", "quantity": 40}]');
 select pg_temp.assert_true(
-  (select current_stock = 120 and daily_consumption = 10 and unit_of_measure = 'cajas' from public.distributor_product_stocks
+  (select current_stock = 120 and daily_consumption = 10 from public.distributor_product_stocks
     where distributor_id = '90000000-0000-0000-0002-000000000001' and product_id = '90000000-0000-0000-0003-000000000001'),
   'el total debe ser 80 + 40');
 select pg_temp.assert_true((select count(*) = 2 from public.distributor_batch_stocks), 'el operador ve sus dos lotes');
 
 -- Guardar de nuevo reemplaza los lotes anteriores.
-select public.save_distributor_stock('90000000-0000-0000-0003-000000000001', 'kilogramos', 2.5,
+select public.save_distributor_stock('90000000-0000-0000-0003-000000000001', 2.5,
   '[{"batch_id": "90000000-0000-0000-0004-000000000002", "quantity": 12.75}]');
 select pg_temp.assert_true(
-  (select current_stock = 12.75 and unit_of_measure = 'kilogramos' from public.distributor_product_stocks
+  (select current_stock = 12.75 from public.distributor_product_stocks
     where distributor_id = '90000000-0000-0000-0002-000000000001'),
   'el total se recalcula y admite decimales en kilogramos');
+-- El operador lee la unidad del producto de su empresa.
+select pg_temp.assert_true(
+  (select unit_of_measure = 'kilogramos' from public.products where id = '90000000-0000-0000-0003-000000000001'),
+  'el operador ve la unidad del producto');
 select pg_temp.assert_true(
   (select count(*) = 1 and bool_and(batch_id = '90000000-0000-0000-0004-000000000002') from public.distributor_batch_stocks),
   'el lote que ya no se informa se borra');
 
 -- Una lista vacía deja el producto en cero.
-select public.save_distributor_stock('90000000-0000-0000-0003-000000000002', 'unidades', 4, '[]');
+select public.save_distributor_stock('90000000-0000-0000-0003-000000000002', 4, '[]');
 select pg_temp.assert_true(
   (select current_stock = 0 from public.distributor_product_stocks where product_id = '90000000-0000-0000-0003-000000000002'),
   'sin lotes el stock es cero');

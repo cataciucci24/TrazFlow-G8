@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { PalletStatusBadge, TableShell } from "@/components/ui/design-system";
-import { PALLET_UNITS } from "@/lib/pallets/units";
+import { PRODUCT_UNITS } from "@/lib/pallets/units";
 import type { Pallet } from "@/lib/types";
 
 const formatQuantity = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 20 });
@@ -33,9 +33,10 @@ export function groupByLocation(pallets: Pallet[]) {
   return Array.from(groups.entries()).sort(([a], [b]) => (a ?? "").localeCompare(b ?? "", "es-AR"));
 }
 
+/** Totales por unidad: cada pallet suma en la unidad de su producto. */
 function summarizeStock(pallets: Pallet[]) {
-  const defined = pallets.filter((pallet) => pallet.quantity !== null && pallet.unitOfMeasure !== null);
-  const totals = PALLET_UNITS.map((unit) => ({
+  const defined = pallets.filter((pallet) => pallet.quantity !== null);
+  const totals = PRODUCT_UNITS.map((unit) => ({
     unit,
     total: defined.filter((pallet) => pallet.unitOfMeasure === unit).reduce((sum, pallet) => sum + pallet.quantity!, 0),
   })).filter(({ total }) => total > 0);
@@ -98,7 +99,7 @@ export function LocationStockTable({ location, pallets, filtered = false }: { lo
                 <td className="max-w-64 break-words font-medium">{pallet.productName}<span className="table-secondary block md:hidden">SKU {pallet.productSku} · Lote {pallet.batchNumber}</span></td>
                 <td className="table-secondary-column max-w-48 break-words font-mono text-slate-600">{pallet.productSku}</td>
                 <td className="table-secondary-column max-w-48 break-words font-mono text-slate-600">{pallet.batchNumber}</td>
-                <td className="text-right tabular-nums">{pallet.quantity === null || pallet.unitOfMeasure === null ? "Sin definir" : `${formatQuantity.format(pallet.quantity)} ${pallet.unitOfMeasure}`}</td>
+                <td className="text-right tabular-nums">{pallet.quantity === null ? "Sin definir" : `${formatQuantity.format(pallet.quantity)} ${pallet.unitOfMeasure}`}</td>
                 <td>
                   <PalletStatusBadge status={pallet.status} />
                 </td>

@@ -12,8 +12,8 @@ declare
   second_qr text;
 begin
   insert into public.companies (name) values ('US-B1 test') returning id into company;
-  insert into public.products (company_id, sku, name)
-    values (company, 'US-B1', 'Test') returning id into product;
+  insert into public.products (company_id, sku, name, unit_of_measure)
+    values (company, 'US-B1', 'Test', 'unidades') returning id into product;
   insert into public.batches (product_id, batch_number, quantity)
     values (product, 'US-B1', 0) returning id into batch;
 

@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { PALLET_UNITS } from "@/lib/pallets/units";
 import type { Lot, Pallet } from "@/lib/types";
 import { TableShell } from "@/components/ui/design-system";
 
@@ -39,10 +38,7 @@ export function LotsTable({ lots, pallets }: LotsTableProps) {
         <tbody className="divide-y divide-stone-200">
           {lots.map((lot) => {
             const lotPallets = palletsByLot.get(lotKey(lot.productSku, lot.batchNumber)) ?? [];
-            const totals = PALLET_UNITS.map((unit) => ({
-              unit,
-              total: lotPallets.filter((pallet) => pallet.unitOfMeasure === unit).reduce((sum, pallet) => sum + (pallet.quantity ?? 0), 0),
-            })).filter(({ total }) => total > 0);
+            const total = lotPallets.reduce((sum, pallet) => sum + (pallet.quantity ?? 0), 0);
 
             return (
               <tr key={lot.id}>
@@ -52,7 +48,7 @@ export function LotsTable({ lots, pallets }: LotsTableProps) {
                 <td className="text-slate-500">{lot.expirationDate ? DATE_FORMATTER.format(new Date(`${lot.expirationDate}T00:00:00`)) : "—"}</td>
                 <td className="text-right tabular-nums">{lotPallets.length}</td>
                 <td className="text-right tabular-nums">
-                  {totals.length > 0 ? totals.map(({ unit, total }) => `${formatQuantity.format(total)} ${unit}`).join(", ") : "Sin definir"}
+                  {total > 0 ? `${formatQuantity.format(total)} ${lot.unitOfMeasure}` : "Sin definir"}
                 </td>
                 <td className="text-right">
                   <Link

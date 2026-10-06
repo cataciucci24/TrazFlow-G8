@@ -5,7 +5,7 @@ import { InlineAlert } from "@/components/ui/design-system";
 
 import { useActionState, useState } from "react";
 
-import { PALLET_UNITS } from "@/lib/pallets/units";
+import { quantityStep } from "@/lib/pallets/units";
 import { saveDistributorStock, type SaveDistributorStockState } from "@/lib/stock-reporting/actions";
 import type { StockReportingProduct } from "@/lib/stock-reporting/queries";
 import type { DistributorStockEntry } from "@/lib/types";
@@ -29,11 +29,12 @@ export function StockReportForm({
   /** Stock ya informado: al elegir un producto se precargan sus valores para editarlos. */
   entries: DistributorStockEntry[];
 }) {
-  const [values, setValues] = useState({ productId: "", unitOfMeasure: "", dailyConsumption: "" });
+  const [values, setValues] = useState({ productId: "", dailyConsumption: "" });
   const [rows, setRows] = useState<BatchRow[]>(() => [emptyRow()]);
   const [state, formAction, isPending] = useActionState(saveDistributorStock, INITIAL_STATE);
 
   const product = products.find((item) => item.id === values.productId);
+  const unit = product?.unitOfMeasure ?? null;
   const total = rows.reduce((sum, row) => sum + (Number(row.quantity) || 0), 0);
   const batchesJson = JSON.stringify(rows.map((row) => ({ batchId: row.batchId, quantity: row.quantity })));
 
@@ -41,7 +42,6 @@ export function StockReportForm({
     const entry = entries.find((item) => item.productId === productId);
     setValues({
       productId,
-      unitOfMeasure: entry?.unitOfMeasure ?? "",
       dailyConsumption: entry ? String(entry.dailyConsumption) : "",
     });
     setRows(entry && entry.batches.length > 0
@@ -65,20 +65,14 @@ export function StockReportForm({
       {state.success && <InlineAlert variant="success">{state.success}</InlineAlert>}
 
       {products.length === 0 && <InlineAlert variant="warning">No hay productos disponibles para informar stock. Consultá con el administrador de tu empresa.</InlineAlert>}
-      <div className="grid gap-5 md:grid-cols-3">
-        <Field label="Producto">
+      <div className="grid gap-5 md:grid-cols-2">
+        <Field label="Producto" hint={unit ? `Se informa en ${unit}, la unidad del producto.` : undefined}>
           <select name="productId" required disabled={isPending} value={values.productId} onChange={(event) => selectProduct(event.target.value)} className="form-control">
             <option value="">Seleccionar producto</option>
             {products.map((item) => <option key={item.id} value={item.id}>{item.name} ({item.sku})</option>)}
           </select>
         </Field>
-        <Field label="Unidad de medida" hint="Se usa para las cantidades y el consumo diario.">
-          <select name="unitOfMeasure" required disabled={isPending} value={values.unitOfMeasure} onChange={(event) => setValues((current) => ({ ...current, unitOfMeasure: event.target.value }))} className="form-control">
-            <option value="" disabled>Seleccionar unidad</option>
-            {PALLET_UNITS.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
-          </select>
-        </Field>
-        <Field label="Consumo diario estimado" hint="Promedio consumido por día, en la misma unidad.">
+        <Field label={unit ? `Consumo diario estimado (${unit}/día)` : "Consumo diario estimado"} hint="Promedio consumido por día.">
           <input name="dailyConsumption" value={values.dailyConsumption} onChange={(event) => setValues((current) => ({ ...current, dailyConsumption: event.target.value }))} type="number" min="0.01" step="0.01" required disabled={isPending} placeholder="Ej. 10" className="form-control" />
         </Field>
       </div>
@@ -109,8 +103,8 @@ export function StockReportForm({
                   </select>
                 </label>
                 <label className="space-y-1.5">
-                  <span className="text-xs font-semibold text-stone-600">Cantidad</span>
-                  <input value={row.quantity} onChange={(event) => updateRow(row.key, { quantity: event.target.value })} type="number" min="0.01" step={values.unitOfMeasure === "kilogramos" ? "0.01" : "1"} required placeholder="Ej. 40" className="form-control" />
+                  <span className="text-xs font-semibold text-stone-600">{unit ? `Cantidad (${unit})` : "Cantidad"}</span>
+                  <input value={row.quantity} onChange={(event) => updateRow(row.key, { quantity: event.target.value })} type="number" min={quantityStep(unit)} step={quantityStep(unit)} required placeholder="Ej. 40" className="form-control" />
                 </label>
                 <button type="button" onClick={() => setRows((current) => current.filter((other) => other.key !== row.key))} className="button-secondary button-sm whitespace-nowrap" aria-label={`Quitar lote ${index + 1}`}>
                   Quitar
@@ -124,7 +118,7 @@ export function StockReportForm({
               <p className="text-sm text-stone-600" role="status">
                 {rows.length === 0
                   ? "Sin lotes: el stock del producto queda en 0."
-                  : <>Stock total: <span className="font-semibold text-stone-900">{NUMBER_FORMATTER.format(total)} {values.unitOfMeasure}</span></>}
+                  : <>Stock total: <span className="font-semibold text-stone-900">{NUMBER_FORMATTER.format(total)} {unit}</span></>}
               </p>
             </div>
           </>
