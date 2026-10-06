@@ -92,6 +92,19 @@ select pg_temp.assert_true(
   'el pallet debe volver a in_warehouse'
 );
 
+select pg_temp.assert_true(
+  exists (
+    select 1 from traceability_events
+    where order_id = '70000000-0000-0000-0000-000000000001'
+      and pallet_id = '60000000-0000-0000-0000-000000000001'
+      and event_type = 'pallet_dissociated'
+      and user_id = '10000000-0000-0000-0000-000000000001'
+      and company_id = '20000000-0000-0000-0000-000000000001'
+      and details ->> 'qr_code' = 'PAL-1'
+  ),
+  'la desasociación debe registrar un traceability_event pallet_dissociated'
+);
+
 -- --- pallet ya validado: no se puede sacar ----------------------------------
 do $$
 declare result record;
