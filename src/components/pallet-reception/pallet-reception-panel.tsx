@@ -36,17 +36,8 @@ export function PalletReceptionPanel({
 
   const receivedCount = pallets.filter((pallet) => pallet.received).length;
 
-  const handleScan = useCallback((qrCode: string) => {
-    setIsScannerOpen(false);
-    setSubmissionError(null);
-    setPendingQrCode(qrCode);
-  }, []);
-
-  const confirmReception = useCallback(
-    (discrepancyType: ReceptionDiscrepancyType | null) => {
-      if (!pendingQrCode || isPending) return;
-
-      const qrCode = pendingQrCode;
+  const submitReception = useCallback(
+    (qrCode: string, discrepancyType: ReceptionDiscrepancyType | null) => {
       startTransition(async () => {
         setSubmissionError(null);
         try {
@@ -63,7 +54,27 @@ export function PalletReceptionPanel({
         }
       });
     },
-    [orderId, pendingQrCode, isPending],
+    [orderId],
+  );
+
+  const handleScan = useCallback((qrCode: string) => {
+    setIsScannerOpen(false);
+    setSubmissionError(null);
+    // Un pallet que no es de la orden no se clasifica a mano: la base lo
+    // registra como "no corresponde al pedido" (evento + notificación).
+    if (!pallets.some((pallet) => pallet.qrCode === qrCode.trim())) {
+      submitReception(qrCode, null);
+      return;
+    }
+    setPendingQrCode(qrCode);
+  }, [pallets, submitReception]);
+
+  const confirmReception = useCallback(
+    (discrepancyType: ReceptionDiscrepancyType | null) => {
+      if (!pendingQrCode || isPending) return;
+      submitReception(pendingQrCode, discrepancyType);
+    },
+    [pendingQrCode, isPending, submitReception],
   );
 
   const isSuccess = result?.outcome === "received";
@@ -100,6 +111,10 @@ export function PalletReceptionPanel({
         <InlineAlert>
           Esta orden no está en tránsito o ya no admite recepciones.
         </InlineAlert>
+      )}
+
+      {submissionError && !pendingQrCode && (
+        <InlineAlert variant="danger">{submissionError}</InlineAlert>
       )}
 
       {result && (
@@ -162,10 +177,8 @@ export function PalletReceptionPanel({
             <div className="grid gap-2 sm:grid-cols-2">
               <button type="button" className="button-primary" disabled={isPending} aria-busy={isPending} onClick={() => confirmReception(null)}>{isPending ? "Registrando…" : "OK"}</button>
               {([
-                ["missing", "Faltante"],
                 ["surplus", "Sobrante"],
                 ["damaged", "Dañado"],
-                ["wrong_order", "No corresponde al pedido"],
               ] as const).map(([type, label]) => (
                 <button key={type} type="button" className="button-secondary text-left" disabled={isPending} aria-busy={isPending} onClick={() => confirmReception(type)}>{label}</button>
               ))}

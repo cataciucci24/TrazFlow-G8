@@ -17,6 +17,10 @@ export type DeletePalletState = CreatePalletState;
 export type CreateLotState = CreatePalletState;
 
 const INITIAL_ERROR = "No se pudo crear el pallet. Revisá los datos e intentá nuevamente.";
+const UPDATE_ERROR = "No se pudieron guardar los cambios del pallet. Intentá nuevamente.";
+const NOT_EDITABLE_ERROR = "Solo se pueden editar pallets en depósito.";
+const DELETE_ERROR = "No se pudo eliminar el pallet. Intentá nuevamente.";
+const HAS_HISTORY_ERROR = "No se puede eliminar un pallet con historial de trazabilidad.";
 
 /** Registra un lote sin exigir que ya tenga pallets asociados. */
 export async function createLot(
@@ -156,18 +160,19 @@ export async function updatePallet(
   const supabase = await createClient();
   const { data: existingPallet, error: palletLookupError } = await supabase
     .from("pallets")
-    .select("id, qr_code")
+    .select("id, qr_code, status")
     .eq("id", palletId)
     .eq("company_id", profile.companyId)
     .maybeSingle();
   if (palletLookupError || !existingPallet) return { error: "El pallet no existe o no pertenece a tu empresa.", success: null };
+  if (existingPallet.status !== "in_warehouse") return { error: NOT_EDITABLE_ERROR, success: null };
 
   const { data: product, error: productError } = await supabase
     .from("products")
     .upsert({ company_id: profile.companyId, sku: productSku, name: productName }, { onConflict: "company_id,sku" })
     .select("id")
     .single();
-  if (productError || !product) return { error: INITIAL_ERROR, success: null };
+  if (productError || !product) return { error: UPDATE_ERROR, success: null };
 
   const { data: batch, error: batchError } = await supabase
     .from("batches")
@@ -177,12 +182,18 @@ export async function updatePallet(
     .single();
   if (batchError || !batch) return { error: "El lote seleccionado no existe para ese producto. Crealo primero desde la sección Lotes.", success: null };
 
-  const { error: updateError } = await supabase
+  // El filtro por estado cubre el caso de que el pallet se haya asociado a una
+  // orden entre la lectura de arriba y este UPDATE.
+  const { data: updated, error: updateError } = await supabase
     .from("pallets")
     .update({ batch_id: batch.id, quantity, unit_of_measure: unitOfMeasure, current_location: currentLocation || null })
     .eq("id", palletId)
-    .eq("company_id", profile.companyId);
-  if (updateError) return { error: INITIAL_ERROR, success: null };
+    .eq("company_id", profile.companyId)
+    .eq("status", "in_warehouse")
+    .select("id");
+  if (updateError) return { error: UPDATE_ERROR, success: null };
+  // 0 filas: el pallet salió del depósito (el UPDATE filtra por status).
+  if (!updated || updated.length === 0) return { error: NOT_EDITABLE_ERROR, success: null };
 
   revalidatePath("/dashboard/inventory");
   revalidatePath("/dashboard/traceability");
@@ -216,7 +227,10 @@ export async function deletePallet(palletId: string): Promise<DeletePalletState>
     .eq("id", palletId)
     .eq("company_id", profile.companyId)
     .eq("status", "in_warehouse");
-  if (deleteError) return { error: INITIAL_ERROR, success: null };
+  if (deleteError) {
+    // 23503: la base conserva el historial (eventos/movimientos) del pallet.
+    return { error: deleteError.code === "23503" ? HAS_HISTORY_ERROR : DELETE_ERROR, success: null };
+  }
 
   revalidatePath("/dashboard/inventory");
   revalidatePath("/dashboard/traceability");
