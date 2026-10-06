@@ -1,4 +1,4 @@
-import type { PalletUnit } from "@/lib/pallets/units";
+import type { ProductUnit } from "@/lib/pallets/units";
 
 /** Roles de la app, espejo del enum `user_role` de Postgres. */
 export type UserRole =
@@ -43,7 +43,7 @@ export type DistributorStockAlert = {
   productSku: string;
   currentStock: number;
   dailyConsumption: number;
-  unitOfMeasure: PalletUnit;
+  unitOfMeasure: ProductUnit;
   stockDays: number;
   riskLevel: StockRiskLevel;
 };
@@ -58,10 +58,20 @@ export type DistributorStockEntry = {
   productSku: string;
   currentStock: number;
   dailyConsumption: number;
-  unitOfMeasure: PalletUnit;
+  unitOfMeasure: ProductUnit;
   stockDays: number;
   riskLevel: StockRiskLevel | null;
   updatedAt: string;
+  /** Detalle por lote; vacío en filas informadas antes de TRZ-90. */
+  batches: DistributorBatchStock[];
+};
+
+/** Cantidad de un lote en una distribuidora, en la unidad de su producto. */
+export type DistributorBatchStock = {
+  batchId: string;
+  batchNumber: string;
+  expirationDate: string | null;
+  quantity: number;
 };
 
 /** Orden de despacho (fila de la tabla `dispatch_orders`). */
@@ -93,6 +103,8 @@ export type ProductBatch = {
 export type ExistingProduct = {
   sku: string;
   name: string;
+  /** Unidad base del producto; queda fija una vez creado. */
+  unitOfMeasure: ProductUnit;
 };
 
 /** Lote (fila de `batches`) con los datos de producto necesarios para listarlo. */
@@ -101,6 +113,8 @@ export type Lot = {
   batchNumber: string;
   productName: string;
   productSku: string;
+  /** Unidad del producto, en la que se suman las cantidades de sus pallets. */
+  unitOfMeasure: ProductUnit;
   expirationDate: string | null;
 };
 
@@ -114,20 +128,33 @@ export type Pallet = {
   productSku: string;
   batchNumber: string;
   quantity: number | null;
-  unitOfMeasure: PalletUnit | null;
+  /** Unidad de su producto. */
+  unitOfMeasure: ProductUnit;
 };
 
 /** Pallet con la marca de si ya tiene eventos de trazabilidad (la base impide eliminarlo). */
 export type PalletWithHistory = Pallet & { hasHistory: boolean };
 
-/** Mercadería disponible cuyo lote vence dentro de los próximos 90 días. */
+/** Días de cada nivel de alerta de vencimiento, configurables por empresa (TRZ-90). */
+export type ExpirationThresholds = {
+  criticalDays: number;
+  cautionDays: number;
+  upcomingDays: number;
+};
+
+/**
+ * Mercadería cuyo lote vence dentro del último nivel de alerta: un pallet en depósito
+ * o un lote informado por una distribuidora (TRZ-90).
+ */
 export type ExpirationAlert = {
-  palletId: string;
+  id: string;
+  source: "warehouse" | "distributor";
   productName: string;
   productSku: string;
   batchNumber: string;
   quantity: number;
-  unitOfMeasure: PalletUnit;
+  unitOfMeasure: ProductUnit;
+  /** Ubicación del pallet en depósito o nombre de la distribuidora. */
   currentLocation: string | null;
   expirationDate: string;
   daysRemaining: number;

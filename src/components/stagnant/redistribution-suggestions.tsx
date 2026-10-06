@@ -57,16 +57,8 @@ export function RedistributionSuggestions({
                       ))}
                     </ul>
                   </td>
-                  {suggestion.compatible ? (
-                    <>
-                      <td className="text-right font-mono">{NUMBER_FORMATTER.format(suggestion.suggestedQuantity ?? 0)} <span className="table-secondary">{suggestion.unitOfMeasure}</span></td>
-                      <td className="text-right font-mono font-semibold">{NUMBER_FORMATTER.format(suggestion.stockDaysAfter ?? 0)} días</td>
-                    </>
-                  ) : (
-                    <td colSpan={2} className="text-right text-stone-500">
-                      Sin cálculo
-                    </td>
-                  )}
+                  <td className="text-right font-mono">{NUMBER_FORMATTER.format(suggestion.suggestedQuantity)} <span className="table-secondary">{suggestion.unitOfMeasure}</span></td>
+                  <td className="text-right font-mono font-semibold">{NUMBER_FORMATTER.format(suggestion.stockDaysAfter)} días</td>
                 </tr>
               ))}
             </tbody>

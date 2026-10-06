@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { filterActiveDispatchDiscrepancies } from "@/lib/pallet-validation/discrepancies";
 import type {
   OrderDispatchDiscrepancy,
   OrderPalletValidation,
@@ -82,6 +83,7 @@ export async function getOrderPalletValidations(
 }
 
 type RawDispatchDiscrepancy = {
+  event_type: string;
   pallet_id: string | null;
   details: {
     type?: string;
@@ -90,18 +92,23 @@ type RawDispatchDiscrepancy = {
   created_at: string;
 };
 
+/** Discrepancias de despacho vigentes (ver filterActiveDispatchDiscrepancies). */
 export async function getOrderDispatchDiscrepancies(
   orderId: string,
 ): Promise<OrderDispatchDiscrepancy[]> {
   const supabase = await createClient();
 
-  const { data, error } = await supabase
-    .from("traceability_events")
-    .select("pallet_id, details, created_at")
-    .eq("order_id", orderId)
-    .eq("event_type", "dispatch_discrepancy")
-    .order("created_at", { ascending: true });
+  const [eventsResult, orderPalletsResult] = await Promise.all([
+    supabase
+      .from("traceability_events")
+      .select("event_type, pallet_id, details, created_at")
+      .eq("order_id", orderId)
+      .in("event_type", ["dispatch_discrepancy", "pallet_associated", "pallet_dissociated"])
+      .order("created_at", { ascending: true }),
+    supabase.from("order_pallets").select("pallet_id").eq("order_id", orderId),
+  ]);
 
+  const error = eventsResult.error ?? orderPalletsResult.error;
   if (error) {
     throw new Error(
       `No se pudieron leer las inconsistencias del despacho (${error.code}: ${error.message}).`,
@@ -109,10 +116,21 @@ export async function getOrderDispatchDiscrepancies(
     );
   }
 
-  return ((data ?? []) as RawDispatchDiscrepancy[]).map((row) => ({
-    palletId: row.pallet_id,
-    qrCode: row.details?.qr_code ?? "—",
-    type: row.details?.type ?? "unknown",
-    createdAt: row.created_at,
-  }));
+  const rows = (eventsResult.data ?? []) as RawDispatchDiscrepancy[];
+  const orderPalletIds = (orderPalletsResult.data ?? []).map((row) => row.pallet_id as string);
+
+  const discrepancies = rows
+    .filter((row) => row.event_type === "dispatch_discrepancy")
+    .map((row) => ({
+      palletId: row.pallet_id,
+      qrCode: row.details?.qr_code ?? "—",
+      type: row.details?.type ?? "unknown",
+      createdAt: row.created_at,
+    }));
+
+  const compositionChanges = rows
+    .filter((row) => row.event_type !== "dispatch_discrepancy")
+    .map((row) => ({ palletId: row.pallet_id, createdAt: row.created_at }));
+
+  return filterActiveDispatchDiscrepancies(discrepancies, orderPalletIds, compositionChanges);
 }

@@ -29,7 +29,7 @@ insert into users (id, company_id, name, email, role) values
   ('a1000000-0000-0000-0000-000000000002', 'a2000000-0000-0000-0000-000000000001', 'Operator', 'operator-a1@test.local', 'distributor_operator');
 insert into distributors (id, company_id, name) values ('a3000000-0000-0000-0000-000000000001', 'a2000000-0000-0000-0000-000000000001', 'Distributor A1');
 insert into distributor_users (distributor_id, user_id) values ('a3000000-0000-0000-0000-000000000001', 'a1000000-0000-0000-0000-000000000002');
-insert into products (id, company_id, sku, name) values ('a4000000-0000-0000-0000-000000000001', 'a2000000-0000-0000-0000-000000000001', 'SKU-A1', 'Product A1');
+insert into products (id, company_id, sku, name, unit_of_measure) values ('a4000000-0000-0000-0000-000000000001', 'a2000000-0000-0000-0000-000000000001', 'SKU-A1', 'Product A1', 'unidades');
 insert into batches (id, product_id, batch_number, quantity) values ('a5000000-0000-0000-0000-000000000001', 'a4000000-0000-0000-0000-000000000001', 'LOT-A1', 2);
 insert into pallets (id, company_id, batch_id, qr_code, status, current_location) values
   ('a6000000-0000-0000-0000-000000000001', 'a2000000-0000-0000-0000-000000000001', 'a5000000-0000-0000-0000-000000000001', 'PAL-A1-EXPECTED', 'in_transit', 'En tránsito'),

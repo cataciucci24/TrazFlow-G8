@@ -1,3 +1,4 @@
+import type { ProductUnit } from "@/lib/pallets/units";
 import { createClient } from "@/lib/supabase/server";
 import type { Pallet, PalletStatus } from "@/lib/types";
 import type {
@@ -10,6 +11,7 @@ import type {
 type RelatedProduct = {
   name: string;
   sku: string;
+  unit_of_measure: ProductUnit;
 };
 
 type RelatedBatch = {
@@ -23,7 +25,6 @@ type RawPalletRow = {
   status: PalletStatus;
   current_location: string | null;
   quantity: number | null;
-  unit_of_measure: Pallet["unitOfMeasure"];
   batches: RelatedBatch | RelatedBatch[] | null;
 };
 
@@ -53,7 +54,8 @@ function mapPallet(row: RawPalletRow): Pallet {
     productSku: product?.sku ?? "—",
     batchNumber: batch?.batch_number ?? "—",
     quantity: row.quantity,
-    unitOfMeasure: row.unit_of_measure,
+    // batches.product_id es obligatorio: el producto solo falta si la fila embebida no llegó.
+    unitOfMeasure: product?.unit_of_measure ?? "unidades",
   };
 }
 
@@ -77,7 +79,7 @@ export async function getPalletTraceability(
   const { data: palletData, error: palletError } = await supabase
     .from("pallets")
     .select(
-      "id, qr_code, status, current_location, quantity, unit_of_measure, batches ( batch_number, products ( name, sku ) )",
+      "id, qr_code, status, current_location, quantity, batches ( batch_number, products ( name, sku, unit_of_measure ) )",
     )
     .eq("qr_code", qrCode)
     .eq("company_id", companyId)
@@ -124,12 +126,12 @@ type RawLotRow = {
   product_id: string;
   product_name: string;
   product_sku: string;
+  product_unit_of_measure: ProductUnit;
   pallet_id: string | null;
   pallet_qr_code: string | null;
   pallet_status: PalletStatus | null;
   pallet_current_location: string | null;
   pallet_quantity: number | null;
-  pallet_unit_of_measure: Pallet["unitOfMeasure"];
   movement_id: string | null;
   movement_order_id: string | null;
   movement_origin_location: string | null;
@@ -185,7 +187,7 @@ export async function getLotTraceability(batchNumber: string): Promise<LotTracea
           productSku: row.product_sku,
           batchNumber: row.batch_number,
           quantity: row.pallet_quantity,
-          unitOfMeasure: row.pallet_unit_of_measure,
+          unitOfMeasure: row.product_unit_of_measure,
         },
         movements: [],
       };

@@ -17,19 +17,19 @@ export function AssignDistributorForm({ operator, distributors }: Props) {
   const needsWarning = changed && leavesDistributorUnattended(operator);
 
   return (
-    <form action={action} className="min-w-56 max-w-sm space-y-3 whitespace-normal">
+    <form action={action} className="min-w-72 max-w-sm space-y-3 whitespace-normal">
       <input type="hidden" name="userId" value={operator.userId} />
       <input type="hidden" name="distributorId" value={distributorId} />
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex items-center gap-2">
         <label htmlFor={`distributor-${operator.userId}`} className="sr-only">Distribuidor de {operator.name}</label>
-        <select id={`distributor-${operator.userId}`} className="form-control" value={distributorId} disabled={pending || confirming}
+        <select id={`distributor-${operator.userId}`} className="form-control form-control-sm" value={distributorId} disabled={pending || confirming}
           onChange={(event) => setDistributorId(event.target.value)}>
           <option value="">Elegí un distribuidor</option>
           {distributors.map((distributor) => <option key={distributor.id} value={distributor.id}>{distributor.name}</option>)}
         </select>
         {!confirming && (needsWarning
-          ? <button type="button" className="button-primary" disabled={!changed} onClick={() => setConfirming(true)}>Guardar</button>
-          : <button className="button-primary" disabled={!changed || pending}>{pending ? "Guardando…" : "Guardar"}</button>)}
+          ? <button type="button" className="button-primary button-sm shrink-0 whitespace-nowrap" disabled={!changed} onClick={() => setConfirming(true)}>Guardar</button>
+          : <button className="button-primary button-sm shrink-0 whitespace-nowrap" disabled={!changed || pending}>{pending ? "Guardando…" : "Guardar"}</button>)}
       </div>
       {confirming && (
         <div className="feedback feedback-warning space-y-3">
@@ -38,8 +38,8 @@ export function AssignDistributorForm({ operator, distributors }: Props) {
             tránsito y quedará sin operadores para recibirlas. ¿Reasignar igual?
           </p>
           <div className="flex flex-wrap gap-2">
-            <button className="button-primary" disabled={pending}>{pending ? "Guardando…" : "Reasignar igual"}</button>
-            <button type="button" className="button-secondary" disabled={pending} onClick={() => setConfirming(false)}>Cancelar</button>
+            <button className="button-primary button-sm" disabled={pending}>{pending ? "Guardando…" : "Reasignar igual"}</button>
+            <button type="button" className="button-secondary button-sm" disabled={pending} onClick={() => setConfirming(false)}>Cancelar</button>
           </div>
         </div>
       )}

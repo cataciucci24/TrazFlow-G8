@@ -31,10 +31,10 @@ values
   ('13000000-0000-0000-0000-000000000002', '23000000-0000-0000-0000-000000000001', 'Operator US13', 'operator-us13@test.local', 'warehouse_operator'),
   ('13000000-0000-0000-0000-000000000003', '23000000-0000-0000-0000-000000000002', 'Other Manager US13', 'manager-other-us13@test.local', 'logistics_manager');
 
-insert into products (id, company_id, sku, name)
+insert into products (id, company_id, sku, name, unit_of_measure)
 values
-  ('43000000-0000-0000-0000-000000000001', '23000000-0000-0000-0000-000000000001', 'SKU-US13-A', 'Producto US13 A'),
-  ('43000000-0000-0000-0000-000000000002', '23000000-0000-0000-0000-000000000002', 'SKU-US13-B', 'Producto US13 B (otra empresa)');
+  ('43000000-0000-0000-0000-000000000001', '23000000-0000-0000-0000-000000000001', 'SKU-US13-A', 'Producto US13 A', 'cajas'),
+  ('43000000-0000-0000-0000-000000000002', '23000000-0000-0000-0000-000000000002', 'SKU-US13-B', 'Producto US13 B (otra empresa)', 'unidades');
 
 insert into batches (id, product_id, batch_number, expiration_date, quantity)
 values
@@ -43,11 +43,11 @@ values
 
 -- Dos pallets del mismo lote (uno con movements, otro sin) + un pallet de otra
 -- empresa con el mismo batch_number, para probar que no se mezclan.
-insert into pallets (id, company_id, batch_id, qr_code, status, current_location, quantity, unit_of_measure)
+insert into pallets (id, company_id, batch_id, qr_code, status, current_location, quantity)
 values
-  ('63000000-0000-0000-0000-000000000001', '23000000-0000-0000-0000-000000000001', '53000000-0000-0000-0000-000000000001', 'PAL-US13-A1', 'in_transit', 'En tránsito', 10, 'cajas'),
-  ('63000000-0000-0000-0000-000000000002', '23000000-0000-0000-0000-000000000001', '53000000-0000-0000-0000-000000000001', 'PAL-US13-A2', 'in_warehouse', 'Depósito Central', 5, 'cajas'),
-  ('63000000-0000-0000-0000-000000000003', '23000000-0000-0000-0000-000000000002', '53000000-0000-0000-0000-000000000002', 'PAL-US13-B1', 'in_warehouse', 'Depósito Ajeno', 20, 'unidades');
+  ('63000000-0000-0000-0000-000000000001', '23000000-0000-0000-0000-000000000001', '53000000-0000-0000-0000-000000000001', 'PAL-US13-A1', 'in_transit', 'En tránsito', 10),
+  ('63000000-0000-0000-0000-000000000002', '23000000-0000-0000-0000-000000000001', '53000000-0000-0000-0000-000000000001', 'PAL-US13-A2', 'in_warehouse', 'Depósito Central', 5),
+  ('63000000-0000-0000-0000-000000000003', '23000000-0000-0000-0000-000000000002', '53000000-0000-0000-0000-000000000002', 'PAL-US13-B1', 'in_warehouse', 'Depósito Ajeno', 20);
 
 -- Fuera de orden cronológico, para verificar el ORDER BY del RPC.
 insert into movements (id, pallet_id, order_id, origin_location, destination_location, resulting_status, user_id, created_at)
@@ -85,6 +85,16 @@ select pg_temp.assert_true(
     where pallet_qr_code = 'PAL-US13-A2' and movement_id is null
   ),
   'un pallet del lote sin movements debe seguir siendo visible'
+);
+
+-- La unidad de cada pallet es la de su producto.
+select pg_temp.assert_true(
+  (
+    select bool_and(product_unit_of_measure = 'cajas')
+    from get_lot_traceability('LOT-US13-SHARED')
+    where batch_id = '53000000-0000-0000-0000-000000000001'
+  ),
+  'la unidad debe salir del producto'
 );
 
 -- No mezcla el lote de otra empresa aunque comparta batch_number.

@@ -15,7 +15,6 @@ function pallet(overrides: Partial<StagnantPalletInput> = {}): StagnantPalletInp
     productName: "Yerba",
     productSku: "YER-1",
     quantity: 50,
-    unitOfMeasure: "unidades",
     daysWithoutMovement: 40,
     ...overrides,
   };
@@ -38,11 +37,11 @@ function coverage(overrides: Partial<DistributorCoverageInput> = {}): Distributo
   };
 }
 
-test("sugiere el pallet cuando hay faltante del mismo producto y la misma unidad", () => {
+test("sugiere el pallet cuando hay faltante del mismo producto", () => {
   const [suggestion] = suggestRedistributions([pallet()], [coverage()]);
 
-  assert.equal(suggestion.compatible, true);
   assert.equal(suggestion.distributorName, "Norte");
+  assert.equal(suggestion.unitOfMeasure, "unidades");
   assert.equal(suggestion.suggestedQuantity, 50);
   assert.deepEqual(suggestion.pallets.map((item) => item.id), ["p1"]);
   // (100 + 50) / 20 = 7,5 días
@@ -111,34 +110,19 @@ test("usa primero los pallets más antiguos y corta al cubrir lo necesario", () 
   assert.equal(suggestion.suggestedQuantity, 400);
 });
 
-test("marca como no compatible si la unidad del pallet difiere del stock", () => {
-  const boxes = pallet({ unitOfMeasure: "cajas", quantity: 10 });
-
-  const [suggestion] = suggestRedistributions([boxes], [coverage()]);
-
-  assert.equal(suggestion.compatible, false);
-  assert.equal(suggestion.suggestedQuantity, null);
-  assert.equal(suggestion.stockDaysAfter, null);
-  assert.deepEqual(suggestion.pallets.map((item) => item.id), ["p1"]);
+test("no sugiere pallets sin cantidad definida", () => {
+  const undefinedQuantity = pallet({ quantity: null });
+  assert.deepEqual(suggestRedistributions([undefinedQuantity], [coverage()]), []);
 });
 
-test("un pallet sin cantidad definida no cuenta como compatible", () => {
-  const undefinedQuantity = pallet({ quantity: null, unitOfMeasure: null });
-
-  const [suggestion] = suggestRedistributions([undefinedQuantity], [coverage()]);
-
-  assert.equal(suggestion.compatible, false);
-  assert.equal(suggestion.suggestedQuantity, null);
-});
-
-test("prefiere los pallets compatibles y descarta los de otra unidad", () => {
+test("salta los pallets sin cantidad y usa los cuantificados", () => {
   const pallets = [
-    pallet({ id: "cajas", unitOfMeasure: "cajas", quantity: 10, daysWithoutMovement: 90 }),
-    pallet({ id: "unidades", quantity: 50 }),
+    pallet({ id: "sin-cantidad", quantity: null, daysWithoutMovement: 90 }),
+    pallet({ id: "con-cantidad", quantity: 50 }),
   ];
 
   const [suggestion] = suggestRedistributions(pallets, [coverage()]);
 
-  assert.equal(suggestion.compatible, true);
-  assert.deepEqual(suggestion.pallets.map((item) => item.id), ["unidades"]);
+  assert.deepEqual(suggestion.pallets.map((item) => item.id), ["con-cantidad"]);
+  assert.equal(suggestion.suggestedQuantity, 50);
 });

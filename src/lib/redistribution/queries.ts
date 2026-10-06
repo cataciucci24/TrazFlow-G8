@@ -1,18 +1,18 @@
-import type { PalletUnit } from "@/lib/pallets/units";
+import type { ProductUnit } from "@/lib/pallets/units";
 import type { StalePallet } from "@/lib/pallets/queries";
 import { suggestRedistributions } from "@/lib/redistribution/suggest";
 import type { DistributorCoverageInput, RedistributionSuggestion } from "@/lib/redistribution/suggest";
 import { calculateStockDays, getStockRiskLevel } from "@/lib/stock-alerts/queries";
 import { createClient } from "@/lib/supabase/server";
 
-type RelatedRecord = { name: string; sku?: string } | { name: string; sku?: string }[] | null;
+type RelatedRecord = { name: string } | { name: string }[] | null;
+type RelatedProduct = { name: string; sku: string; unit_of_measure: ProductUnit } | { name: string; sku: string; unit_of_measure: ProductUnit }[] | null;
 
 type RawCoverageRow = {
   current_stock: number;
   daily_consumption: number;
-  unit_of_measure: PalletUnit;
   distributors: RelatedRecord;
-  products: RelatedRecord;
+  products: RelatedProduct;
 };
 
 export type RedistributionSuggestionsResult = {
@@ -28,7 +28,7 @@ export async function getRedistributionSuggestions(
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("distributor_product_stocks")
-    .select("current_stock, daily_consumption, unit_of_measure, distributors ( name ), products ( name, sku )")
+    .select("current_stock, daily_consumption, distributors ( name ), products ( name, sku, unit_of_measure )")
     .eq("company_id", companyId);
 
   if (error) {
@@ -51,7 +51,7 @@ export async function getRedistributionSuggestions(
       productSku: product?.sku ?? "—",
       currentStock: row.current_stock,
       dailyConsumption: row.daily_consumption,
-      unitOfMeasure: row.unit_of_measure,
+      unitOfMeasure: product?.unit_of_measure ?? "unidades",
       stockDays,
       riskLevel: getStockRiskLevel(stockDays),
     };

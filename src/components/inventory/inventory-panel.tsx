@@ -3,18 +3,11 @@
 import { useState } from "react";
 import { PALLET_STATUS_LABELS } from "@/lib/pallets/labels";
 import type { Pallet } from "@/lib/types";
-import { PALLET_UNITS } from "@/lib/pallets/units";
-import { FilterPanel, CompactSummaryCard, EmptyState, PalletStatusBadge, SectionHeader, TableShell } from "@/components/ui/design-system";
-
-const formatQuantity = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 20 });
-
+import { FilterPanel, EmptyState, SectionHeader } from "@/components/ui/design-system";
+import { groupByLocation, locationLabel, locationOf, LocationStockCard, LocationStockTable } from "@/components/inventory/location-stock";
 
 function normalize(value: string) {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es-AR");
-}
-
-function locationOf(pallet: Pallet) {
-  return pallet.currentLocation?.trim() || null;
 }
 
 export function InventoryPanel({ pallets, initialSearch = "" }: { pallets: Pallet[]; initialSearch?: string }) {
@@ -30,14 +23,9 @@ export function InventoryPanel({ pallets, initialSearch = "" }: { pallets: Palle
     (!query || [pallet.productName, pallet.productSku, pallet.batchNumber, pallet.qrCode]
       .some((value) => normalize(value).includes(query))),
   );
-  const groups = new Map<string | null, Pallet[]>();
-  for (const pallet of visiblePallets) {
-    const key = locationOf(pallet);
-    const group = groups.get(key);
-    if (group) group.push(pallet);
-    else groups.set(key, [pallet]);
-  }
   const hasFilters = Boolean(search || location || status);
+  // Sin filtros: una tarjeta por ubicación con acceso a su página. Con filtros: tablas con lo que cumple.
+  const groups = groupByLocation(visiblePallets);
 
   function clearFilters() {
     setSearch("");
@@ -75,11 +63,6 @@ export function InventoryPanel({ pallets, initialSearch = "" }: { pallets: Palle
         </label>
       </FilterPanel>
 
-      <section aria-label="Resumen de stock" className="grid gap-4 sm:grid-cols-2">
-        <CompactSummaryCard label="Total de pallets" value={pallets.length} tone="brand" />
-        <CompactSummaryCard label="Ubicaciones registradas" value={locations.filter((value) => value !== null).length} tone="sky" />
-      </section>
-
       <section className="section-stack" aria-labelledby="stock-list-title">
         <SectionHeader
           id="stock-list-title"
@@ -96,62 +79,16 @@ export function InventoryPanel({ pallets, initialSearch = "" }: { pallets: Palle
             action={pallets.length > 0 && hasFilters ? <button type="button" onClick={clearFilters} className="button-secondary">Limpiar filtros</button> : undefined}
           />
         </div>
-        ) : locations.filter((value) => groups.has(value)).map((value) => {
-        const group = groups.get(value)!;
-        const defined = group.filter((pallet) => pallet.quantity !== null && pallet.unitOfMeasure !== null);
-        const undefinedCount = group.length - defined.length;
-        const positiveTotals = PALLET_UNITS.map((unit) => {
-          const matching = defined.filter((pallet) => pallet.unitOfMeasure === unit);
-          const total = matching.reduce((sum, pallet) => sum + pallet.quantity!, 0);
-          return { unit, total };
-        }).filter(({ total }) => total > 0);
-        const label = value ?? "Sin ubicación registrada";
-        return (
-          <section key={JSON.stringify(value)} aria-label={`Pallets: ${label}`} className="section-stack [&_.section-title]:break-words">
-            <SectionHeader title={label} description={`${group.length} ${group.length === 1 ? "pallet" : "pallets"} en esta ubicación.`} />
-            <div className="surface overflow-hidden">
-            <div className="space-y-2 border-b border-stone-200 px-5 py-4 text-sm">
-              <p className="font-semibold">Total de mercadería{hasFilters ? " (según filtros)" : ""}</p>
-              {positiveTotals.length > 0 ? (
-                <ul className="flex flex-wrap gap-x-6 gap-y-2">
-                  {positiveTotals.map(({ unit, total }) => (
-                    <li key={unit}>{formatQuantity.format(total)} {unit}</li>
-                  ))}
-                </ul>
-              ) : <p className="text-stone-500">Stock aún no cuantificado</p>}
-              {undefinedCount > 0 && <p className="text-amber-800">{undefinedCount} {undefinedCount === 1 ? "pallet" : "pallets"} sin cantidad</p>}
-            </div>
-            <TableShell label={`Detalle de stock: ${label}`} className="table-embedded">
-              <table className="data-table min-w-[640px]">
-                <caption className="sr-only">Pallets en {label}</caption>
-                <thead>
-                  <tr>
-                    {["Código QR", "Producto", "SKU", "Lote", "Cantidad", "Estado", "Ubicación"].map((heading) => (
-                      <th key={heading} scope="col" className={["SKU", "Lote"].includes(heading) ? "table-secondary-column" : heading === "Cantidad" ? "text-right" : undefined}>{heading}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-stone-200">
-                  {group.map((pallet) => (
-                    <tr key={pallet.id}>
-                      <td className="max-w-64 break-words font-mono font-bold">{pallet.qrCode}</td>
-                      <td className="max-w-64 break-words font-medium">{pallet.productName}<span className="table-secondary block md:hidden">SKU {pallet.productSku} · Lote {pallet.batchNumber}</span></td>
-                      <td className="table-secondary-column max-w-48 break-words font-mono text-slate-600">{pallet.productSku}</td>
-                      <td className="table-secondary-column max-w-48 break-words font-mono text-slate-600">{pallet.batchNumber}</td>
-                      <td className="text-right tabular-nums">{pallet.quantity === null || pallet.unitOfMeasure === null ? "Sin definir" : `${formatQuantity.format(pallet.quantity)} ${pallet.unitOfMeasure}`}</td>
-                      <td>
-                        <PalletStatusBadge status={pallet.status} />
-                      </td>
-                      <td className="max-w-64 break-words text-slate-500">{locationOf(pallet) ?? "Sin ubicación registrada"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </TableShell>
-            </div>
+        ) : hasFilters ? groups.map(([value, group]) => (
+          <section key={JSON.stringify(value)} aria-label={`Pallets: ${locationLabel(value)}`} className="section-stack [&_.section-title]:break-words">
+            <SectionHeader title={locationLabel(value)} description={`${group.length} ${group.length === 1 ? "pallet" : "pallets"} en esta ubicación.`} />
+            <LocationStockTable location={value} pallets={group} filtered />
           </section>
-        );
-        })}
+        )) : (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {groups.map(([value, group]) => <LocationStockCard key={JSON.stringify(value)} location={value} pallets={group} />)}
+          </div>
+        )}
       </section>
     </div>
   );

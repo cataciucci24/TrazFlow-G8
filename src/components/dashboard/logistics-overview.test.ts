@@ -15,7 +15,7 @@ const require = createRequire(import.meta.url);
 const ts = require("typescript");
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const expiration: ExpirationAlert = {
-  palletId: "p1", productName: "Producto próximo", productSku: "SKU-1", batchNumber: "LOTE / 1",
+  id: "p1", source: "warehouse", productName: "Producto próximo", productSku: "SKU-1", batchNumber: "LOTE / 1",
   quantity: 20, unitOfMeasure: "cajas", currentLocation: "Depósito central",
   expirationDate: "2026-12-01", daysRemaining: 60, urgency: "warning",
 };
@@ -81,7 +81,7 @@ function render(expirationAlerts: ExpirationAlert[], stockData: StockAlertsResul
 }
 
 test("prioriza alertas críticas y limita el resumen a cinco sin perder los totales", () => {
-  const html = render(Array.from({ length: 6 }, (_, index) => ({ ...expiration, palletId: `p-${index}`, productName: `Próximo ${index}` })), { alerts: [stock], inventorySourceAvailable: true });
+  const html = render(Array.from({ length: 6 }, (_, index) => ({ ...expiration, id: `p-${index}`, productName: `Próximo ${index}` })), { alerts: [stock], inventorySourceAvailable: true });
   assert.ok(html.indexOf("Producto crítico") < html.indexOf("Próximo 0"));
   assert.equal((html.match(/<li /g) ?? []).length, 5);
   assert.match(html, /Mostrando 5 de 7 alertas/);
