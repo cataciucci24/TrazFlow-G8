@@ -2,7 +2,8 @@
 
 > Estado: **diseño aprobado** (no hay código implementado). Desbloquea US-C2, US-C3 y US-C4.
 > ERP de referencia para la demo: **Odoo 19** (Community, instalable localmente).
-> Las decisiones tomadas están registradas en la [§6](#6-decisiones-tomadas).
+> Las decisiones tomadas están registradas en la [§6](#6-decisiones-tomadas); lo que falta definir, en la
+> [§8](#8-a-definir).
 
 ## 0. Principio rector
 
@@ -32,7 +33,7 @@ La integración es **opcional por empresa**: si la empresa no tiene un ERP conec
 | 2 | ERP → TrazFlow | **Lotes con vencimientos y alertas** | Sincronización | `stock.lot` (`expiration_date`, `alert_date`, `removal_date`, `product_expiry_alert`) | Programada |
 | 3 | ERP → TrazFlow | **Stock actual** por producto/lote/paquete/ubicación | Sincronización | `stock.quant` (lectura) | Programada |
 | 4 | TrazFlow → ERP | **Pallet armado** (`pallet.packed`) | Insert en `pallets` | Transferencia interna que mete stock suelto del lote en un `stock.package` (= QR) | Por evento |
-| 5 | TrazFlow → ERP | **Pallet ajustado** (`pallet.adjusted`) | Update de cantidad/lote/unidad de un pallet en depósito | Transferencia interna que reacomoda la diferencia entre el paquete y el stock suelto | Por evento |
+| 5 | TrazFlow → ERP | **Pallet ajustado** (`pallet.adjusted`) | Update de cantidad o lote de un pallet en depósito | Transferencia interna que reacomoda la diferencia entre el paquete y el stock suelto | Por evento |
 | 6 | TrazFlow → ERP | **Pallet desarmado** (`pallet.unpacked`) | Delete de un pallet en depósito | Transferencia interna que vacía el paquete al stock suelto | Por evento |
 | 7 | TrazFlow → ERP | **Consumo de lote / salida física** (`dispatch.confirmed`) | RPC `confirm_dispatch_order` | `stock.picking` de entrega con una línea por pallet validado | Por evento |
 | — | Fuera de alcance | Recepción en distribuidor (`receive_order_pallet`) | — | La mercadería ya salió del stock de la empresa (ver §3.4) | — |
@@ -115,17 +116,17 @@ así que todo el circuito queda dentro de Supabase.
 
 | Qué | Dónde | Cambio con ERP conectado |
 |---|---|---|
-| Upsert de producto por SKU | [src/lib/pallets/actions.ts:47-51](../src/lib/pallets/actions.ts#L47-L51) y [:99-103](../src/lib/pallets/actions.ts#L99-L103) | El producto se elige con un **selector alimentado por `erp_products`**; la fila local de `products` se crea o actualiza desde el espejo. Sin ERP, sigue el alta manual. |
+| Alta de producto por SKU (`resolveProduct` en `src/lib/pallets/actions.ts`) | Usado por `createLot`, `createPallet` y `updatePallet` | El producto se elige con un **selector alimentado por `erp_products`**; la fila local de `products` se crea o actualiza desde el espejo, **incluida su unidad** (`products.unit_of_measure` ← `erp_products.uom`, ver §4.4). Sin ERP, sigue el alta manual: la unidad se elige una sola vez al crear el SKU. |
 | Insert de lote (`createLot`) | [src/lib/pallets/actions.ts:56-61](../src/lib/pallets/actions.ts#L56-L61) | **No se usa**: los lotes los da de alta el ERP. La fila local de `batches` se crea desde `erp_lot_snapshots` (con su `expiration_date`). Sin ERP, sigue el alta manual. |
 | Insert de pallet (`createPallet`) | [src/lib/pallets/actions.ts:114-120](../src/lib/pallets/actions.ts#L114-L120) | Se elige un lote del ERP y se muestra el stock suelto disponible (`erp_unpacked_stock`, §3.3) como referencia. Encola **`pallet.packed`**. |
-| Edición de pallet (`updatePallet`) | [src/lib/pallets/actions.ts:180-184](../src/lib/pallets/actions.ts#L180-L184) | Si cambia `quantity`, `unit_of_measure` o `batch_id`, encola **`pallet.adjusted`**. Cambiar solo `current_location` no genera evento (es dato propio de TrazFlow). |
+| Edición de pallet (`updatePallet`) | [src/lib/pallets/actions.ts:180-184](../src/lib/pallets/actions.ts#L180-L184) | Si cambia `quantity` o `batch_id` (que incluye cambiar de producto), encola **`pallet.adjusted`**. El pallet no tiene unidad propia: usa la del producto. Cambiar solo `current_location` no genera evento (es dato propio de TrazFlow). |
 | Baja de pallet (`deletePallet`) | [src/lib/pallets/actions.ts:213-218](../src/lib/pallets/actions.ts#L213-L218) | Solo pallets `in_warehouse` (ya era así). Encola **`pallet.unpacked`**. |
-| Tablas | [supabase/migrations/0001_init_schema.sql:115-139](../supabase/migrations/0001_init_schema.sql#L115-L139) | `batches` y `pallets`. Cantidad del pallet en [20260918000100_add_pallet_quantity.sql](../supabase/migrations/20260918000100_add_pallet_quantity.sql). |
+| Tablas | [supabase/migrations/0001_init_schema.sql:115-139](../supabase/migrations/0001_init_schema.sql#L115-L139) | `batches` y `pallets`. Cantidad del pallet en [20260918000100_add_pallet_quantity.sql](../supabase/migrations/20260918000100_add_pallet_quantity.sql). Unidad de medida en `products` (migración `20261006140000_product_unit_of_measure.sql`, rama `fix/usabilidad`): pallets y stock de distribuidoras ya no guardan unidad. |
 
 **Propuesta de enganche:** triggers sobre `pallets` que escriben en `erp_outbox`:
 
 - `AFTER INSERT` → `pallet.packed`.
-- `AFTER UPDATE OF batch_id, quantity, unit_of_measure`, solo si `old.status = 'in_warehouse'` y algún valor
+- `AFTER UPDATE OF batch_id, quantity`, solo si `old.status = 'in_warehouse'` y algún valor
   cambió → `pallet.adjusted` (con valores anteriores y nuevos). La lista de columnas importa: los RPCs de despacho
   y recepción actualizan `status` y `current_location`, y eso **no** debe disparar ajustes.
 - `AFTER DELETE` → `pallet.unpacked` (con el QR en el payload, porque la fila ya no existe).
@@ -139,7 +140,7 @@ Supabase (cualquier camino futuro queda cubierto) y el evento se guarda en la mi
 |---|---|---|
 | `validate_order_pallet` (versión vigente) | [supabase/migrations/20260901035906_persist_dispatch_discrepancies.sql:102-125](../supabase/migrations/20260901035906_persist_dispatch_discrepancies.sql#L102-L125) | Marca el pallet como validado por escaneo. **No reporta al ERP**: validar no es mover stock. El dato que deja (`order_pallets.validated_at`) es el que se usa al confirmar. |
 | Discrepancia de despacho (`wrong_order`) | mismo archivo, [:62-86](../supabase/migrations/20260901035906_persist_dispatch_discrepancies.sql#L62-L86) | Informativo; opcional enviarlo como nota (`message_post`) en la transferencia. No mueve stock. |
-| `confirm_dispatch_order` | [supabase/migrations/20260901120000_confirm_dispatch_order.sql:119-148](../supabase/migrations/20260901120000_confirm_dispatch_order.sql#L119-L148) | **Enganche del evento `dispatch.confirmed`.** Después del insert del evento `dispatch_confirmed` (línea 148) y antes del `return` (línea 150), encolar un evento con el detalle de cada pallet esperado y validado (QR, lote, SKU, cantidad, unidad). |
+| `confirm_dispatch_order` | [supabase/migrations/20260901120000_confirm_dispatch_order.sql:119-148](../supabase/migrations/20260901120000_confirm_dispatch_order.sql#L119-L148) | **Enganche del evento `dispatch.confirmed`.** Después del insert del evento `dispatch_confirmed` (línea 148) y antes del `return` (línea 150), encolar un evento con el detalle de cada pallet esperado y validado (QR, lote, SKU, cantidad y la unidad de su producto). |
 | Llamadas desde la app | [src/lib/orders/actions.ts:302](../src/lib/orders/actions.ts#L302), [src/lib/pallet-validation/actions.ts:54](../src/lib/pallet-validation/actions.ts#L54) | No cambian: la integración queda del lado de la base + Edge Function. |
 
 `confirm_dispatch_order` es `security invoker` y corre como `warehouse_operator`. Para que ese rol no tenga
@@ -150,7 +151,7 @@ escritura directa sobre `erp_outbox`, el insert se hace con una función `enqueu
 
 | Qué | Dónde | Problema actual / cambio |
 |---|---|---|
-| `getCompanyProducts` | [src/lib/pallets/queries.ts:202](../src/lib/pallets/queries.ts#L202) | Con ERP conectado, alimenta el selector desde `erp_products`. |
+| `getCompanyProducts` | [src/lib/pallets/queries.ts:202](../src/lib/pallets/queries.ts#L202) | Con ERP conectado, alimenta el selector desde `erp_products` (SKU, nombre y unidad). |
 | `getExpirationAlerts` | [src/lib/pallets/queries.ts:256-296](../src/lib/pallets/queries.ts#L256-L296) | **Duplica lógica del ERP**: calcula umbrales propios (≤30 crítico, ≤60 advertencia, ≤90 próximo) sobre `batches.expiration_date`. Con ERP conectado, lee `erp_expiration_alerts`. |
 | Consumidores de alertas | [src/app/dashboard/alerts/page.tsx:21-22](../src/app/dashboard/alerts/page.tsx#L21-L22), [src/app/dashboard/page.tsx:72](../src/app/dashboard/page.tsx#L72) | Pasan a leer la vista nueva cuando hay ERP. |
 | `getDistributorStockAlerts` | [src/lib/stock-alerts/queries.ts:34](../src/lib/stock-alerts/queries.ts#L34) | **No se toca**: es stock informado por las distribuidoras (que no están en el ERP de la empresa). Es dato propio de TrazFlow. |
@@ -164,7 +165,7 @@ create table erp_products (
   erp_product_id    bigint not null,
   sku               text not null,        -- product.product.default_code
   name              text not null,
-  uom               text not null,        -- uom_id (nombre)
+  uom               text not null,        -- uom_id (nombre); se traduce a products.unit_of_measure (§4.4)
   tracking          text not null,        -- 'lot' esperado
   synced_at         timestamptz not null,
   primary key (company_id, erp_product_id),
@@ -197,7 +198,7 @@ create table erp_stock_snapshots (
   location_name     text not null,
   quantity          numeric not null,
   reserved_quantity numeric not null,
-  uom               text not null,
+  uom               text not null,        -- en Odoo es siempre la uom_id del producto
   synced_at         timestamptz not null,
   primary key (company_id, erp_quant_id)
 );
@@ -214,7 +215,7 @@ group by company_id, product_sku, lot_name, location_name, uom;
 create view erp_expiration_alerts as
 select l.company_id, l.product_sku, l.lot_name, l.expiration_date, l.alert_date,
        case when l.is_expired then 'expired' else 'alert' end as erp_status,
-       p.id as pallet_id, p.qr_code, p.current_location, p.quantity, p.unit_of_measure
+       p.id as pallet_id, p.qr_code, p.current_location, p.quantity, pr.unit_of_measure
 from erp_lot_snapshots l
 join products pr on pr.company_id = l.company_id and pr.sku = l.product_sku
 join batches  b  on b.product_id = pr.id and b.batch_number = l.lot_name
@@ -317,9 +318,9 @@ Evento canónico (independiente del ERP):
   "event_type": "pallet.packed",
   "occurred_at": "2026-10-02T13:10:00Z",
   "company_id": "c1…",
-  "pallet": { "local_id": "e9…", "qr_code": "PAL-3f1d…", "quantity": 48, "unit_of_measure": "cajas" },
+  "pallet": { "local_id": "e9…", "qr_code": "PAL-3f1d…", "quantity": 48 },
   "lot": { "number": "L-2026-0915" },
-  "product": { "sku": "ACE-500" }
+  "product": { "sku": "ACE-500", "unit_of_measure": "cajas" }
 }
 ```
 
@@ -353,8 +354,9 @@ En Odoo:
    evento queda en `needs_attention`.
 5. Guardar `erp_external_refs(pallet, e9…, stock.package, 90)`.
 
-Mapeo de unidades (`pallets.unit_of_measure` → `uom.uom`): `unidades` → *Units*, `kilogramos` → *kg*,
-`cajas` → unidad creada en Odoo (p. ej. "Caja"); los ids están en `erp_connections.config`.
+`quantity` está en la unidad del producto (`products.unit_of_measure`), que es la misma que su `uom_id` en Odoo
+(§4.4). Por eso `product_uom` / `product_uom_id` de la transferencia es directamente la `uom_id` del producto y no hay
+conversión.
 
 #### b) `pallet.adjusted` (edición de un pallet ya armado)
 
@@ -365,8 +367,8 @@ Mapeo de unidades (`pallets.unit_of_measure` → `uom.uom`): `unidades` → *Uni
   "occurred_at": "2026-10-02T13:25:00Z",
   "company_id": "c1…",
   "pallet": { "local_id": "e9…", "qr_code": "PAL-3f1d…" },
-  "before": { "lot_number": "L-2026-0915", "product_sku": "ACE-500", "quantity": 48, "unit_of_measure": "cajas" },
-  "after":  { "lot_number": "L-2026-0915", "product_sku": "ACE-500", "quantity": 45, "unit_of_measure": "cajas" }
+  "before": { "lot_number": "L-2026-0915", "product_sku": "ACE-500", "quantity": 48 },
+  "after":  { "lot_number": "L-2026-0915", "product_sku": "ACE-500", "quantity": 45 }
 }
 ```
 
@@ -376,7 +378,7 @@ En Odoo, siempre como **transferencia interna** en WH/Stock (mismo esquema que e
 |---|---|
 | Aumenta la cantidad | `quantity` = diferencia, `package_id: false` → `result_package_id: <paquete>` (entra stock suelto al pallet) |
 | Disminuye la cantidad | `quantity` = diferencia, `package_id: <paquete>` → `result_package_id: false` (sale del pallet al stock suelto) |
-| Cambia el lote, el producto o la unidad | Dos líneas: vaciar el paquete con los valores de `before` y volver a llenarlo con los de `after` |
+| Cambia el lote o el producto | Dos líneas: vaciar el paquete con los valores de `before` y volver a llenarlo con los de `after`, cada una en la unidad de su producto |
 
 Es un **reacomodo**, no un ajuste de inventario: el total del lote en el ERP no cambia. Si la edición refleja una
 diferencia real de conteo (mercadería perdida, rota), ese ajuste de inventario lo registra el ERP, no TrazFlow.
@@ -424,6 +426,9 @@ En Odoo: un `stock.picking` de salida (`picking_type_id` = WH: Entregas, `locati
 indicando **`lot_id`** y **`package_id` = `result_package_id`** del pallet escaneado (sale el paquete completo);
 luego `button_validate` con `skip_backorder`.
 
+`unit_of_measure` de cada pallet es la de su producto; se incluye para que el evento canónico sea legible sin
+consultar el maestro.
+
 Esto es lo que TrazFlow aporta al ERP: **qué lote y qué pallet salieron físicamente**, no los que el ERP habría
 sugerido por FIFO/FEFO. Si difieren, Odoo registra la salida real y la diferencia queda auditada.
 
@@ -445,6 +450,9 @@ Formato canónico en `erp_products`:
 ```json
 { "erp_product_id": 17, "sku": "ACE-500", "name": "Aceite 500ml", "uom": "Caja", "tracking": "lot" }
 ```
+
+Al crear o actualizar la fila local de `products`, `uom` se traduce a `products.unit_of_measure` con el mapeo de
+§4.4. Si la unidad no tiene mapeo, o si cambió respecto de la que ya tenía el producto, ver §8.
 
 #### b) Lotes, vencimientos y alertas
 
@@ -502,12 +510,32 @@ parsea):
   "location_name": "WH/Stock", "quantity": 48, "reserved_quantity": 0, "uom": "Caja" }
 ```
 
-### 4.4 Configuración mínima de Odoo para la demo
+### 4.4 Unidad de medida
+
+En TrazFlow la unidad es un dato **del producto** (`products.unit_of_measure`: `unidades`, `cajas` o
+`kilogramos`). Pallets, stock de distribuidoras y eventos se expresan en esa unidad; solo `kilogramos` admite
+decimales. TrazFlow **no** guarda factores de conversión ni jerarquía de empaque (1 caja = 12 unidades): eso es dato
+maestro del ERP.
+
+Con ERP conectado, la unidad del producto es la `uom_id` de `product.product` y se traduce así (los ids de Odoo van en
+`erp_connections.config`):
+
+| `products.unit_of_measure` | `uom.uom` en Odoo |
+|---|---|
+| `unidades` | *Units* |
+| `kilogramos` | *kg* |
+| `cajas` | unidad creada en Odoo (p. ej. "Caja") |
+
+Como en Odoo los quants y los movimientos del producto usan su `uom_id`, las cantidades de TrazFlow y las del ERP
+están en la misma unidad y no hace falta convertir al enviar eventos ni al leer stock.
+
+### 4.5 Configuración mínima de Odoo para la demo
 
 - Odoo 19 Community (imagen Docker oficial `odoo:19` + Postgres), app **Inventario**.
 - Ajustes de Inventario: **Lotes y números de serie**, **Fechas de vencimiento**, **Paquetes** y
   **Ubicaciones de almacenamiento** (habilita el tipo de operación de transferencias internas).
-- Productos: `is_storable = true`, `tracking = "lot"`, `use_expiration_date = true`, con `alert_time` configurado.
+- Productos: `is_storable = true`, `tracking = "lot"`, `use_expiration_date = true`, con `alert_time` configurado y
+  `uom_id` en una de las unidades mapeadas en §4.4 (la unidad "Caja" se crea a mano).
 - Stock inicial cargado **en Odoo** (recepción o ajuste de inventario con lote), porque con la decisión 1 TrazFlow
   no da de alta stock.
 - Una distribuidora = un `res.partner` (cargado en `erp_external_refs`).
@@ -583,6 +611,7 @@ se valida es que el contrato canónico alcanza para escribir ese adaptador sin r
 | 2 | **Editar o borrar un pallet ya sincronizado emite un evento al ERP.** | Eventos `pallet.adjusted` y `pallet.unpacked` (§4.2 b y c), triggers sobre `UPDATE`/`DELETE` de `pallets` y orden de envío por pallet. Se resuelven como reacomodo entre paquete y stock suelto. |
 | 3 | **El selector de `product.product` aparece solo si la empresa tiene ERP conectado; si no, sigue el alta manual.** | Tabla `erp_connections`. Todos los enganches y la UI preguntan primero si hay conexión activa. Las empresas sin ERP no ven cambios. |
 | 4 | **Supabase Edge Function disparada por `pg_cron`** (no Vercel Cron, que en el plan gratuito corre como máximo una vez por día). | Edge Function `erp-sync` con el adaptador, dos jobs (`erp-outbox-drain` cada minuto y `erp-snapshot-sync` cada 15 minutos), API key como secreto de la función. |
+| 5 | **La unidad de medida es del producto, no del pallet.** TrazFlow no implementa conversiones ni jerarquía de empaque. | Con ERP, la unidad sale de `uom_id` (§4.4). Los eventos de pallet no llevan unidad propia y `pallet.adjusted` deja de tener el caso "cambia la unidad". |
 
 ## 7. Qué desbloquea (propuesta de corte)
 
@@ -595,6 +624,18 @@ se valida es que el contrato canónico alcanza para escribir ese adaptador sin r
 - **US-C3 — Despacho:** enganche en `confirm_dispatch_order` y `registerDispatch`.
 - **US-C4 — Alertas de vencimiento:** vista `erp_expiration_alerts` y reemplazo de `getExpirationAlerts` cuando hay
   ERP conectado.
+
+## 8. A definir
+
+Puntos de la unidad de medida que quedan abiertos para US-C2:
+
+| # | Tema | Pregunta | Opciones |
+|---|---|---|---|
+| 1 | **Unidades de Odoo sin mapeo** | ¿Qué pasa si un producto del ERP tiene una `uom_id` que no es *Units*, *kg* ni la caja configurada (litros, gramos, docenas…)? | Ampliar el check de `products.unit_of_measure`; o no importar el producto y mostrarlo en `needs_attention`; o mapear por categoría de unidad. **A definir.** |
+| 2 | **Cambio de unidad en el ERP** | ¿Qué hace `erp-snapshot-sync` si la `uom_id` de un producto que ya tiene pallets o stock en distribuidoras cambia? TrazFlow no convierte cantidades, así que pisar la unidad reinterpreta todo lo cargado. | No pisarla y marcar el producto para revisión; o pisarla solo si no tiene pallets ni stock. Verificar si Odoo 19 permite el cambio cuando ya hay movimientos. **A definir.** |
+| 3 | **Vinculación inicial** | Al conectar el ERP, ¿qué pasa con un producto dado de alta a mano cuya unidad no coincide con la del ERP? | Bloquear la vinculación hasta que se corrija; o adoptar la del ERP si el producto no tiene pallets ni stock. **A definir.** |
+| 4 | **Precisión** | TrazFlow admite hasta 2 decimales en kilogramos y enteros en las demás unidades. Odoo redondea según el `rounding` de cada `uom.uom`. ¿Qué precisión rige y qué pasa si un quant del ERP trae más decimales o fracciones de caja? | Alinear el `rounding` en Odoo con la regla de TrazFlow; o aceptar la precisión del ERP en los espejos. **A definir.** |
+| 5 | **Empaques y conversiones** | Si más adelante hace falta convertir (cajas ↔ unidades), ¿de dónde se leen los factores? | Leer `factor` / categoría de `uom.uom` o los empaques del producto desde el ERP; TrazFlow seguiría sin guardarlos. Verificar cómo los modela Odoo 19. **Fuera de alcance por ahora; a definir si aparece el caso.** |
 
 ## Referencias
 
