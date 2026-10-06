@@ -75,7 +75,7 @@ export function PalletActions({
 
   return (
     <div className="inline-flex flex-col items-end gap-2">
-      <button type="button" onClick={() => { setState(INITIAL_STATE); setProductSku(pallet.productSku); setIsDirty(false); setIsOpen(true); }} className="button-secondary">Editar</button>
+      <button type="button" onClick={() => { setState(INITIAL_STATE); setProductSku(pallet.productSku); setIsDirty(false); setIsOpen(true); }} className="button-secondary button-sm">Editar</button>
       <Modal open={isOpen} onClose={closeForm} title="Editar pallet"
         description="Actualizá su producto, lote o ubicación. Cerrá o cancelá para descartar los datos sin guardar."
         busy={isPending} dismissOnBackdrop={false} dismissOnEscape={!isDirty}>
@@ -96,7 +96,7 @@ export function PalletActions({
           </fieldset>
         </form>
       </Modal>
-      {mayDelete ? <button type="button" disabled={isDeleting} aria-busy={isDeleting} onClick={() => { setDeleteState(null); setDeleteOpen(true); }} className="button-danger">Eliminar</button> : <span title="Solo se pueden eliminar pallets en depósito" className="text-xs text-stone-400">No eliminable</span>}
+      {mayDelete ? <button type="button" disabled={isDeleting} aria-busy={isDeleting} onClick={() => { setDeleteState(null); setDeleteOpen(true); }} className="button-danger button-sm">Eliminar</button> : <span title="Solo se pueden eliminar pallets en depósito" className="text-xs text-stone-400">No eliminable</span>}
       <ConfirmationDialog open={deleteOpen} onClose={() => setDeleteOpen(false)} onConfirm={handleDelete}
         title="Eliminar pallet" description={<>Vas a eliminar el pallet <strong className="break-all font-mono">{pallet.qrCode}</strong>. Esta acción no se puede deshacer.</>}
         confirmLabel="Eliminar pallet" danger busy={isDeleting} blocked={!mayDelete} error={deleteState?.error} />

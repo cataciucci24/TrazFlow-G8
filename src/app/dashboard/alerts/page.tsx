@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { AlertsCenter } from "@/components/dashboard/alerts-center";
 import { PageHeader } from "@/components/ui/design-system";
 import { hasRole, requireUserProfile } from "@/lib/auth/session";
+import { getExpirationThresholds } from "@/lib/expiration/queries";
 import { getExpirationAlerts } from "@/lib/pallets/queries";
 import { getDistributorStockAlerts } from "@/lib/stock-alerts/queries";
 
@@ -18,9 +19,10 @@ export default async function AlertsPage() {
     redirect("/dashboard");
   }
 
-  const [expirationAlerts, stockAlerts] = await Promise.all([
+  const [expirationAlerts, stockAlerts, thresholds] = await Promise.all([
     getExpirationAlerts(profile.companyId),
     getDistributorStockAlerts(profile.companyId),
+    getExpirationThresholds(),
   ]);
 
   return (
@@ -33,6 +35,7 @@ export default async function AlertsPage() {
         expirationAlerts={expirationAlerts}
         stockAlerts={stockAlerts.alerts}
         inventorySourceAvailable={stockAlerts.inventorySourceAvailable}
+        thresholds={thresholds}
       />
     </div>
   );

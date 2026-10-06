@@ -1,4 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
+import { getExpirationThresholds } from "@/lib/expiration/queries";
+import { classifyExpiration } from "@/lib/expiration/thresholds";
 import type { ExistingProduct, ExpirationAlert, Lot, Pallet } from "@/lib/types";
 
 /**
@@ -214,24 +216,33 @@ export async function getCompanyProducts(companyId: string): Promise<ExistingPro
   return (data ?? []) as ExistingProduct[];
 }
 
+type RawExpirationBatch = {
+  batch_number: string;
+  expiration_date: string;
+  products: { name: string; sku: string } | { name: string; sku: string }[] | null;
+};
+
 type RawExpirationAlertRow = {
   id: string;
   current_location: string | null;
   quantity: number;
   unit_of_measure: ExpirationAlert["unitOfMeasure"];
-  batches:
-    | {
-        batch_number: string;
-        expiration_date: string;
-        products: { name: string; sku: string } | { name: string; sku: string }[] | null;
-      }
-    | {
-        batch_number: string;
-        expiration_date: string;
-        products: { name: string; sku: string } | { name: string; sku: string }[] | null;
-      }[]
+  batches: RawExpirationBatch | RawExpirationBatch[] | null;
+};
+
+type RawDistributorBatchRow = {
+  id: string;
+  quantity: number;
+  batches: RawExpirationBatch | RawExpirationBatch[] | null;
+  distributor_product_stocks:
+    | { unit_of_measure: ExpirationAlert["unitOfMeasure"]; distributors: { name: string } | { name: string }[] | null }
+    | { unit_of_measure: ExpirationAlert["unitOfMeasure"]; distributors: { name: string } | { name: string }[] | null }[]
     | null;
 };
+
+function one<T>(value: T | T[] | null): T | null {
+  return Array.isArray(value) ? value[0] ?? null : value;
+}
 
 function dateAtMidnightUtc(date: string): number {
   return Date.parse(`${date}T00:00:00.000Z`);
@@ -249,48 +260,81 @@ function argentinaToday(): string {
 }
 
 /**
- * Pallets disponibles que vencen en los próximos 90 días. La fecha se filtra
- * desde Supabase y los días restantes se calculan contra el calendario local
- * de la operación para clasificar la urgencia en la interfaz.
+ * Mercadería que vence dentro del último nivel de alerta de la empresa: pallets
+ * disponibles en depósito y lotes informados por las distribuidoras (TRZ-90).
+ * La fecha se filtra desde Supabase y los días restantes se calculan contra el
+ * calendario local de la operación para clasificar la urgencia en la interfaz.
  */
 export async function getExpirationAlerts(companyId: string): Promise<ExpirationAlert[]> {
   const today = argentinaToday();
-  const maximumDate = new Date(dateAtMidnightUtc(today) + 90 * 86_400_000).toISOString().slice(0, 10);
+  const thresholds = await getExpirationThresholds();
+  const maximumDate = new Date(dateAtMidnightUtc(today) + thresholds.upcomingDays * 86_400_000).toISOString().slice(0, 10);
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("pallets")
-    .select("id, current_location, quantity, unit_of_measure, batches!inner ( batch_number, expiration_date, products ( name, sku ) )")
-    .eq("company_id", companyId)
-    .eq("status", "in_warehouse")
-    .gt("quantity", 0)
-    .gte("batches.expiration_date", today)
-    .lte("batches.expiration_date", maximumDate)
-    .order("expiration_date", { foreignTable: "batches", ascending: true });
+  const [warehouseResult, distributorResult] = await Promise.all([
+    supabase
+      .from("pallets")
+      .select("id, current_location, quantity, unit_of_measure, batches!inner ( batch_number, expiration_date, products ( name, sku ) )")
+      .eq("company_id", companyId)
+      .eq("status", "in_warehouse")
+      .gt("quantity", 0)
+      .gte("batches.expiration_date", today)
+      .lte("batches.expiration_date", maximumDate),
+    supabase
+      .from("distributor_batch_stocks")
+      .select("id, quantity, batches!inner ( batch_number, expiration_date, products ( name, sku ) ), distributor_product_stocks ( unit_of_measure, distributors ( name ) )")
+      .eq("company_id", companyId)
+      .gte("batches.expiration_date", today)
+      .lte("batches.expiration_date", maximumDate),
+  ]);
 
-  if (error) {
-    throw new Error(`No se pudieron leer las alertas de vencimiento (${error.code}: ${error.message}).`, { cause: error });
+  if (warehouseResult.error) {
+    throw new Error(`No se pudieron leer las alertas de vencimiento (${warehouseResult.error.code}: ${warehouseResult.error.message}).`, { cause: warehouseResult.error });
+  }
+  // Durante un despliegue la app puede llegar antes que la tabla de TRZ-90: se muestran solo las del depósito.
+  if (distributorResult.error && distributorResult.error.code !== "PGRST205") {
+    throw new Error(`No se pudieron leer las alertas de vencimiento de distribuidoras (${distributorResult.error.code}: ${distributorResult.error.message}).`, { cause: distributorResult.error });
   }
 
-  return ((data ?? []) as unknown as RawExpirationAlertRow[])
-    .flatMap((row): ExpirationAlert[] => {
-      const batch = Array.isArray(row.batches) ? row.batches[0] : row.batches;
-      if (!batch?.expiration_date || !row.unit_of_measure) return [];
-      const product = Array.isArray(batch.products) ? batch.products[0] : batch.products;
-      const daysRemaining = Math.round((dateAtMidnightUtc(batch.expiration_date) - dateAtMidnightUtc(today)) / 86_400_000);
-      const urgency = daysRemaining <= 30 ? "critical" : daysRemaining <= 60 ? "warning" : "upcoming";
+  function toAlert(
+    base: Pick<ExpirationAlert, "id" | "source" | "quantity" | "unitOfMeasure" | "currentLocation">,
+    rawBatch: RawExpirationBatch | RawExpirationBatch[] | null,
+  ): ExpirationAlert[] {
+    const batch = one(rawBatch);
+    if (!batch?.expiration_date || !base.unitOfMeasure) return [];
+    const product = one(batch.products);
+    const daysRemaining = Math.round((dateAtMidnightUtc(batch.expiration_date) - dateAtMidnightUtc(today)) / 86_400_000);
+    const urgency = classifyExpiration(daysRemaining, thresholds);
+    if (!urgency) return [];
+    return [{
+      ...base,
+      productName: product?.name ?? "—",
+      productSku: product?.sku ?? "—",
+      batchNumber: batch.batch_number,
+      expirationDate: batch.expiration_date,
+      daysRemaining,
+      urgency,
+    }];
+  }
 
-      return [{
-        palletId: row.id,
-        productName: product?.name ?? "—",
-        productSku: product?.sku ?? "—",
-        batchNumber: batch.batch_number,
-        quantity: row.quantity,
-        unitOfMeasure: row.unit_of_measure,
-        currentLocation: row.current_location,
-        expirationDate: batch.expiration_date,
-        daysRemaining,
-        urgency,
-      }];
-    })
-    .sort((a, b) => a.expirationDate.localeCompare(b.expirationDate));
+  const warehouse = ((warehouseResult.data ?? []) as unknown as RawExpirationAlertRow[]).flatMap((row) => toAlert({
+    id: `warehouse-${row.id}`,
+    source: "warehouse",
+    quantity: row.quantity,
+    unitOfMeasure: row.unit_of_measure,
+    currentLocation: row.current_location,
+  }, row.batches));
+
+  const distributors = ((distributorResult.data ?? []) as unknown as RawDistributorBatchRow[]).flatMap((row) => {
+    const stock = one(row.distributor_product_stocks);
+    if (!stock) return [];
+    return toAlert({
+      id: `distributor-${row.id}`,
+      source: "distributor",
+      quantity: row.quantity,
+      unitOfMeasure: stock.unit_of_measure,
+      currentLocation: one(stock.distributors)?.name ?? "Distribuidora",
+    }, row.batches);
+  });
+
+  return [...warehouse, ...distributors].sort((a, b) => a.expirationDate.localeCompare(b.expirationDate));
 }

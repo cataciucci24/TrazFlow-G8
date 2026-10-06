@@ -43,20 +43,22 @@ select pg_temp.assert_true((select current_stock / daily_consumption = 8 from di
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '18000000-0000-0000-0000-000000000002', true);
 
+-- Desde TRZ-90 el stock se guarda con save_distributor_stock (por lote): el operador
+-- no puede editar la tabla directamente, ni en su distribuidora ni en otra.
 update distributor_product_stocks
 set current_stock = 30, daily_consumption = 6
 where distributor_id = '38000000-0000-0000-0000-000000000001';
-
-select pg_temp.assert_true(
-  (select current_stock = 30 and daily_consumption = 6 from distributor_product_stocks where distributor_id = '38000000-0000-0000-0000-000000000001'),
-  'el operador debe poder actualizar el stock de su distribuidora'
-);
 
 update distributor_product_stocks
 set current_stock = 999
 where distributor_id = '38000000-0000-0000-0000-000000000002';
 
 reset role;
+
+select pg_temp.assert_true(
+  (select current_stock = 35 and daily_consumption = 5 from distributor_product_stocks where distributor_id = '38000000-0000-0000-0000-000000000001'),
+  'el operador no debe poder editar el stock directamente'
+);
 
 select pg_temp.assert_true(
   (select count(*) = 0 from distributor_product_stocks where current_stock = 999),

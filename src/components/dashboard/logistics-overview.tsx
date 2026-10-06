@@ -24,7 +24,7 @@ export function LogisticsOverview({ expirationAlerts, stockData }: {
 }) {
   const attention = [
     ...expirationAlerts.map((alert) => ({
-      id: `expiration-${alert.palletId}`,
+      id: `expiration-${alert.id}`,
       type: "expiration" as const,
       status: (alert.urgency === "warning" ? "caution" : alert.urgency) as AlertStatus,
       title: alert.productName,

@@ -9,11 +9,13 @@ import { PALLET_STATUS_LABELS } from "@/lib/pallets/labels";
 import type { ExistingProduct, Pallet, ProductBatch } from "@/lib/types";
 import { EmptyState, FilterPanel, CompactSummaryCard, PalletStatusBadge, SectionHeader, TableShell } from "@/components/ui/design-system";
 
-const statusDetails = [
-  { value: "in_warehouse", label: "En depósito", tone: "sky" },
-  { value: "assigned", label: "Asignados", tone: "violet" },
-  { value: "in_transit", label: "Despachados", tone: "amber" },
-  { value: "received", label: "Entregados", tone: "green" },
+// Las etiquetas salen de PALLET_STATUS_LABELS para que tarjetas, filtro y badges digan lo mismo.
+const statusCards = [
+  { value: "in_warehouse", tone: "sky" },
+  { value: "assigned", tone: "violet" },
+  { value: "in_transit", tone: "amber" },
+  { value: "received", tone: "green" },
+  { value: "discrepancy", tone: "red" },
 ] as const;
 
 
@@ -69,10 +71,11 @@ export function PalletTrackingPanel({
         </label>
       </FilterPanel>
 
-      <section aria-label="Resumen de pallets" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {statusDetails.map((detail) => {
-          const count = pallets.filter((pallet) => pallet.status === detail.value).length;
-          return <CompactSummaryCard key={detail.value} label={detail.label} value={count} tone={detail.tone} />;
+      <section aria-label="Resumen de pallets por estado (tocá una tarjeta para filtrar)" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        {statusCards.map((card) => {
+          const count = pallets.filter((pallet) => pallet.status === card.value).length;
+          const isActive = status === card.value;
+          return <CompactSummaryCard key={card.value} label={PALLET_STATUS_LABELS[card.value]} value={count} tone={card.tone} pressed={isActive} onClick={() => setStatus(isActive ? "" : card.value)} />;
         })}
       </section>
 
@@ -89,7 +92,7 @@ export function PalletTrackingPanel({
           <table role="table" aria-label="Pallets registrados" className="data-table min-w-[780px]">
             <thead role="rowgroup"><tr role="row"><th role="columnheader" scope="col">Código</th><th role="columnheader" scope="col">Producto</th><th role="columnheader" scope="col">Lote</th><th role="columnheader" scope="col">Estado</th><th role="columnheader" scope="col">Ubicación</th><th role="columnheader" scope="col" className="text-right">Acciones</th></tr></thead>
             <tbody role="rowgroup">
-              {visiblePallets.map((pallet) => <tr role="row" key={pallet.id}><td role="cell" data-label="Código" className="mobile-primary font-mono font-bold">{pallet.qrCode}</td><td role="cell" data-label="Producto" className="font-medium">{pallet.productName}</td><td role="cell" data-label="Lote" className="font-mono text-stone-600">{pallet.batchNumber}</td><td role="cell" data-label="Estado" className="mobile-priority"><PalletStatusBadge status={pallet.status} /></td><td role="cell" data-label="Ubicación" className="mobile-priority text-stone-500">{pallet.currentLocation ?? "—"}</td><td role="cell" data-label="Acciones" className="mobile-actions text-right"><div className="table-row-actions"><Link href={`/dashboard/traceability?qr=${encodeURIComponent(pallet.qrCode)}`} className="button-secondary">Ver trazabilidad</Link><PalletQrButton qrCode={pallet.qrCode} /><PalletActions pallet={pallet} existingBatches={existingBatches} existingProducts={existingProducts} /></div></td></tr>)}
+              {visiblePallets.map((pallet) => <tr role="row" key={pallet.id}><td role="cell" data-label="Código" className="mobile-primary font-mono font-bold">{pallet.qrCode}</td><td role="cell" data-label="Producto" className="font-medium">{pallet.productName}</td><td role="cell" data-label="Lote" className="font-mono text-stone-600">{pallet.batchNumber}</td><td role="cell" data-label="Estado" className="mobile-priority"><PalletStatusBadge status={pallet.status} /></td><td role="cell" data-label="Ubicación" className="mobile-priority text-stone-500">{pallet.currentLocation ?? "—"}</td><td role="cell" data-label="Acciones" className="mobile-actions text-right"><div className="table-row-actions"><Link href={`/dashboard/traceability?qr=${encodeURIComponent(pallet.qrCode)}`} className="button-secondary button-sm">Ver trazabilidad</Link><PalletQrButton qrCode={pallet.qrCode} variant="compact" /><PalletActions pallet={pallet} existingBatches={existingBatches} existingProducts={existingProducts} /></div></td></tr>)}
             </tbody>
           </table>
         </TableShell>}

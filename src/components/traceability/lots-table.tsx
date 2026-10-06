@@ -57,7 +57,7 @@ export function LotsTable({ lots, pallets }: LotsTableProps) {
                 <td className="text-right">
                   <Link
                     href={`/dashboard/traceability?view=lotes&lote=${encodeURIComponent(lot.batchNumber)}`}
-                    className="button-secondary"
+                    className="button-secondary button-sm"
                   >
                     Ver trazabilidad
                   </Link>

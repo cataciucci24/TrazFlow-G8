@@ -13,6 +13,17 @@ export type SaveDistributorStockState = {
 
 const EMPTY_STATE: SaveDistributorStockState = { error: null, success: null };
 
+const RPC_MESSAGES: Record<string, string> = {
+  "42501": "No tenés permisos para informar stock de una distribuidora.",
+  P3902: "La distribuidora de tu cuenta no está configurada correctamente. Contactá al administrador.",
+  P3903: "El producto seleccionado no está disponible para tu empresa.",
+  P3904: "Seleccioná la unidad de medida.",
+  P3905: "El consumo diario debe ser un número mayor a cero.",
+  P3906: "Revisá las cantidades: deben ser mayores a cero y, en unidades o cajas, enteras.",
+  P3907: "Uno de los lotes no corresponde al producto seleccionado.",
+  P3908: "Cada lote puede informarse una sola vez.",
+};
+
 export async function saveDistributorStock(
   _previousState: SaveDistributorStockState,
   formData: FormData,
@@ -24,9 +35,9 @@ export async function saveDistributorStock(
   }
 
   const productId = String(formData.get("productId") ?? "").trim();
-  const currentStock = Number(formData.get("currentStock"));
   const dailyConsumption = Number(formData.get("dailyConsumption"));
   const unitOfMeasure = String(formData.get("unitOfMeasure") ?? "").trim();
+  const batches = parseBatches(String(formData.get("batches") ?? ""));
 
   if (!productId) {
     return { ...EMPTY_STATE, error: "Seleccioná el producto." };
@@ -34,57 +45,56 @@ export async function saveDistributorStock(
   if (!isPalletUnit(unitOfMeasure)) {
     return { ...EMPTY_STATE, error: "Seleccioná la unidad de medida." };
   }
-  if (!Number.isFinite(currentStock) || currentStock < 0) {
-    return { ...EMPTY_STATE, error: "El stock actual debe ser un número mayor o igual a cero." };
-  }
-  if (unitOfMeasure !== "kilogramos" && !Number.isInteger(currentStock)) {
-    return { ...EMPTY_STATE, error: "El stock en unidades o cajas debe ser un número entero." };
-  }
   if (!Number.isFinite(dailyConsumption) || dailyConsumption <= 0) {
     return { ...EMPTY_STATE, error: "El consumo diario debe ser un número mayor a cero." };
   }
+  if (!batches) {
+    return { ...EMPTY_STATE, error: "Revisá los lotes informados." };
+  }
+  if (batches.some((batch) => !batch.batch_id)) {
+    return { ...EMPTY_STATE, error: "Seleccioná el lote de cada fila." };
+  }
+  if (new Set(batches.map((batch) => batch.batch_id)).size !== batches.length) {
+    return { ...EMPTY_STATE, error: "Cada lote puede informarse una sola vez." };
+  }
+  if (batches.some((batch) => !Number.isFinite(batch.quantity) || batch.quantity <= 0)) {
+    return { ...EMPTY_STATE, error: "La cantidad de cada lote debe ser mayor a cero." };
+  }
+  if (unitOfMeasure !== "kilogramos" && batches.some((batch) => !Number.isInteger(batch.quantity))) {
+    return { ...EMPTY_STATE, error: "En unidades o cajas, la cantidad de cada lote debe ser un número entero." };
+  }
 
   const supabase = await createClient();
-  const [assignmentsResult, productResult] = await Promise.all([
-    supabase
-      .from("distributor_users")
-      .select("distributor_id")
-      .eq("user_id", profile.id)
-      .limit(2),
-    supabase
-      .from("products")
-      .select("id")
-      .eq("id", productId)
-      .eq("company_id", profile.companyId)
-      .maybeSingle(),
-  ]);
-
-  if (assignmentsResult.error) {
-    return { ...EMPTY_STATE, error: "No pudimos identificar la distribuidora de tu cuenta. Intentá nuevamente." };
-  }
-  if (assignmentsResult.data?.length !== 1) {
-    return { ...EMPTY_STATE, error: "La distribuidora de tu cuenta no está configurada correctamente. Contactá al administrador." };
-  }
-  if (productResult.error || !productResult.data) {
-    return { ...EMPTY_STATE, error: "El producto seleccionado no está disponible para tu empresa." };
-  }
-
-  const distributorId = assignmentsResult.data[0].distributor_id;
-
-  const { error } = await supabase.from("distributor_product_stocks").upsert({
-    company_id: profile.companyId,
-    distributor_id: distributorId,
-    product_id: productId,
-    current_stock: currentStock,
-    daily_consumption: dailyConsumption,
-    unit_of_measure: unitOfMeasure,
-  }, { onConflict: "distributor_id,product_id" });
+  const { error } = await supabase.rpc("save_distributor_stock", {
+    p_product_id: productId,
+    p_unit_of_measure: unitOfMeasure,
+    p_daily_consumption: dailyConsumption,
+    p_batches: batches,
+  });
 
   if (error) {
-    return { ...EMPTY_STATE, error: `No se pudo guardar el stock (${error.message}).` };
+    console.error("Error en save_distributor_stock", { code: error.code });
+    return { ...EMPTY_STATE, error: RPC_MESSAGES[error.code] ?? `No se pudo guardar el stock (${error.message}).` };
   }
 
   revalidatePath("/dashboard/stock-report");
   revalidatePath("/dashboard/alerts");
-  return { error: null, success: "Stock y consumo diario actualizados." };
+  revalidatePath("/dashboard");
+  return { error: null, success: "Stock por lote y consumo diario actualizados." };
+}
+
+type BatchInput = { batch_id: string; quantity: number };
+
+/** El formulario manda los lotes como JSON: [{ batchId, quantity }]. Devuelve null si no tiene esa forma. */
+function parseBatches(raw: string): BatchInput[] | null {
+  try {
+    const value: unknown = JSON.parse(raw || "[]");
+    if (!Array.isArray(value)) return null;
+    return value.map((item) => {
+      const entry = item as { batchId?: unknown; quantity?: unknown };
+      return { batch_id: typeof entry.batchId === "string" ? entry.batchId : "", quantity: Number(entry.quantity) };
+    });
+  } catch {
+    return null;
+  }
 }

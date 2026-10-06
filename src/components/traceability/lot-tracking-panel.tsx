@@ -3,8 +3,9 @@
 import { useMemo, useState } from "react";
 
 import { LotsTable } from "@/components/traceability/lots-table";
-import type { Lot, Pallet } from "@/lib/types";
-import { EmptyState, FilterPanel, CompactSummaryCard, SectionHeader } from "@/components/ui/design-system";
+import { classifyExpiration } from "@/lib/expiration/thresholds";
+import type { ExpirationThresholds, Lot, Pallet } from "@/lib/types";
+import { EmptyState, FilterPanel, SectionHeader } from "@/components/ui/design-system";
 
 const DAY = 86_400_000;
 
@@ -12,16 +13,13 @@ function normalize(value: string) {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es-AR");
 }
 
-function expirationGroup(expirationDate: string | null) {
+function expirationGroup(expirationDate: string | null, thresholds: ExpirationThresholds) {
   if (!expirationDate) return "none";
   const days = Math.floor((Date.parse(`${expirationDate}T00:00:00Z`) - Date.now()) / DAY);
-  if (days <= 30) return "critical";
-  if (days <= 60) return "warning";
-  if (days <= 90) return "upcoming";
-  return "later";
+  return classifyExpiration(days, thresholds) ?? "later";
 }
 
-export function LotTrackingPanel({ lots, pallets }: { lots: Lot[]; pallets: Pallet[] }) {
+export function LotTrackingPanel({ lots, pallets, thresholds }: { lots: Lot[]; pallets: Pallet[]; thresholds: ExpirationThresholds }) {
   const [search, setSearch] = useState("");
   const [expiration, setExpiration] = useState("");
   const [status, setStatus] = useState("");
@@ -29,13 +27,10 @@ export function LotTrackingPanel({ lots, pallets }: { lots: Lot[]; pallets: Pall
   const palletsByLot = useMemo(() => new Map(lots.map((lot) => [lot.id, pallets.filter((pallet) => pallet.batchNumber === lot.batchNumber && pallet.productSku === lot.productSku).length])), [lots, pallets]);
   const visibleLots = lots.filter((lot) =>
     (!query || [lot.batchNumber, lot.productName, lot.productSku].some((value) => normalize(value).includes(query))) &&
-    (!expiration || expirationGroup(lot.expirationDate) === expiration) &&
+    (!expiration || expirationGroup(lot.expirationDate, thresholds) === expiration) &&
     (!status || (status === "with_pallets" ? (palletsByLot.get(lot.id) ?? 0) > 0 : (palletsByLot.get(lot.id) ?? 0) === 0)),
   );
   const hasFilters = Boolean(search || expiration || status);
-  const lotsWithPallets = lots.filter((lot) => (palletsByLot.get(lot.id) ?? 0) > 0).length;
-  const lotsWithoutPallets = lots.length - lotsWithPallets;
-  const expiringLots = lots.filter((lot) => ["critical", "warning", "upcoming"].includes(expirationGroup(lot.expirationDate))).length;
 
   function clearFilters() {
     setSearch("");
@@ -50,19 +45,12 @@ export function LotTrackingPanel({ lots, pallets }: { lots: Lot[]; pallets: Pall
           <input value={search} onChange={(event) => setSearch(event.target.value)} type="search" placeholder="Número de lote, producto o SKU" className="form-control mt-2" />
         </label>
         <label className="form-label">Vencimiento
-          <select value={expiration} onChange={(event) => setExpiration(event.target.value)} className="form-control mt-2"><option value="">Todos los vencimientos</option><option value="critical">Hasta 30 días</option><option value="warning">31 a 60 días</option><option value="upcoming">61 a 90 días</option><option value="later">Más de 90 días</option><option value="none">Sin fecha</option></select>
+          <select value={expiration} onChange={(event) => setExpiration(event.target.value)} className="form-control mt-2"><option value="">Todos los vencimientos</option><option value="critical">Hasta {thresholds.criticalDays} días</option><option value="warning">{thresholds.criticalDays + 1} a {thresholds.cautionDays} días</option><option value="upcoming">{thresholds.cautionDays + 1} a {thresholds.upcomingDays} días</option><option value="later">Más de {thresholds.upcomingDays} días</option><option value="none">Sin fecha</option></select>
         </label>
         <label className="form-label">Estado
           <select value={status} onChange={(event) => setStatus(event.target.value)} className="form-control mt-2"><option value="">Todos los lotes</option><option value="with_pallets">Con pallets</option><option value="without_pallets">Sin pallets</option></select>
         </label>
       </FilterPanel>
-
-      <section aria-label="Resumen de lotes" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <CompactSummaryCard label="Total de lotes" value={lots.length} tone="brand" />
-        <CompactSummaryCard label="Con pallets" value={lotsWithPallets} tone="green" />
-        <CompactSummaryCard label="Sin pallets" value={lotsWithoutPallets} tone="neutral" />
-        <CompactSummaryCard label="Vencen en 90 días" value={expiringLots} tone="amber" />
-      </section>
 
       <div className="section-stack">
         <SectionHeader

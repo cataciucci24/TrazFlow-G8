@@ -13,7 +13,9 @@ export function OperatorAccessAction({ operator }: { operator: CompanyOperator }
   return (
     <div className="space-y-3">
       {!confirming ? (
-        <button type="button" className="button-secondary" onClick={() => setConfirming(true)}>
+        // Mismo ancho en ambos botones para que queden centrados entre filas; restaurar va sin borde.
+        <button type="button" className={`${revoked ? "button-ghost" : "button-secondary"} button-sm w-[10.5rem] whitespace-nowrap`} onClick={() => setConfirming(true)}>
+          {!revoked && <svg viewBox="0 0 20 20" aria-hidden="true" className="size-4 text-stone-400" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round"><path d="M5 10h10" /></svg>}
           {revoked ? "Restaurar acceso" : "Revocar acceso"}
         </button>
       ) : (
@@ -31,10 +33,10 @@ export function OperatorAccessAction({ operator }: { operator: CompanyOperator }
             </p>
           )}
           <div className="flex flex-wrap gap-2">
-            <button className="button-primary" disabled={pending}>
+            <button className="button-primary button-sm" disabled={pending}>
               {pending ? "Guardando…" : revoked ? "Confirmar restauración" : "Confirmar revocación"}
             </button>
-            <button type="button" className="button-secondary" disabled={pending} onClick={() => setConfirming(false)}>Cancelar</button>
+            <button type="button" className="button-secondary button-sm" disabled={pending} onClick={() => setConfirming(false)}>Cancelar</button>
           </div>
         </form>
       )}
@@ -42,3 +44,4 @@ export function OperatorAccessAction({ operator }: { operator: CompanyOperator }
     </div>
   );
 }
+

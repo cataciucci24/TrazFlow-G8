@@ -62,6 +62,16 @@ export type DistributorStockEntry = {
   stockDays: number;
   riskLevel: StockRiskLevel | null;
   updatedAt: string;
+  /** Detalle por lote; vacío en filas informadas antes de TRZ-90. */
+  batches: DistributorBatchStock[];
+};
+
+/** Cantidad de un lote en una distribuidora, en la unidad de su producto. */
+export type DistributorBatchStock = {
+  batchId: string;
+  batchNumber: string;
+  expirationDate: string | null;
+  quantity: number;
 };
 
 /** Orden de despacho (fila de la tabla `dispatch_orders`). */
@@ -117,14 +127,26 @@ export type Pallet = {
   unitOfMeasure: PalletUnit | null;
 };
 
-/** Mercadería disponible cuyo lote vence dentro de los próximos 90 días. */
+/** Días de cada nivel de alerta de vencimiento, configurables por empresa (TRZ-90). */
+export type ExpirationThresholds = {
+  criticalDays: number;
+  cautionDays: number;
+  upcomingDays: number;
+};
+
+/**
+ * Mercadería cuyo lote vence dentro del último nivel de alerta: un pallet en depósito
+ * o un lote informado por una distribuidora (TRZ-90).
+ */
 export type ExpirationAlert = {
-  palletId: string;
+  id: string;
+  source: "warehouse" | "distributor";
   productName: string;
   productSku: string;
   batchNumber: string;
   quantity: number;
   unitOfMeasure: PalletUnit;
+  /** Ubicación del pallet en depósito o nombre de la distribuidora. */
   currentLocation: string | null;
   expirationDate: string;
   daysRemaining: number;
