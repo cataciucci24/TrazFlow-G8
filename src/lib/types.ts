@@ -117,6 +117,9 @@ export type Pallet = {
   unitOfMeasure: PalletUnit | null;
 };
 
+/** Pallet con la marca de si ya tiene eventos de trazabilidad (la base impide eliminarlo). */
+export type PalletWithHistory = Pallet & { hasHistory: boolean };
+
 /** Mercadería disponible cuyo lote vence dentro de los próximos 90 días. */
 export type ExpirationAlert = {
   palletId: string;

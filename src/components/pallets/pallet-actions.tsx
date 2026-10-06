@@ -12,7 +12,7 @@ import { useRef, useState, useTransition } from "react";
 
 import { ConfirmationDialog, Modal } from "@/components/ui/modal";
 import { deletePallet, updatePallet, type UpdatePalletState } from "@/lib/pallets/actions";
-import type { ExistingProduct, Pallet, ProductBatch } from "@/lib/types";
+import type { ExistingProduct, PalletWithHistory, ProductBatch } from "@/lib/types";
 
 const INITIAL_STATE: UpdatePalletState = { error: null, success: null };
 
@@ -21,7 +21,7 @@ export function PalletActions({
   existingBatches,
   existingProducts,
 }: {
-  pallet: Pallet;
+  pallet: PalletWithHistory;
   existingBatches: ProductBatch[];
   existingProducts: ExistingProduct[];
 }) {
@@ -35,7 +35,14 @@ export function PalletActions({
   const [isDeleting, startDeleting] = useTransition();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
-  const mayDelete = pallet.status === "in_warehouse";
+  // Un pallet con eventos de trazabilidad no se elimina: la base lo impide para
+  // conservar el historial.
+  const mayDelete = pallet.status === "in_warehouse" && !pallet.hasHistory;
+  const notDeletableReason = pallet.hasHistory
+    ? "Tiene historial de trazabilidad: no se puede eliminar"
+    : "Solo se pueden eliminar pallets en depósito";
+  // Fuera del depósito el pallet ya forma parte de un despacho: sus datos no se editan.
+  const mayEdit = pallet.status === "in_warehouse";
 
   function handleDelete() {
     if (isDeleting || !mayDelete) return;
@@ -75,8 +82,8 @@ export function PalletActions({
 
   return (
     <div className="inline-flex flex-col items-end gap-2">
-      <button type="button" onClick={() => { setState(INITIAL_STATE); setProductSku(pallet.productSku); setIsDirty(false); setIsOpen(true); }} className="button-secondary">Editar</button>
-      <Modal open={isOpen} onClose={closeForm} title="Editar pallet"
+      {mayEdit && <button type="button" onClick={() => { setState(INITIAL_STATE); setProductSku(pallet.productSku); setIsDirty(false); setIsOpen(true); }} className="button-secondary">Editar</button>}
+      <Modal open={mayEdit && isOpen} onClose={closeForm} title="Editar pallet"
         description="Actualizá su producto, lote o ubicación. Cerrá o cancelá para descartar los datos sin guardar."
         busy={isPending} dismissOnBackdrop={false} dismissOnEscape={!isDirty}>
         <form ref={formRef} onSubmit={handleSubmitEdit} onChange={() => setIsDirty(true)} aria-busy={isPending}>
@@ -96,7 +103,7 @@ export function PalletActions({
           </fieldset>
         </form>
       </Modal>
-      {mayDelete ? <button type="button" disabled={isDeleting} aria-busy={isDeleting} onClick={() => { setDeleteState(null); setDeleteOpen(true); }} className="button-danger">Eliminar</button> : <span title="Solo se pueden eliminar pallets en depósito" className="text-xs text-stone-400">No eliminable</span>}
+      {mayDelete ? <button type="button" disabled={isDeleting} aria-busy={isDeleting} onClick={() => { setDeleteState(null); setDeleteOpen(true); }} className="button-danger">Eliminar</button> : <span title={notDeletableReason} className="text-xs text-stone-400">No eliminable</span>}
       <ConfirmationDialog open={deleteOpen} onClose={() => setDeleteOpen(false)} onConfirm={handleDelete}
         title="Eliminar pallet" description={<>Vas a eliminar el pallet <strong className="break-all font-mono">{pallet.qrCode}</strong>. Esta acción no se puede deshacer.</>}
         confirmLabel="Eliminar pallet" danger busy={isDeleting} blocked={!mayDelete} error={deleteState?.error} />
