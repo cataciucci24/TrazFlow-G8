@@ -132,6 +132,9 @@ export type Pallet = {
   unitOfMeasure: ProductUnit;
 };
 
+/** Pallet con la marca de si ya tiene eventos de trazabilidad (la base impide eliminarlo). */
+export type PalletWithHistory = Pallet & { hasHistory: boolean };
+
 /** Días de cada nivel de alerta de vencimiento, configurables por empresa (TRZ-90). */
 export type ExpirationThresholds = {
   criticalDays: number;

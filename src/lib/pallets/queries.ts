@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getExpirationThresholds } from "@/lib/expiration/queries";
 import { classifyExpiration } from "@/lib/expiration/thresholds";
 import type { ProductUnit } from "@/lib/pallets/units";
-import type { ExistingProduct, ExpirationAlert, Lot, Pallet } from "@/lib/types";
+import type { ExistingProduct, ExpirationAlert, Lot, Pallet, PalletWithHistory } from "@/lib/types";
 
 type RawProduct = { name: string; sku: string; unit_of_measure: ProductUnit };
 
@@ -78,11 +78,11 @@ export async function getAvailablePallets(companyId: string): Promise<Pallet[]> 
 }
 
 /** Inventario completo para que logística pueda seguir cada pallet por estado. */
-export async function getCompanyPallets(companyId: string): Promise<Pallet[]> {
+export async function getCompanyPallets(companyId: string): Promise<PalletWithHistory[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("pallets")
-    .select(PALLET_SELECT)
+    .select(`${PALLET_SELECT}, traceability_events ( count )`)
     .eq("company_id", companyId)
     .order("qr_code");
 
@@ -90,7 +90,11 @@ export async function getCompanyPallets(companyId: string): Promise<Pallet[]> {
     throw new Error(`No se pudieron leer los pallets (${error.code}: ${error.message}).`, { cause: error });
   }
 
-  return (data ?? []).map(mapPalletRow);
+  const rows = (data ?? []) as unknown as (RawPalletRow & { traceability_events: { count: number }[] | null })[];
+  return rows.map((row) => ({
+    ...mapPalletRow(row),
+    hasHistory: (row.traceability_events?.[0]?.count ?? 0) > 0,
+  }));
 }
 
 /** Mercadería cuya última actividad supera el umbral indicado, ordenada por antigüedad. */

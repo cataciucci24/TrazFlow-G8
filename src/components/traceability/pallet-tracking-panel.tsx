@@ -6,7 +6,7 @@ import { useMemo, useState } from "react";
 
 import { PalletActions } from "@/components/pallets/pallet-actions";
 import { PALLET_STATUS_LABELS } from "@/lib/pallets/labels";
-import type { ExistingProduct, Pallet, ProductBatch } from "@/lib/types";
+import type { ExistingProduct, PalletWithHistory, ProductBatch } from "@/lib/types";
 import { EmptyState, FilterPanel, CompactSummaryCard, PalletStatusBadge, SectionHeader, TableShell } from "@/components/ui/design-system";
 
 // Las etiquetas salen de PALLET_STATUS_LABELS para que tarjetas, filtro y badges digan lo mismo.
@@ -28,7 +28,7 @@ export function PalletTrackingPanel({
   existingProducts,
   initialStatus = "",
 }: {
-  pallets: Pallet[];
+  pallets: PalletWithHistory[];
   existingBatches: ProductBatch[];
   existingProducts: ExistingProduct[];
   initialStatus?: string;
