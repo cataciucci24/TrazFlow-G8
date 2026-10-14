@@ -10,13 +10,12 @@ import { AssociatePalletsForm } from "@/components/orders/associate-pallets-form
 import { ConfirmDispatchButton } from "@/components/orders/confirm-dispatch-button";
 import { DissociatePalletButton } from "@/components/orders/dissociate-pallet-button";
 import { PalletValidationPanel } from "@/components/pallet-validation/pallet-validation-panel";
-import { PalletReceptionPanel } from "@/components/pallet-reception/pallet-reception-panel";
+import { DriverAssignmentForm } from "@/components/orders/driver-assignment-form";
 import { OrderNotificationsPanel } from "@/components/orders/order-notifications-panel";
 import {
   getOrderDispatchDiscrepancies,
   getOrderPalletValidations,
 } from "@/lib/pallet-validation/queries";
-import { getOrderPalletReceptions } from "@/lib/pallet-reception/queries";
 import { getOrderScanHistory } from "@/lib/scans/queries";
 import { getOrderNotifications } from "@/lib/order-notifications/queries";
 import { OrderStatusBadge, EmptyState, InlineAlert, PageHeader, PalletStatusBadge, SectionHeader, TableShell } from "@/components/ui/design-system";
@@ -27,21 +26,28 @@ export const metadata: Metadata = {
 
 export default async function DispatchOrderDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ driver?: string }>;
 }) {
   const profile = await requireUserProfile();
 
   const isLogisticsManager = hasRole(profile, "logistics_manager");
   const isWarehouseOperator = hasRole(profile, "warehouse_operator");
-  const isDistributorOperator = hasRole(profile, "distributor_operator");
+  const isDriverOperator = hasRole(profile, "driver_operator");
 
-  if (!isLogisticsManager && !isWarehouseOperator && !isDistributorOperator) {
+  if (isDriverOperator) {
+    const { id } = await params;
+    redirect(`/dashboard/deliveries/${id}`);
+  }
+  if (!isLogisticsManager && !isWarehouseOperator) {
     redirect("/dashboard");
   }
 
   const { id } = await params;
   const order = await getDispatchOrderDetail(id);
+  const { driver: driverResult } = await searchParams;
 
   if (!order) notFound();
 
@@ -55,9 +61,7 @@ export default async function DispatchOrderDetailPage({
     availablePallets,
     palletValidations,
     dispatchDiscrepancies,
-    palletReceptions,
     dispatchScanHistory,
-    receptionScanHistory,
     orderNotifications,
   ] = await Promise.all([
     getPalletsForOrder(id),
@@ -66,11 +70,7 @@ export default async function DispatchOrderDetailPage({
     isWarehouseOperator
       ? getOrderDispatchDiscrepancies(id)
       : Promise.resolve([]),
-    isDistributorOperator
-      ? getOrderPalletReceptions(id)
-      : Promise.resolve([]),
     isWarehouseOperator ? getOrderScanHistory(id, "dispatch") : Promise.resolve([]),
-    isDistributorOperator ? getOrderScanHistory(id, "reception") : Promise.resolve([]),
     canSeeNotifications ? getOrderNotifications(id) : Promise.resolve([]),
   ]);
 
@@ -102,18 +102,11 @@ export default async function DispatchOrderDetailPage({
     );
   }
 
-  if (isDistributorOperator) {
-    return (
-      <div className="app-page">
-        <PageHeader title="Confirmar recepción" description="Registrá la recepción de los pallets incluidos en la orden." action={<Link href="/dashboard" className="button-secondary">Volver</Link>} />
-        <PalletReceptionPanel orderId={order.id} pallets={palletReceptions} canReceive={order.status === "confirmed"} initialScanHistory={receptionScanHistory} />
-      </div>
-    );
-  }
-
   return (
     <div className="app-page">
       <PageHeader title="Detalle de orden" description={`Código ${order.id}`} action={<Link href="/dashboard/orders" className="button-secondary">Volver</Link>} />
+      {driverResult === "assigned" && <InlineAlert variant="success">Chofer asignado correctamente.</InlineAlert>}
+      {driverResult === "error" && <InlineAlert variant="danger">No se pudo asignar el chofer. Verificá que esté activo y pertenezca a tu empresa.</InlineAlert>}
 
       <section className="section-stack">
       <SectionHeader title="Información de la orden" description="Destino, fechas y estado operativo actual." />
@@ -144,6 +137,9 @@ export default async function DispatchOrderDetailPage({
             <p className="font-medium">{order.notes}</p>
           </div>
         )}
+        <div className="sm:col-span-2 border-t border-stone-200 pt-4">
+          <DriverAssignmentForm orderId={order.id} currentDriverId={order.driverId} currentDriverName={order.driverName} />
+        </div>
       </div>
       </section>
 
@@ -154,17 +150,6 @@ export default async function DispatchOrderDetailPage({
             pallets={palletValidations}
             dispatchDiscrepancies={dispatchDiscrepancies}
             initialScanHistory={dispatchScanHistory}
-          />
-        </div>
-      )}
-
-      {isDistributorOperator && (
-        <div className="surface p-6">
-          <PalletReceptionPanel
-            orderId={order.id}
-            pallets={palletReceptions}
-            canReceive={order.status === "confirmed"}
-            initialScanHistory={receptionScanHistory}
           />
         </div>
       )}

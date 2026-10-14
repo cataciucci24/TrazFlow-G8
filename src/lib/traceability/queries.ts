@@ -1,6 +1,7 @@
 import type { ProductUnit } from "@/lib/pallets/units";
+import { normalizePalletStatus, type StoredPalletStatus } from "@/lib/pallets/status";
 import { createClient } from "@/lib/supabase/server";
-import type { Pallet, PalletStatus } from "@/lib/types";
+import type { Pallet } from "@/lib/types";
 import type {
   LotPallet,
   LotTraceability,
@@ -22,7 +23,7 @@ type RelatedBatch = {
 type RawPalletRow = {
   id: string;
   qr_code: string;
-  status: PalletStatus;
+  status: StoredPalletStatus;
   current_location: string | null;
   quantity: number | null;
   batches: RelatedBatch | RelatedBatch[] | null;
@@ -33,7 +34,7 @@ type RawMovementRow = {
   order_id: string | null;
   origin_location: string | null;
   destination_location: string;
-  resulting_status: PalletStatus;
+  resulting_status: StoredPalletStatus;
   created_at: string;
 };
 
@@ -48,7 +49,7 @@ function mapPallet(row: RawPalletRow): Pallet {
   return {
     id: row.id,
     qrCode: row.qr_code,
-    status: row.status,
+    status: normalizePalletStatus(row.status),
     currentLocation: row.current_location,
     productName: product?.name ?? "—",
     productSku: product?.sku ?? "—",
@@ -65,7 +66,7 @@ function mapMovement(row: RawMovementRow): PalletMovement {
     orderId: row.order_id,
     originLocation: row.origin_location,
     destinationLocation: row.destination_location,
-    resultingStatus: row.resulting_status,
+    resultingStatus: normalizePalletStatus(row.resulting_status),
     createdAt: row.created_at,
   };
 }
@@ -129,14 +130,14 @@ type RawLotRow = {
   product_unit_of_measure: ProductUnit;
   pallet_id: string | null;
   pallet_qr_code: string | null;
-  pallet_status: PalletStatus | null;
+  pallet_status: StoredPalletStatus | null;
   pallet_current_location: string | null;
   pallet_quantity: number | null;
   movement_id: string | null;
   movement_order_id: string | null;
   movement_origin_location: string | null;
   movement_destination_location: string | null;
-  movement_resulting_status: PalletStatus | null;
+  movement_resulting_status: StoredPalletStatus | null;
   movement_created_at: string | null;
 };
 
@@ -181,7 +182,7 @@ export async function getLotTraceability(batchNumber: string): Promise<LotTracea
         pallet: {
           id: row.pallet_id,
           qrCode: row.pallet_qr_code!,
-          status: row.pallet_status!,
+          status: normalizePalletStatus(row.pallet_status!),
           currentLocation: row.pallet_current_location,
           productName: row.product_name,
           productSku: row.product_sku,
@@ -201,7 +202,7 @@ export async function getLotTraceability(batchNumber: string): Promise<LotTracea
         orderId: row.movement_order_id,
         originLocation: row.movement_origin_location,
         destinationLocation: row.movement_destination_location!,
-        resultingStatus: row.movement_resulting_status!,
+        resultingStatus: normalizePalletStatus(row.movement_resulting_status!),
         createdAt: row.movement_created_at!,
       });
     }

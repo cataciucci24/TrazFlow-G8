@@ -4,7 +4,7 @@ import type { ProductUnit } from "@/lib/pallets/units";
 export type UserRole =
   | "logistics_manager"
   | "warehouse_operator"
-  | "distributor_operator";
+  | "driver_operator";
 
 /** Perfil del usuario logueado (fila de la tabla `users`). */
 export type UserProfile = {
@@ -23,8 +23,8 @@ export type OrderStatus =
   | "validating"
   | "has_discrepancy"
   | "confirmed"
-  | "received"
-  | "received_with_discrepancy";
+  | "delivered"
+  | "delivered_with_discrepancy";
 
 /** Distribuidor de destino (fila de la tabla `distributors`). */
 export type Distributor = {
@@ -83,6 +83,8 @@ export type DispatchOrder = {
   estimatedDispatchDate: string;
   notes: string | null;
   createdAt: string;
+  driverId: string | null;
+  driverName: string | null;
 };
 
 /** Estados de un pallet, espejo del enum `pallet_status` de Postgres. */
@@ -90,8 +92,8 @@ export type PalletStatus =
   | "in_warehouse"
   | "assigned"
   | "in_transit"
-  | "received"
-  | "discrepancy";
+  | "delivered"
+  | "delivery_discrepancy";
 
 /** Lote existente de un producto (por SKU), para elegirlo en el formulario en vez de tipearlo. */
 export type ProductBatch = {

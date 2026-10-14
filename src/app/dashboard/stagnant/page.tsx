@@ -20,7 +20,7 @@ const STATUS_FILTERS: Array<{ value: "all" | PalletStatus; label: string }> = [
   { value: "in_warehouse", label: "En depósito" },
   { value: "assigned", label: "Asociados a orden" },
   { value: "in_transit", label: "En tránsito" },
-  { value: "received", label: "Recibidos" },
+  { value: "delivered", label: "Entregados" },
 ];
 
 export default async function StagnantInventoryPage({

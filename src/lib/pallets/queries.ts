@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getExpirationThresholds } from "@/lib/expiration/queries";
 import { classifyExpiration } from "@/lib/expiration/thresholds";
 import type { ProductUnit } from "@/lib/pallets/units";
+import { normalizePalletStatus, type StoredPalletStatus } from "@/lib/pallets/status";
 import type { ExistingProduct, ExpirationAlert, Lot, Pallet, PalletWithHistory } from "@/lib/types";
 
 type RawProduct = { name: string; sku: string; unit_of_measure: ProductUnit };
@@ -16,7 +17,7 @@ type RawProduct = { name: string; sku: string; unit_of_measure: ProductUnit };
 type RawPalletRow = {
   id: string;
   qr_code: string;
-  status: Pallet["status"];
+  status: StoredPalletStatus;
   current_location: string | null;
   quantity: number | null;
   created_at: string;
@@ -43,7 +44,7 @@ function mapPalletRow(row: RawPalletRow): Pallet {
   return {
     id: row.id,
     qrCode: row.qr_code,
-    status: row.status,
+    status: normalizePalletStatus(row.status),
     currentLocation: row.current_location,
     productName: product?.name ?? "—",
     productSku: product?.sku ?? "—",
@@ -95,6 +96,20 @@ export async function getCompanyPallets(companyId: string): Promise<PalletWithHi
     ...mapPalletRow(row),
     hasHistory: (row.traceability_events?.[0]?.count ?? 0) > 0,
   }));
+}
+
+/** Pallets seleccionados para impresión; la empresa se valida otra vez en servidor. */
+export async function getCompanyPalletsByIds(companyId: string, ids: string[]): Promise<Pallet[]> {
+  if (ids.length === 0) return [];
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("pallets").select(PALLET_SELECT)
+    .eq("company_id", companyId).in("id", ids);
+  if (error) throw new Error("No se pudieron consultar los pallets para imprimir.", { cause: error });
+  const byId = new Map(((data ?? []) as unknown as RawPalletRow[]).map((row) => [row.id, mapPalletRow(row)]));
+  return ids.flatMap((id) => {
+    const pallet = byId.get(id);
+    return pallet ? [pallet] : [];
+  });
 }
 
 /** Mercadería cuya última actividad supera el umbral indicado, ordenada por antigüedad. */

@@ -29,7 +29,7 @@ const statuses: Record<AccessRequestStatus, { title: string; description: string
 
 const roles: Record<RequestedRole, string> = {
   warehouse_operator: "Operador de depósito",
-  distributor_operator: "Operador de distribuidor",
+  driver_operator: "Chofer",
 };
 
 export default async function AccessStatusPage() {

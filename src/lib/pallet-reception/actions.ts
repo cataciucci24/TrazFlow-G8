@@ -45,7 +45,7 @@ export async function receivePallet(
 ): Promise<PalletReceptionResult> {
   const profile = await requireUserProfile();
 
-  if (!hasRole(profile, "distributor_operator")) {
+  if (!hasRole(profile, "driver_operator")) {
     return { outcome: "forbidden", message: MESSAGES.forbidden, pallet: null };
   }
 

@@ -26,7 +26,8 @@ export function PalletTraceability({
           <div className="min-w-0">
             <div className="flex items-center gap-5">
               <h2 className="section-title min-w-0 break-all">Pallet {pallet.qrCode}</h2>
-              <PalletQrButton qrCode={pallet.qrCode} variant="icon" />
+              <PalletQrButton pallet={pallet} variant="icon" />
+              <Link href={`/dashboard/pallets/print?ids=${pallet.id}`} className="button-secondary button-sm">Imprimir etiqueta</Link>
             </div>
             <p className="section-description">Identificación y estado actual del pallet.</p>
           </div>

@@ -13,7 +13,7 @@ type DashboardSidebarProps = { role: UserRole };
 const roleDetails = {
   logistics_manager: { label: "Logística", color: "bg-[var(--brand)]", tone: "bg-[var(--brand-soft)] text-[var(--brand-hover)]" },
   warehouse_operator: { label: "Depósito", color: "bg-[var(--brand)]", tone: "bg-[var(--brand-soft)] text-[var(--brand-hover)]" },
-  distributor_operator: { label: "Distribuidora", color: "bg-[var(--brand)]", tone: "bg-[var(--brand-soft)] text-[var(--brand-hover)]" },
+  driver_operator: { label: "Chofer", color: "bg-[var(--brand)]", tone: "bg-[var(--brand-soft)] text-[var(--brand-hover)]" },
 } as const;
 
 export function DashboardSidebar({ role }: DashboardSidebarProps) {
@@ -51,9 +51,8 @@ export function DashboardSidebar({ role }: DashboardSidebarProps) {
   const isLots = pathname.startsWith("/dashboard/lots") || traceabilityShowsLots;
   const isInventory = pathname.startsWith("/dashboard/inventory");
   const isAlerts = pathname.startsWith("/dashboard/alerts");
-  const isStockReport = pathname.startsWith("/dashboard/stock-report");
   const isStagnant = pathname.startsWith("/dashboard/stagnant");
-  const detailTitle = role === "warehouse_operator" ? "Confirmar despacho" : role === "distributor_operator" ? "Confirmar recepción" : "Órdenes de despacho";
+  const detailTitle = role === "warehouse_operator" ? "Confirmar despacho" : "Órdenes de despacho";
 
   const links = role === "logistics_manager"
     ? [
@@ -65,11 +64,8 @@ export function DashboardSidebar({ role }: DashboardSidebarProps) {
         { href: "/dashboard/stagnant", label: "Mercadería inmovilizada", icon: <StagnantIcon />, active: isStagnant },
         { href: "/dashboard/operators", label: "Operadores", icon: <OrdersIcon />, active: pathname.startsWith("/dashboard/operators") },
       ]
-    : role === "distributor_operator"
-      ? [
-          { href: "/dashboard", label: detailTitle, icon: <ScanIcon />, active: pathname === "/dashboard" || pathname.startsWith("/dashboard/orders/") },
-          { href: "/dashboard/stock-report", label: "Mi stock", icon: <InventoryIcon />, active: isStockReport },
-        ]
+    : role === "driver_operator"
+      ? [{ href: "/dashboard/deliveries", label: "Mis entregas", icon: <ScanIcon />, active: pathname.startsWith("/dashboard/deliveries") }]
       : [{ href: "/dashboard", label: detailTitle, icon: <ScanIcon />, active: pathname === "/dashboard" || pathname.startsWith("/dashboard/orders/") }];
 
   const navigation = (
