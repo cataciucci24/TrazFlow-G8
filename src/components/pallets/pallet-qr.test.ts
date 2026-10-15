@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
 import test from "node:test";
+import { locationQr } from "../../lib/locations/rules.ts";
 
 const require = createRequire(import.meta.url);
 const { BrowserQRCodeSvgWriter } = require("@zxing/browser");
@@ -15,14 +16,14 @@ class SvgElement {
   appendChild(child: SvgElement) { this.children.push(child); }
 }
 
-test("el QR visible se decodifica al valor exacto del pallet nuevo o histórico", () => {
+test("el QR visible se decodifica al valor exacto del pallet nuevo, histórico o ubicación", () => {
   const previousDocument = Object.getOwnPropertyDescriptor(globalThis, "document");
   Object.defineProperty(globalThis, "document", {
     configurable: true,
     value: { createElementNS: () => new SvgElement() },
   });
   try {
-    for (const value of [`PAL-${randomUUID()}`, "PAL-0001"]) {
+    for (const value of [`PAL-${randomUUID()}`, "PAL-0001", locationQr(randomUUID())]) {
       const svg: SvgElement = new BrowserQRCodeSvgWriter().write(value, 280, 280);
       const pixels = new Uint8ClampedArray(280 * 280).fill(255);
       for (const rect of svg.children) {
