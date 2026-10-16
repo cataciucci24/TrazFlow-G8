@@ -27,7 +27,7 @@ select ('36000000-0000-0000-0000-' || lpad(n::text, 12, '0'))::uuid,
   'US29 ' || n, 'us29-' || n || '@test.local',
   case when n <= 2 then 'logistics_manager'::public.user_role
     when n = 3 then 'warehouse_operator'::public.user_role
-    else 'distributor_operator'::public.user_role end
+    else 'driver_operator'::public.user_role end
 from generate_series(1, 4) n;
 
 insert into public.access_requests (user_id, company_id, requested_role, status)

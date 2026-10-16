@@ -5,6 +5,7 @@ import { BrandLogo } from "@/components/brand-mark";
 import { LogoutButton } from "@/components/logout-button";
 import { getAccessRequest, getRequestedCompanyName } from "@/lib/access-requests/queries";
 import type { AccessRequest, AccessRequestStatus, RequestedRole } from "@/lib/access-requests/types";
+import { canAccessDashboard, hasUnknownRole } from "@/lib/auth/profile";
 import { getUserProfile, requireUser } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Estado de solicitud | TrazFlow" };
@@ -39,11 +40,13 @@ export default async function AccessStatusPage() {
   let companyName = "";
   let hasActiveProfile = false;
   let revoked = false;
+  let unknownRole = false;
   let failed = false;
   try {
     const profile = await getUserProfile();
-    hasActiveProfile = profile !== null && !profile.revokedAt;
+    hasActiveProfile = profile !== null && canAccessDashboard(profile);
     revoked = Boolean(profile?.revokedAt);
+    unknownRole = profile !== null && hasUnknownRole(profile);
     if (!profile) {
       request = await getAccessRequest(user.id);
       if (request) companyName = await getRequestedCompanyName(request.companyId);
@@ -76,6 +79,11 @@ export default async function AccessStatusPage() {
             <div className="feedback feedback-danger">
               <h2 className="font-bold">Acceso revocado</h2>
               <p className="mt-2 text-sm">El responsable logístico de tu empresa revocó tu acceso. Si creés que es un error, comunicate con él.</p>
+            </div>
+          ) : unknownRole ? (
+            <div className="feedback feedback-warning">
+              <h2 className="font-bold">Tu rol ya no existe</h2>
+              <p className="mt-2 text-sm">El rol asignado a tu cuenta ya no existe en TrazFlow. Comunicate con el responsable logístico de tu empresa para que te asigne uno vigente.</p>
             </div>
           ) : request && status ? (
             <>

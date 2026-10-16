@@ -24,7 +24,7 @@ El destinatario se conserva en `distributors` como dato comercial de la orden. N
 
 Una persona puede solicitar `warehouse_operator` o `driver_operator`. El responsable logístico aprueba o rechaza la solicitud y puede revocar o restaurar el acceso. La pantalla Operadores muestra cuántas entregas en tránsito tiene cada chofer.
 
-`distributor_operator` permanece en el enum solo para datos históricos. No aparece en el registro ni en la navegación. La conversión de usuarios existentes y la asignación de órdenes se realizan de forma explícita siguiendo `docs/transicion-choferes.md`.
+`distributor_operator` ya no existe: la migración `20261016120000_drop_distributor_operator_role.sql` lo quita del enum `user_role`, junto con sus policies y RPCs (recepción de distribuidor, stock por lote y vínculo operador-distribuidor). Antes de aplicarla hay que convertir o borrar los usuarios con ese rol siguiendo `docs/transicion-choferes.md`. Las solicitudes de acceso ya resueltas conservan el valor como historial. Si la app encuentra un rol que no conoce, manda al usuario a `/access-status` en lugar de abrir el dashboard.
 
 ## Flujo de entrega
 

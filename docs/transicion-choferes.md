@@ -31,3 +31,5 @@ where role = 'distributor_operator';
 ```
 
 No ejecutar la conversión masiva en producción sin validar antes la nómina de choferes.
+
+Cuando no quede ningún usuario con `distributor_operator`, aplicar `supabase/migrations/20261016120000_drop_distributor_operator_role.sql`, que elimina el rol del enum. La migración aborta si todavía hay usuarios o solicitudes pendientes con ese rol.
