@@ -30,7 +30,7 @@ insert into users (id, company_id, name, email, role)
 values
   ('11000000-0000-0000-0000-000000000001', '21000000-0000-0000-0000-000000000001', 'Warehouse', 'warehouse-us18@test.local', 'warehouse_operator'),
   ('11000000-0000-0000-0000-000000000002', '21000000-0000-0000-0000-000000000001', 'Manager', 'manager-us18@test.local', 'logistics_manager'),
-  ('11000000-0000-0000-0000-000000000003', '21000000-0000-0000-0000-000000000001', 'Distributor Op', 'distributor-op-us18@test.local', 'distributor_operator'),
+  ('11000000-0000-0000-0000-000000000003', '21000000-0000-0000-0000-000000000001', 'Distributor Op', 'distributor-op-us18@test.local', 'driver_operator'),
   ('11000000-0000-0000-0000-000000000004', '21000000-0000-0000-0000-000000000002', 'Other Warehouse', 'other-warehouse-us18@test.local', 'warehouse_operator');
 
 insert into distributors (id, company_id, name)
@@ -172,12 +172,12 @@ select pg_temp.assert_true(
   'logistics_manager debe ver las mismas notificaciones que warehouse_operator'
 );
 
--- --- visibilidad por rol: distributor_operator no ve este log --------------
+-- --- visibilidad por rol: driver_operator no ve este log --------------
 select set_config('request.jwt.claim.sub', '11000000-0000-0000-0000-000000000003', true);
 select pg_temp.assert_true(
   (select count(*) from order_notifications
    where order_id = '71000000-0000-0000-0000-000000000001') = 0,
-  'distributor_operator no debe ver el log de notificaciones de despacho'
+  'driver_operator no debe ver el log de notificaciones de despacho'
 );
 
 -- --- aislamiento entre empresas ---------------------------------------------

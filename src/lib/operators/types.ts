@@ -15,16 +15,9 @@ export type CompanyOperator = {
   otherActiveOperators: number;
 };
 
-export type DistributorOption = { id: string; name: string };
-
 export type OperatorActionState = { error: string | null };
 
 /** Advierte antes de revocar a un chofer que todavía tiene entregas asignadas. */
 export function hasActiveDeliveryAssignments(operator: CompanyOperator): boolean {
   return operator.role === "driver_operator" && operator.inTransitOrders > 0;
-}
-
-/** Compatibilidad del formulario histórico, que ya no se muestra en Operadores. */
-export function leavesDistributorUnattended(operator: CompanyOperator): boolean {
-  return operator.distributorId !== null && operator.otherActiveOperators === 0 && operator.inTransitOrders > 0;
 }
