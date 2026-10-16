@@ -32,9 +32,10 @@ insert into public.users(id,company_id,name,email,role,revoked_at) values
  ('96000000-0000-0000-0000-000000000003','96000000-0000-0000-0000-000000000011','Driver','trz96-driver@test.local','driver_operator',null),
  ('96000000-0000-0000-0000-000000000004','96000000-0000-0000-0000-000000000011','Revoked','trz96-revoked@test.local','warehouse_operator',now()),
  ('96000000-0000-0000-0000-000000000005','96000000-0000-0000-0000-000000000012','Foreign','trz96-foreign@test.local','warehouse_operator',null);
-insert into public.products(id,company_id,sku,name) values
- ('96000000-0000-0000-0000-000000000021','96000000-0000-0000-0000-000000000011','TRZ96-A','Product A'),
- ('96000000-0000-0000-0000-000000000022','96000000-0000-0000-0000-000000000012','TRZ96-B','Product B');
+-- products.unit_of_measure is NOT NULL without a default since 20261006140000.
+insert into public.products(id,company_id,sku,name,unit_of_measure) values
+ ('96000000-0000-0000-0000-000000000021','96000000-0000-0000-0000-000000000011','TRZ96-A','Product A','unidades'),
+ ('96000000-0000-0000-0000-000000000022','96000000-0000-0000-0000-000000000012','TRZ96-B','Product B','unidades');
 insert into public.batches(id,product_id,batch_number,quantity) values
  ('96000000-0000-0000-0000-000000000031','96000000-0000-0000-0000-000000000021','TRZ96-A',10),
  ('96000000-0000-0000-0000-000000000032','96000000-0000-0000-0000-000000000022','TRZ96-B',10);

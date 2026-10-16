@@ -164,3 +164,23 @@ La corrección se limita a `src/components/pallets/pallet-qr.test.ts`: fixtures 
 El escáner conserva la detección normal y sus intentos sucesivos: PURE_BARCODE no corresponde a frames reales con fondo o perspectiva. La lectura con cámara física sigue pendiente de validación manual; esta corrección no garantiza detección en cada frame ni elimina las limitaciones del detector de la dependencia.
 
 Resultado de la corrección QR: suite completa con 47/47 pruebas aprobadas, TypeScript sin errores y ESLint aprobado. La ejecución de la suite requirió salir del sandbox por spawn EPERM. No se ejecutaron comandos de Supabase ni se cambiaron migraciones en esta investigación.
+
+## Corrección de fixtures SQL: unidad de medida del producto
+
+La primera ejecución de la suite en el proyecto aislado falló con SQLSTATE 23502 al insertar Product A. La migración `20261006140000_product_unit_of_measure.sql` hace obligatoria `products.unit_of_measure`, sin asignar un DEFAULT para nuevas filas. Su backfill de productos existentes no sustituye el valor requerido en INSERT posteriores.
+
+Se corrigió únicamente el INSERT de los dos productos sintéticos para proporcionar `unit_of_measure = 'unidades'`, uno de los valores permitidos. No se modificaron el esquema, las migraciones ni las aserciones de seguridad.
+
+Revisión estática de los demás fixtures contra las migraciones del repositorio:
+
+- Empresas: id y nombre presentes; umbrales de vencimiento con defaults 30/60/90.
+- Perfiles: id, empresa, nombre, correo y rol presentes; usuarios auth sintéticos creados antes.
+- Lotes: producto, número de lote y cantidad obligatorios presentes.
+- Pallets: empresa y lote presentes; QR generado por default; quantity admite NULL según el esquema vigente y no requiere una unidad propia.
+- Ubicaciones: empresa, código y coordenadas presentes; depósito e identificadores omitidos en algunas inserciones tienen default.
+- Destinatario, orden y asociación: referencias presentes, fecha estimada explícita, chofer sintético asignado y flags de asociación con defaults válidos.
+- Movimientos y eventos: sus INSERT siguen en las RPC existentes; no se alteraron sus campos ni reglas para adaptar el test.
+
+No se encontraron otras omisiones de campos obligatorios en los fixtures revisados. Es una comprobación estática, no una ejecución SQL: queda pendiente volver a correr la suite completa en el proyecto aislado.
+
+Para repetir desde SQL Editor: verificar el proyecto `trazflow-trz96-test` y el rol postgres, ejecutar ROLLBACK si la sesión indica transacción abortada, comprobar ausencia de los UUID/correos sintéticos, reemplazar todo el texto anterior del editor por esta versión actualizada de la suite y ejecutar el bloque completo desde BEGIN hasta ROLLBACK. No reanudar a partir del INSERT fallido. Se puede agregar después de ROLLBACK un SELECT de resultado como marcador de finalización. Solo dar por aprobada si no hay errores y se alcanza ese marcador; luego comprobar que no queden usuarios, empresas, pallets, ubicaciones ni el trigger trz96_test_reject de prueba. Si se usa la copia temporal del repositorio, también debe actualizarse este archivo de test en esa copia; no hace falta reaplicar migraciones.
