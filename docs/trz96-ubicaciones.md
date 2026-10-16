@@ -18,8 +18,8 @@ Un depósito por empresa: `DEP-01`, sin administración de múltiples depósitos
 
 Aplicar, en orden y después de las migraciones existentes:
 
-1. `supabase/migrations/20261015130000_location_event_types.sql`
-2. `supabase/migrations/20261015130100_pallet_physical_locations.sql`
+1. `supabase/migrations/20261016130000_location_event_types.sql`
+2. `supabase/migrations/20261016130100_pallet_physical_locations.sql`
 
 La primera migración debe terminar su transacción antes de ejecutar la segunda, porque PostgreSQL requiere confirmar los nuevos valores del enum antes de usarlos. No concatenarlas en una única transacción desde SQL Editor.
 
@@ -122,7 +122,7 @@ Dependencias inspeccionadas:
 | Validar QR | validate_order_pallet, SECURITY DEFINER; actualiza order_pallets, no pallet.status | Sin modificar RPC |
 | Despachar | confirm_dispatch_order, SECURITY DEFINER; in_transit | Sin modificar RPC |
 | Entregar | confirm_delivery_pallet, SECURITY DEFINER; delivered / delivery_discrepancy | Sin modificar RPC |
-| Recepción histórica | receive_order_pallet, SECURITY DEFINER | Sin modificar RPC ni habilitar roles retirados |
+| Recepción histórica | RPC eliminada por TRZ-91 | TRZ-96 no la utiliza |
 | Normalizaciones históricas | Migraciones ejecutadas por el propietario | No son escrituras del cliente |
 | Ubicación | assign_pallet_location; no modifica status | Misma autorización por empresa, rol activo y estado físico |
 
@@ -133,3 +133,34 @@ La suite SQL incorpora intentos de evasión con operador y Logística sobre los 
 Solo se modificaron en esta corrección la segunda migración de TRZ-96, su prueba SQL y este documento. No se aplicaron migraciones, no se modificaron RPC compartidas ni código de otras historias. Si la segunda migración ya estuviese aplicada en algún entorno, no debe repetirse: ese entorno necesitaría una migración incremental con el nuevo trigger.
 
 Validación de esta corrección: TypeScript y ESLint aprobados. La suite Node terminó con 43/43 pruebas aprobadas al repetirla; en el intento anterior falló el test QR con `NotFoundException` y UUID aleatorios. Se registra como fallo intermitente pendiente de investigar, no como regresión SQL demostrada. No se modificó ese test ni se eliminó su cobertura. El primer intento dentro del sandbox no pudo crear procesos (spawn EPERM); las ejecuciones efectivas fueron fuera del sandbox. No se ejecutó nuevamente build porque esta corrección solo modifica SQL y documentación. Las nuevas pruebas de seguridad y regresión SQL aún no se ejecutaron: no hay psql ni Docker disponibles.
+
+
+## Revisión después del merge de TRZ-91 (16/10/2026)
+
+La rama incorpora la migración `20261016120000_drop_distributor_operator_role.sql` y los controles de perfiles desconocidos de TRZ-91. Las acciones y consultas de ubicaciones usan `requireUserProfile`, que rechaza perfiles revocados o con roles desconocidos. Los SQL y fixtures de TRZ-96 solo utilizan los tres roles vigentes; no dependen de las funciones antiguas eliminadas por TRZ-91. La protección de estados y las RPC compartidas se conservan.
+
+Se renombraron exclusivamente las dos migraciones pendientes de TRZ-96, sin cambiar su contenido SQL. El orden local queda:
+
+1. `20261016120000_drop_distributor_operator_role.sql` (TRZ-91).
+2. `20261016130000_location_event_types.sql` (TRZ-96, enum).
+3. `20261016130100_pallet_physical_locations.sql` (TRZ-96, catálogo y operaciones).
+
+La última inspección remota mostró TRZ-91 aplicada y TRZ-96 pendiente. Esta revisión posterior al merge es únicamente local: antes de aplicar, el responsable debe confirmar que nadie haya aplicado entretanto las versiones antiguas de TRZ-96. Si alguna ya estuviera registrada o sus objetos existieran, detenerse y conciliar con el equipo; no ejecutar nuevamente el CREATE ni reparar automáticamente el historial. Los nombres anteriores de TRZ-96 quedan sustituidos por los indicados arriba y no deben aplicarse desde copias antiguas de la rama.
+
+El cambio permite mantener un orden creciente sin forzar migraciones anteriores a la última aplicada. La migración del enum debe confirmar su transacción antes de comenzar la siguiente. No se ejecutaron comandos de Supabase ni se cambió su configuración.
+
+Pendiente antes de dar aceptación: ejecutar las migraciones en un entorno separado con TRZ-91, correr `supabase/tests/trz96_physical_locations.sql`, verificar RLS con dos empresas y varios roles, rollback atómico, concurrencia real y regresiones de asociación/desasociación, validación, despacho y entrega. La suite SQL no debe ejecutarse en la base compartida porque crea fixtures y triggers temporales de prueba, aunque finalmente revierta la transacción. Luego coordinar la aplicación y el código actualizado: el formulario anterior que escribe ubicación libre dejará de tener permiso.
+
+Verificación local posterior al merge: `npx.cmd tsc --noEmit` y `npm.cmd run lint` aprobados. `npm.cmd test`, ejecutado fuera del sandbox tras `spawn EPERM`, dio 46 aprobados y 1 fallido de 47: el test QR con UUID aleatorios falló con `ChecksumException`. Las pruebas de perfiles y roles de TRZ-91 aprobaron. Se conserva el fallo intermitente QR como pendiente; no se alteró la prueba ni la implementación QR para obtener un resultado verde. Los hashes de ambos SQL antes y después del renombrado son idénticos. No se ejecutaron pruebas SQL ni build en esta revisión.
+
+## Investigación del fallo QR y corrección del test
+
+Se reprodujo de forma determinista `ChecksumException` con `PAL-43fc61dc-3737-41df-ae95-0579597726e4`, a 260 y 280 px. El SVG y su rasterización son correctos: el detector geométrico de ZXing selecciona un patrón interno como finder point, en vez de la esquina superior derecha, y entrega una matriz equivocada al decodificador. No es un checksum incorrecto en el QR generado. También se reprodujeron NotFoundException y FormatException según el contenido.
+
+En un diagnóstico reproducible de 1.000 payloads con semilla 96, el camino de detección geométrica falló 62 veces; el mismo bitmap leído como QR aislado con PURE_BARCODE recuperó el contenido exacto en los 1.000 casos. No se modificaron dependencias ni código de generación, impresión o cámara.
+
+La corrección se limita a `src/components/pallets/pallet-qr.test.ts`: fixtures deterministas que incluyen los fallos encontrados, los dos tamaños usados por las etiquetas (260 y 280 px) y PURE_BARCODE para estas imágenes sintéticas aisladas y sin perspectiva. Se mantiene la rasterización del SVG real y la comprobación del contenido mediante el decodificador y su corrección de errores; no se capturan ni ignoran errores para hacer pasar la prueba. El nombre del test ahora describe generación/codificación, no una prueba de cámara.
+
+El escáner conserva la detección normal y sus intentos sucesivos: PURE_BARCODE no corresponde a frames reales con fondo o perspectiva. La lectura con cámara física sigue pendiente de validación manual; esta corrección no garantiza detección en cada frame ni elimina las limitaciones del detector de la dependencia.
+
+Resultado de la corrección QR: suite completa con 47/47 pruebas aprobadas, TypeScript sin errores y ESLint aprobado. La ejecución de la suite requirió salir del sandbox por spawn EPERM. No se ejecutaron comandos de Supabase ni se cambiaron migraciones en esta investigación.
