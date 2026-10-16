@@ -1,10 +1,17 @@
 import type { ProductUnit } from "@/lib/pallets/units";
 
-/** Roles de la app, espejo del enum `user_role` de Postgres. */
-export type UserRole =
-  | "logistics_manager"
-  | "warehouse_operator"
-  | "driver_operator";
+/**
+ * Roles vigentes de la app. El enum `user_role` de Postgres todavía puede
+ * contener valores históricos (ej: `distributor_operator`), por eso todo rol
+ * que venga de la base se valida con `isUserRole` antes de usarlo.
+ */
+export const USER_ROLES = ["logistics_manager", "warehouse_operator", "driver_operator"] as const;
+
+export type UserRole = (typeof USER_ROLES)[number];
+
+export function isUserRole(value: unknown): value is UserRole {
+  return typeof value === "string" && (USER_ROLES as readonly string[]).includes(value);
+}
 
 /** Perfil del usuario logueado (fila de la tabla `users`). */
 export type UserProfile = {

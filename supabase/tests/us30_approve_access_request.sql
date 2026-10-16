@@ -37,12 +37,12 @@ select pg_temp.uid(n),
     else '37000000-0000-0000-0001-000000000001'::uuid end,
   'Perfil anterior', 'us30-' || n || '@test.local',
   case when n in (1,2) then 'logistics_manager'::public.user_role
-    when n = 4 then 'distributor_operator'::public.user_role else 'warehouse_operator'::public.user_role end
+    when n = 4 then 'driver_operator'::public.user_role else 'warehouse_operator'::public.user_role end
 from unnest(array[1,2,3,4,8]) n;
 
 insert into public.access_requests(id, user_id, company_id, requested_role, status)
 select pg_temp.uid(n), pg_temp.uid(n), '37000000-0000-0000-0001-000000000001',
-  case when n = 6 then 'distributor_operator' else 'warehouse_operator' end,
+  case when n = 6 then 'driver_operator' else 'warehouse_operator' end,
   case when n = 7 then 'rejected' else 'pending' end
 from generate_series(5, 15) n;
 
@@ -67,7 +67,7 @@ select public.approve_access_request(pg_temp.uid(6));
 select pg_temp.assert_true((select count(*) = 2 from public.users where id in (pg_temp.uid(5), pg_temp.uid(6))), 'un perfil por solicitante');
 select pg_temp.assert_true((select bool_and(company_id = '37000000-0000-0000-0001-000000000001'::uuid
   and name = 'María José O''Connor' and email = case when id = pg_temp.uid(5) then 'us30-5@test.local' else 'us30-6@test.local' end
-  and role = case when id = pg_temp.uid(5) then 'warehouse_operator'::public.user_role else 'distributor_operator'::public.user_role end)
+  and role = case when id = pg_temp.uid(5) then 'warehouse_operator'::public.user_role else 'driver_operator'::public.user_role end)
   from public.users where id in (pg_temp.uid(5), pg_temp.uid(6))), 'perfil desde solicitud/Auth; metadata no asigna rol/empresa');
 select pg_temp.assert_true(not exists(select 1 from public.get_pending_access_requests() where request_id in (pg_temp.uid(5), pg_temp.uid(6))), 'aprobadas desaparecen de pendientes');
 select pg_temp.expect_failure(pg_temp.uid(5), 'P3702');

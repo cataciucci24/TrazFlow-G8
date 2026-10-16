@@ -20,9 +20,8 @@ const dateFormatter = new Intl.DateTimeFormat("es-AR", {
 type Tab = "solicitudes" | "operadores";
 
 const doneMessages: Record<string, string> = {
-  approved: "Solicitud aprobada. El perfil operativo fue creado. Si es operador de distribuidor, vinculalo en la pestaña Operadores.",
+  approved: "Solicitud aprobada. El perfil operativo fue creado.",
   rejected: "Solicitud rechazada.",
-  assigned: "Distribuidor asignado.",
   revoked: "Acceso revocado. El historial del operador se conserva.",
   restored: "Acceso restaurado.",
 };

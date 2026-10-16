@@ -31,7 +31,7 @@ values
   ('10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001', 'Warehouse', 'warehouse@test.local', 'warehouse_operator'),
   ('10000000-0000-0000-0000-000000000002', '20000000-0000-0000-0000-000000000001', 'Manager', 'manager@test.local', 'logistics_manager'),
   ('10000000-0000-0000-0000-000000000003', '20000000-0000-0000-0000-000000000002', 'Other Warehouse', 'other-warehouse@test.local', 'warehouse_operator'),
-  ('10000000-0000-0000-0000-000000000004', '20000000-0000-0000-0000-000000000001', 'Distributor Op', 'distributor-op@test.local', 'distributor_operator');
+  ('10000000-0000-0000-0000-000000000004', '20000000-0000-0000-0000-000000000001', 'Distributor Op', 'distributor-op@test.local', 'driver_operator');
 
 insert into distributors (id, company_id, name)
 values ('30000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001', 'Distributor');
@@ -161,7 +161,7 @@ select pg_temp.assert_true(
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000004', true);
 select pg_temp.assert_true(
   (select outcome from confirm_dispatch_order('70000000-0000-0000-0000-000000000002')) = 'forbidden',
-  'distributor_operator no debe poder confirmar despachos'
+  'driver_operator no debe poder confirmar despachos'
 );
 
 -- --- aislamiento entre empresas ----------------------------------------------

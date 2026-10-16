@@ -5,6 +5,7 @@ import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { getAccessRequest } from "@/lib/access-requests/queries";
 import type { UserProfile, UserRole } from "@/lib/types";
+import { canAccessDashboard, toUserProfile, type StoredUserProfile } from "@/lib/auth/profile";
 
 /**
  * Capa de acceso a la sesión (Data Access Layer).
@@ -35,7 +36,7 @@ export const getUser = cache(async (): Promise<User | null> => {
  * lanzamos el error en vez de devolver null: son problemas de configuración de
  * la base, y disfrazarlos de "perfil inexistente" hace imposible diagnosticarlos.
  */
-export const getUserProfile = cache(async (): Promise<UserProfile | null> => {
+export const getUserProfile = cache(async (): Promise<StoredUserProfile | null> => {
   const user = await getUser();
   if (!user) return null;
 
@@ -56,14 +57,9 @@ export const getUserProfile = cache(async (): Promise<UserProfile | null> => {
 
   if (!data) return null;
 
-  return {
-    id: data.id,
-    companyId: data.company_id,
-    name: data.name,
-    email: data.email,
-    role: data.role as UserRole,
-    revokedAt: data.revoked_at,
-  };
+  // El rol se valida en vez de castearse: la base puede tener roles históricos
+  // que la UI no conoce (ver toUserProfile).
+  return toUserProfile(data);
 });
 
 /**
@@ -81,8 +77,8 @@ export async function requireUser(): Promise<User> {
  * Igual que getUserProfile(), pero exige sesión + perfil cargado.
  * Sin perfil operativo, una solicitud permite consultar su estado, no entrar
  * al dashboard. Sin solicitud se conserva el error de perfil incompleto.
- * Un perfil revocado (TRZ-38) tampoco entra: RLS ya le bloquea los datos, y
- * /access-status le explica por qué.
+ * Un perfil revocado (TRZ-38) o con un rol que ya no existe (TRZ-91) tampoco
+ * entra: /access-status le explica por qué.
  */
 export async function requireUserProfile(): Promise<UserProfile> {
   const user = await requireUser();
@@ -93,7 +89,7 @@ export async function requireUserProfile(): Promise<UserProfile> {
     if (request) redirect("/access-status");
     redirect("/login?error=perfil-incompleto");
   }
-  if (profile.revokedAt) redirect("/access-status");
+  if (!canAccessDashboard(profile)) redirect("/access-status");
 
   return profile;
 }

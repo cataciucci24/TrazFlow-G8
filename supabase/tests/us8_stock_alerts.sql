@@ -19,7 +19,7 @@ values ('28000000-0000-0000-0000-000000000001', 'US8 Company');
 insert into users (id, company_id, name, email, role)
 values
   ('18000000-0000-0000-0000-000000000001', '28000000-0000-0000-0000-000000000001', 'Manager US8', 'manager-us8@test.local', 'logistics_manager'),
-  ('18000000-0000-0000-0000-000000000002', '28000000-0000-0000-0000-000000000001', 'Distributor US8', 'distributor-us8@test.local', 'distributor_operator');
+  ('18000000-0000-0000-0000-000000000002', '28000000-0000-0000-0000-000000000001', 'Distributor US8', 'distributor-us8@test.local', 'driver_operator');
 
 insert into distributors (id, company_id, name)
 values ('38000000-0000-0000-0000-000000000001', '28000000-0000-0000-0000-000000000001', 'Distribuidora crítica'), ('38000000-0000-0000-0000-000000000002', '28000000-0000-0000-0000-000000000001', 'Distribuidora precaución');
@@ -43,8 +43,8 @@ select pg_temp.assert_true((select current_stock / daily_consumption = 8 from di
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '18000000-0000-0000-0000-000000000002', true);
 
--- Desde TRZ-90 el stock se guarda con save_distributor_stock (por lote): el operador
--- no puede editar la tabla directamente, ni en su distribuidora ni en otra.
+-- Un operador no puede editar la tabla de stock directamente, ni en la
+-- distribuidora a la que estuvo vinculado ni en otra.
 update distributor_product_stocks
 set current_stock = 30, daily_consumption = 6
 where distributor_id = '38000000-0000-0000-0000-000000000001';
