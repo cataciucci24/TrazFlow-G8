@@ -10,6 +10,21 @@ Pallet labels can be printed individually or in batches from the pallet list. Th
 
 Database changes are applied with the Supabase migrations. Existing `distributor_operator` users must be transitioned explicitly by following [`docs/transicion-choferes.md`](docs/transicion-choferes.md).
 
+## ERP integration
+
+The ERP is the source of truth for products, lots, stock and orders. The app talks to it only through the `ErpClient` interface in `src/lib/erp` (`getErpClient(companyId)`), and the provider is chosen with server-only environment variables:
+
+```bash
+ERP_PROVIDER=mock            # default; or "erpnext"
+ERP_MOCK_SCENARIO=ok         # mock only: ok | timeout | unauthorized | validation | server_error
+ERP_BASE_URL=http://localhost:8080   # erpnext only
+ERP_API_KEY=...                      # erpnext only
+ERP_API_SECRET=...                   # erpnext only
+ERP_TIMEOUT_MS=10000                 # optional
+```
+
+The contract (payloads, external ids, error codes, idempotency key and ERPNext setup) is documented in [`docs/erp-contract.md`](docs/erp-contract.md).
+
 ## Getting Started
 
 First, run the development server:
