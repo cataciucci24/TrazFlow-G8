@@ -19,6 +19,7 @@ type RawPalletRow = {
   qr_code: string;
   status: StoredPalletStatus;
   current_location: string | null;
+  current_location_id?: string | null;
   quantity: number | null;
   created_at: string;
   batches:
@@ -46,6 +47,7 @@ function mapPalletRow(row: RawPalletRow): Pallet {
     qrCode: row.qr_code,
     status: normalizePalletStatus(row.status),
     currentLocation: row.current_location,
+    currentLocationId: row.current_location_id ?? null,
     productName: product?.name ?? "—",
     productSku: product?.sku ?? "—",
     batchNumber: batch?.batch_number ?? "—",
@@ -56,7 +58,7 @@ function mapPalletRow(row: RawPalletRow): Pallet {
 }
 
 const PALLET_SELECT =
-  "id, qr_code, status, current_location, quantity, created_at, batches ( batch_number, products ( name, sku, unit_of_measure ) )";
+  "id, qr_code, status, current_location, current_location_id, quantity, created_at, batches ( batch_number, products ( name, sku, unit_of_measure ) )";
 
 /** Pallets de la empresa disponibles para asociar a una orden (en depósito, sin asignar). */
 export async function getAvailablePallets(companyId: string): Promise<Pallet[]> {

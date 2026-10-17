@@ -95,7 +95,7 @@ export function PalletActions({
             <LotField productSku={product.sku} existingBatches={existingBatches} defaultValue={pallet.batchNumber} />
             <p className="break-all text-xs text-stone-500">Código QR (no editable): <span className="font-mono">{pallet.qrCode}</span></p>
             <PalletField label={product.unitOfMeasure ? `Cantidad (${product.unitOfMeasure})` : "Cantidad"} name="quantity" type="number" step={quantityStep(product.unitOfMeasure)} defaultValue={pallet.quantity === null ? "" : String(pallet.quantity)} />
-            <PalletField label="Ubicación" name="currentLocation" defaultValue={pallet.currentLocation ?? "Depósito"} required={false} />
+            <p className="text-sm text-stone-500">Ubicación: {pallet.currentLocation ?? "Sin asignar"}. Los cambios se registran desde Ubicaciones.</p>
             <div className="flex flex-wrap justify-end gap-3">
               <button type="button" onClick={closeForm} className="button-secondary">Cancelar</button>
               <button disabled={isPending} aria-busy={isPending} className="button-primary">{isPending ? "Guardando..." : "Guardar cambios"}</button>

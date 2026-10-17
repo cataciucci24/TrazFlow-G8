@@ -182,7 +182,6 @@ export async function updatePallet(
   const productName = String(formData.get("productName") ?? "").trim();
   const productSku = String(formData.get("productSku") ?? "").trim();
   const batchNumber = String(formData.get("batchNumber") ?? "").trim();
-  const currentLocation = String(formData.get("currentLocation") ?? "").trim();
   const quantity = Number(formData.get("quantity") ?? 0);
 
   if (!productName || !productSku || !batchNumber) {
@@ -215,7 +214,7 @@ export async function updatePallet(
   // orden entre la lectura de arriba y este UPDATE.
   const { data: updated, error: updateError } = await supabase
     .from("pallets")
-    .update({ batch_id: batch.id, quantity, current_location: currentLocation || null })
+    .update({ batch_id: batch.id, quantity })
     .eq("id", palletId)
     .eq("company_id", profile.companyId)
     .eq("status", "in_warehouse")

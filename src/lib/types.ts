@@ -133,6 +133,7 @@ export type Pallet = {
   qrCode: string;
   status: PalletStatus;
   currentLocation: string | null;
+  currentLocationId?: string | null;
   productName: string;
   productSku: string;
   batchNumber: string;

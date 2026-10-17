@@ -14,24 +14,25 @@ type TraceabilitySearchParams = { qr?: string; status?: string; view?: string; l
 
 export default async function TraceabilityPage({ searchParams }: { searchParams: Promise<TraceabilitySearchParams> }) {
   const profile = await requireUserProfile();
-  if (!hasRole(profile, "logistics_manager")) redirect("/dashboard");
+  if (!hasRole(profile, "logistics_manager", "warehouse_operator")) redirect("/dashboard");
 
   const params = await searchParams;
   const isLots = params.view === "lotes";
   const query = isLots ? params.lote?.trim() : params.qr?.trim();
   if (!query) {
     const status = !isLots && params.status ? `?status=${encodeURIComponent(params.status)}` : "";
-    redirect(isLots ? "/dashboard/lots" : `/dashboard/pallets${status}`);
+    redirect(profile.role === "warehouse_operator" ? "/dashboard/locations" : isLots ? "/dashboard/lots" : `/dashboard/pallets${status}`);
   }
 
   const isTooLong = query.length > 512;
   if (isLots) {
+    if (!hasRole(profile, "logistics_manager")) redirect("/dashboard/locations");
     const lots = isTooLong ? null : await getLotTraceability(query);
     return <TraceabilityLayout backHref="/dashboard/lots" backLabel="Lotes" title="lote">{isTooLong ? <TooLongMessage /> : !lots || lots.length === 0 ? <NotFoundMessage entity="lote" /> : <LotTraceability lots={lots} />}</TraceabilityLayout>;
   }
 
   const pallet = isTooLong ? null : await getPalletTraceability(query, profile.companyId);
-  return <TraceabilityLayout backHref="/dashboard/pallets" backLabel="Pallets" title="pallet">{isTooLong ? <TooLongMessage /> : !pallet ? <NotFoundMessage entity="pallet" /> : <PalletTraceability traceability={pallet} />}</TraceabilityLayout>;
+  return <TraceabilityLayout backHref={profile.role === "warehouse_operator" ? "/dashboard/locations" : "/dashboard/pallets"} backLabel={profile.role === "warehouse_operator" ? "Ubicaciones" : "Pallets"} title="pallet">{isTooLong ? <TooLongMessage /> : !pallet ? <NotFoundMessage entity="pallet" /> : <PalletTraceability traceability={pallet} canPrint={profile.role === "logistics_manager"} />}</TraceabilityLayout>;
 }
 
 function TraceabilityLayout({ backHref, backLabel, title, children }: { backHref: string; backLabel: string; title: string; children: React.ReactNode }) {

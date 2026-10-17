@@ -68,6 +68,8 @@ export function DashboardSidebar({ role }: DashboardSidebarProps) {
       ? [{ href: "/dashboard/deliveries", label: "Mis entregas", icon: <ScanIcon />, active: pathname.startsWith("/dashboard/deliveries") }]
       : [{ href: "/dashboard", label: detailTitle, icon: <ScanIcon />, active: pathname === "/dashboard" || pathname.startsWith("/dashboard/orders/") }];
 
+  if (role !== "driver_operator") links.push({ href: "/dashboard/locations", label: "Ubicaciones", icon: <InventoryIcon />, active: pathname.startsWith("/dashboard/locations") });
+
   const navigation = (
     <nav className="px-3 py-5" aria-label="Navegación principal">
       <p className="mb-3 px-3 text-[11px] font-bold tracking-[0.12em] text-[var(--muted)]">NAVEGACIÓN</p>

@@ -7,12 +7,14 @@ import { Modal } from "@/components/ui/modal";
 import type { IScannerControls } from "@zxing/browser";
 
 type QrScannerProps = {
+  title?: string;
+  description?: string;
   disabled: boolean;
   onCancel: () => void;
   onScan: (value: string) => void;
 };
 
-export function QrScanner({ disabled, onCancel, onScan }: QrScannerProps) {
+export function QrScanner({ disabled, onCancel, onScan, title = "Escanear pallet", description = "Apuntá la cámara al código QR adherido al pallet." }: QrScannerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const controlsRef = useRef<IScannerControls | null>(null);
   const readLockedRef = useRef(false);
@@ -63,8 +65,8 @@ export function QrScanner({ disabled, onCancel, onScan }: QrScannerProps) {
   }
 
   return (
-    <Modal open onClose={closeScanner} title="Escanear pallet"
-      description="Apuntá la cámara al código QR adherido al pallet."
+    <Modal open onClose={closeScanner} title={title}
+      description={description}
       busy={disabled}
       actions={<button type="button" disabled={disabled} onClick={closeScanner} className="button-secondary">
         {disabled ? "Validando..." : "Cancelar"}
