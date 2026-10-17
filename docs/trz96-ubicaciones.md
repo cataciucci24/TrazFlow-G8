@@ -184,3 +184,38 @@ Revisión estática de los demás fixtures contra las migraciones del repositori
 No se encontraron otras omisiones de campos obligatorios en los fixtures revisados. Es una comprobación estática, no una ejecución SQL: queda pendiente volver a correr la suite completa en el proyecto aislado.
 
 Para repetir desde SQL Editor: verificar el proyecto `trazflow-trz96-test` y el rol postgres, ejecutar ROLLBACK si la sesión indica transacción abortada, comprobar ausencia de los UUID/correos sintéticos, reemplazar todo el texto anterior del editor por esta versión actualizada de la suite y ejecutar el bloque completo desde BEGIN hasta ROLLBACK. No reanudar a partir del INSERT fallido. Se puede agregar después de ROLLBACK un SELECT de resultado como marcador de finalización. Solo dar por aprobada si no hay errores y se alcanza ese marcador; luego comprobar que no queden usuarios, empresas, pallets, ubicaciones ni el trigger trz96_test_reject de prueba. Si se usa la copia temporal del repositorio, también debe actualizarse este archivo de test en esa copia; no hace falta reaplicar migraciones.
+
+## Revisión final de UX y técnica previa al PR
+
+Estado informado por el equipo: las migraciones de TRZ-96 ya están aplicadas en la base compartida y se probaron manualmente catálogo, QR e impresión, cámara, asignaciones, reubicaciones, historial y bloqueo del chofer en un proyecto aislado. En esta revisión no se consultó ni se modificó ninguna base; tampoco se cambiaron las migraciones ya aplicadas, archivos .env o configuración Supabase.
+
+### Mejoras de UX
+
+- Éxitos inline con el componente InlineAlert existente y duración de cuatro segundos, independiente por formulario. Una respuesta nueva, incluso con texto idéntico, reinicia el plazo. El hook cancela timers al reemplazar mensajes o desmontarse y descarta respuestas tardías.
+- Errores persistentes hasta editar, volver a escanear, actualizar o iniciar otra operación. Los errores de negocio de la RPC se conservan; los diagnósticos técnicos de permisos, restricciones y referencias se traducen a mensajes comprensibles.
+- El formulario de movimiento usa el patrón onSubmit + useTransition de los formularios existentes. Se evita el reset automático de React sobre form action, manteniendo pallet y destino seleccionados. La revalidación existente trae en la misma respuesta la ubicación actual y su identificador; no se introduce una ubicación optimista que oculte conflictos.
+- Después de confirmar, el destino coincide con la ubicación actual y se explica «El pallet ya se encuentra en esta ubicación». El botón sigue deshabilitado y el handler también rechaza un submit forzado de ese mismo destino. La RPC conserva su propia validación.
+- El alta conserva sus entradas si hay error y las reinicia únicamente tras éxito. Un error de transporte al confirmar un movimiento invita a actualizar antes de reintentar, porque no demuestra que la transacción no se haya completado.
+- No se cambió el plazo de ocho segundos de las notificaciones globales de otras pantallas; la duración solicitada se limita a Ubicaciones.
+
+### Hallazgo crítico pendiente: retorno a depósito mediante desasociación
+
+Encontrado por lectura de las políticas y funciones versionadas; no se reprodujo contra ninguna base. Es una ruta heredada, no una regresión introducida por la UX:
+
+1. La policy order_pallets_insert_manager (20260831235900_add_pallet_validation.sql) permite a Logística insertar una relación para un pallet y una orden de su empresa sin comprobar el estado actual del pallet.
+2. dissociate_pallet_from_order (20261006120000_log_pallet_dissociation.sql) exige orden draft y relación sin validación, pero no verifica que el pallet siga assigned antes de ponerlo in_warehouse.
+3. Un manager puede enlazar por API un pallet entregado o en tránsito a una orden draft y desasociarlo mediante esa RPC. El trigger guard_direct_pallet_status no bloquea ese cambio porque la RPC es SECURITY DEFINER. Posteriormente, un operador de la misma empresa podría asignarle ubicación.
+
+Recomendación antes de aprobar el PR: una migración NUEVA, posterior a las ya aplicadas, que bloquee y verifique el pallet dentro de dissociate_pallet_from_order antes de borrar la relación o actualizarlo. Si no está assigned, devolver not_removable sin modificar datos. Evaluar además restringir el INSERT de order_pallets a pallets assigned, conservando el orden de reserva → asociación de las Server Actions existentes. Agregar regresiones SQL para tránsito, entrega y desasociación legítima. No se escribió ni aplicó esta corrección porque implica una RPC compartida y una migración adicional; no editar la migración histórica de TRZ-96.
+
+### Alcance de la revisión y límites
+
+Se contrastó el diff completo respecto de origin/develop disponible localmente. Los controles de empresa/rol en página, acciones, consultas, RLS y RPC siguen presentes; los helpers rechazan perfiles revocados y roles desconocidos de TRZ-91. La FK compuesta conserva empresa entre pallet y ubicación. El RPC mantiene FOR UPDATE, ubicación esperada y las tres escrituras en una transacción. Los eventos conservan autor, fecha y snapshots, con protección de inmutabilidad y falsificación. No se alteraron validaciones ni tipos de evento en esta mejora.
+
+Stock y alertas conservan cantidades y unidades; el agrupamiento por ubicación admite los códigos DEP-01 / código porque usa texto genérico. Reserva y compensación siguen usando in_warehouse ↔ assigned, y despacho/entrega conservan sus RPC y el trigger que limpia la ubicación física activa. El escáner mantiene sus valores predeterminados y su lectura de pallets; solo acepta textos de modal opcionales desde TRZ-96.
+
+Límites menores ya existentes: no hay prueba de dos conexiones concurrentes reales; el historial usa fecha y UUID para desempatar y no prueba orden estricto de varios eventos en una misma transacción; los tests de componentes usan el harness de hooks/JSX del proyecto, no un navegador. Debe repetirse un smoke test manual de selección, mensajes y revalidación tras estos cambios. La suite SQL y las políticas no se ejecutaron en esta revisión.
+
+Estado recomendado: UX preparada para revisión, pero no recomendar aprobación/merge como historia completamente cerrada hasta resolver el hallazgo crítico o acordar explícitamente su tratamiento con el equipo.
+
+Validación local de las mejoras finales: TypeScript y ESLint aprobados; suite completa Node con 54/54 pruebas aprobadas (incluye siete pruebas nuevas de selección, duplicados, feedback, timers y errores). El primer intento en sandbox no pudo crear procesos de Node y se repitió fuera del sandbox. Los tests de componentes no reemplazan la prueba manual en navegador. No se ejecutó SQL, no se hizo build ni se agregaron dependencias. No se realizaron commits, push o PR.

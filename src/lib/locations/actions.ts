@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { requireUserProfile, hasRole } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { normalizeLocationCode, validLocationCode } from "./rules";
+import { locationErrorMessage } from "./errors";
 import type { LocationActionState } from "./types";
 
 export async function createLocation(_previous: LocationActionState, form: FormData): Promise<LocationActionState> {
@@ -18,7 +19,7 @@ export async function createLocation(_previous: LocationActionState, form: FormD
   }
   const db = await createClient();
   const { error } = await db.from("warehouse_locations").insert({ company_id: profile.companyId, code, aisle, rack, level, position });
-  if (error) return { error: error.code === "23505" ? "Ya existe ese código o esas coordenadas en el depósito." : "No se pudo crear la ubicación.", success: null };
+  if (error) return { error: locationErrorMessage(error, "create"), success: null };
   revalidatePath("/dashboard/locations");
   return { success: "Ubicación creada.", error: null };
 }
@@ -32,7 +33,7 @@ export async function assignLocation(_previous: LocationActionState, form: FormD
   if (!uuid.test(palletId) || !uuid.test(locationId) || (expected && !uuid.test(expected))) return { error: "Seleccioná un pallet y una ubicación válidos.", success: null };
   const db = await createClient();
   const { error } = await db.rpc("assign_pallet_location", { p_pallet_id: palletId, p_location_id: locationId, p_expected_location_id: expected || null });
-  if (error) return { error: ["42501", "P0002", "23514", "40001"].includes(error.code) ? error.message : "No se pudo registrar el movimiento. Actualizá la pantalla e intentá nuevamente.", success: null };
+  if (error) return { error: locationErrorMessage(error, "move"), success: null };
   revalidatePath("/dashboard", "layout");
   return { error: null, success: "Movimiento registrado y ubicación actualizada." };
 }
