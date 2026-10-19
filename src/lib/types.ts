@@ -1,3 +1,4 @@
+import type { ErpOrigin } from "@/lib/erp-sync/types";
 import type { ProductUnit } from "@/lib/pallets/units";
 
 /**
@@ -92,6 +93,7 @@ export type DispatchOrder = {
   createdAt: string;
   driverId: string | null;
   driverName: string | null;
+  origin?: ErpOrigin;
 };
 
 /** Estados de un pallet, espejo del enum `pallet_status` de Postgres. */
@@ -140,6 +142,8 @@ export type Pallet = {
   quantity: number | null;
   /** Unidad de su producto. */
   unitOfMeasure: ProductUnit;
+  /** De dónde vino: alta en TrazFlow o saldo de stock importado del ERP (US-ERP-03). */
+  origin?: ErpOrigin;
 };
 
 /** Pallet con la marca de si ya tiene eventos de trazabilidad (la base impide eliminarlo). */

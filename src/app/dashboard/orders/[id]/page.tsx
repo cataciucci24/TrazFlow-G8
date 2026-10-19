@@ -18,6 +18,7 @@ import {
 } from "@/lib/pallet-validation/queries";
 import { getOrderScanHistory } from "@/lib/scans/queries";
 import { getOrderNotifications } from "@/lib/order-notifications/queries";
+import { ErpOriginCell } from "@/components/erp/erp-origin";
 import { OrderStatusBadge, EmptyState, InlineAlert, PageHeader, PalletStatusBadge, SectionHeader, TableShell } from "@/components/ui/design-system";
 
 export const metadata: Metadata = {
@@ -124,6 +125,10 @@ export default async function DispatchOrderDetailPage({
         <div>
           <p className="text-stone-500">Fecha estimada de despacho</p>
           <p className="font-semibold">{order.estimatedDispatchDate}</p>
+        </div>
+        <div>
+          <p className="text-stone-500">Origen</p>
+          <p className="mt-1"><ErpOriginCell origin={order.origin} /></p>
         </div>
         <div>
           <p className="text-stone-500">Creada el</p>

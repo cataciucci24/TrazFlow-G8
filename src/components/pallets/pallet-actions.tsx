@@ -20,10 +20,13 @@ export function PalletActions({
   pallet,
   existingBatches,
   existingProducts,
+  allowEdit = true,
 }: {
   pallet: PalletWithHistory;
   existingBatches: ProductBatch[];
   existingProducts: ExistingProduct[];
+  /** false con ERP: producto, lote y cantidad vienen de la sincronización (US-ERP-03). */
+  allowEdit?: boolean;
 }) {
   const notify = useFeedback();
   const [state, setState] = useState(INITIAL_STATE);
@@ -38,12 +41,16 @@ export function PalletActions({
   const formRef = useRef<HTMLFormElement>(null);
   // Un pallet con eventos de trazabilidad no se elimina: la base lo impide para
   // conservar el historial.
-  const mayDelete = pallet.status === "in_warehouse" && !pallet.hasHistory;
-  const notDeletableReason = pallet.hasHistory
-    ? "Tiene historial de trazabilidad: no se puede eliminar"
-    : "Solo se pueden eliminar pallets en depósito";
+  // Un saldo importado del ERP tampoco: la base lo impide y la próxima sincronización lo volvería a crear.
+  const isImported = pallet.origin?.sourceSystem === "erp";
+  const mayDelete = pallet.status === "in_warehouse" && !pallet.hasHistory && !isImported;
+  const notDeletableReason = isImported
+    ? "Importado del ERP: no se elimina desde TrazFlow"
+    : pallet.hasHistory
+      ? "Tiene historial de trazabilidad: no se puede eliminar"
+      : "Solo se pueden eliminar pallets en depósito";
   // Fuera del depósito el pallet ya forma parte de un despacho: sus datos no se editan.
-  const mayEdit = pallet.status === "in_warehouse";
+  const mayEdit = allowEdit && pallet.status === "in_warehouse";
 
   function handleDelete() {
     if (isDeleting || !mayDelete) return;
