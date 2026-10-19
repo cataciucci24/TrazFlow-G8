@@ -1,6 +1,6 @@
 export type AccessRequestStatus = "pending" | "approved" | "rejected";
 
-export type RequestedRole = "warehouse_operator" | "distributor_operator";
+export type RequestedRole = "warehouse_operator" | "driver_operator";
 
 export type AccessRequest = {
   id: string;

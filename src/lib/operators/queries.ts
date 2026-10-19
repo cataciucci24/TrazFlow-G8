@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { isRequestedRole } from "@/lib/registration/options";
-import type { CompanyOperator, DistributorOption } from "./types";
+import type { CompanyOperator } from "./types";
 
 type Row = {
   user_id: string; name: string; email: string; role: string; revoked_at: string | null;
@@ -23,11 +23,16 @@ export async function getCompanyOperators(): Promise<CompanyOperator[]> {
   });
 }
 
-/** RLS (`distributors_select`) limita el listado a la empresa del responsable logístico. */
-export async function getCompanyDistributors(companyId: string): Promise<DistributorOption[]> {
+export type DriverOption = { id: string; name: string };
+
+/** Choferes activos de la empresa del responsable autenticado. */
+export async function getCompanyDrivers(): Promise<DriverOption[]> {
   const supabase = await createClient();
-  const { data, error } = await supabase.from("distributors")
-    .select("id, name").eq("company_id", companyId).order("name");
-  if (error) throw new Error("No se pudieron consultar los distribuidores.", { cause: error });
+  const { data, error } = await supabase.from("users")
+    .select("id, name")
+    .eq("role", "driver_operator")
+    .is("revoked_at", null)
+    .order("name");
+  if (error) throw new Error("No se pudieron consultar los choferes.", { cause: error });
   return data ?? [];
 }

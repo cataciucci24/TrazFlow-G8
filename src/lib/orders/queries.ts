@@ -9,7 +9,7 @@ export async function getDispatchOrderDetail(
   const { data, error } = await supabase
     .from("dispatch_orders")
     .select(
-      "id, distributor_id, status, estimated_dispatch_date, notes, created_at, distributors ( name )",
+      "id, distributor_id, driver_id, status, estimated_dispatch_date, notes, created_at, source_system, external_id, synced_at, distributors ( name ), driver:users!dispatch_orders_driver_id_fkey ( name )",
     )
     .eq("id", orderId)
     .maybeSingle();
@@ -26,6 +26,7 @@ export async function getDispatchOrderDetail(
   const distributor = Array.isArray(data.distributors)
     ? data.distributors[0]
     : data.distributors;
+  const driver = Array.isArray(data.driver) ? data.driver[0] : data.driver;
 
   return {
     id: data.id,
@@ -35,5 +36,8 @@ export async function getDispatchOrderDetail(
     estimatedDispatchDate: data.estimated_dispatch_date,
     notes: data.notes,
     createdAt: data.created_at,
+    driverId: data.driver_id,
+    driverName: driver?.name ?? null,
+    origin: { sourceSystem: data.source_system, externalId: data.external_id, syncedAt: data.synced_at },
   };
 }

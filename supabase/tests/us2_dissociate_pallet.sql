@@ -31,7 +31,7 @@ insert into users (id, company_id, name, email, role)
 values
   ('10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001', 'Manager', 'manager@test.local', 'logistics_manager'),
   ('10000000-0000-0000-0000-000000000002', '20000000-0000-0000-0000-000000000001', 'Warehouse', 'warehouse@test.local', 'warehouse_operator'),
-  ('10000000-0000-0000-0000-000000000003', '20000000-0000-0000-0000-000000000001', 'Distributor Op', 'distributor-op@test.local', 'distributor_operator'),
+  ('10000000-0000-0000-0000-000000000003', '20000000-0000-0000-0000-000000000001', 'Distributor Op', 'distributor-op@test.local', 'driver_operator'),
   ('10000000-0000-0000-0000-000000000004', '20000000-0000-0000-0000-000000000002', 'Other Manager', 'other-manager@test.local', 'logistics_manager');
 
 insert into distributors (id, company_id, name)
@@ -152,7 +152,7 @@ select pg_temp.assert_true(
   (select outcome from dissociate_pallet_from_order(
     '70000000-0000-0000-0000-000000000002', '60000000-0000-0000-0000-000000000002'
   )) = 'forbidden',
-  'distributor_operator no debe poder desasociar pallets'
+  'driver_operator no debe poder desasociar pallets'
 );
 
 -- --- aislamiento entre empresas ----------------------------------------------

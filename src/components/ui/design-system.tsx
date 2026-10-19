@@ -104,8 +104,8 @@ const palletStatusClasses: Record<PalletStatus, BadgeTone> = {
   in_warehouse: "info",
   assigned: "assigned",
   in_transit: "warning",
-  received: "success",
-  discrepancy: "danger",
+  delivered: "success",
+  delivery_discrepancy: "danger",
 };
 
 export function PalletStatusBadge({ status }: { status: PalletStatus }) {
@@ -117,8 +117,8 @@ const orderStatusClasses: Record<OrderStatus, BadgeTone> = {
   validating: "info",
   has_discrepancy: "danger",
   confirmed: "warning",
-  received: "success",
-  received_with_discrepancy: "danger",
+  delivered: "success",
+  delivered_with_discrepancy: "danger",
 };
 
 export function OrderStatusBadge({ status }: { status: OrderStatus }) {

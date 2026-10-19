@@ -11,10 +11,6 @@ const OPERATORS_PATH = "/dashboard/operators";
 
 const messages: Record<string, string> = {
   "42501": "No tenés permisos para gestionar operadores.",
-  P3801: "El operador no está disponible. Actualizá el listado.",
-  P3802: "Solo se pueden vincular operadores de distribuidor.",
-  P3803: "El distribuidor no está disponible.",
-  P3804: "El operador tiene el acceso revocado. Restauralo antes de vincularlo.",
   P3811: "La solicitud no está disponible.",
   P3812: "La solicitud ya no está pendiente. Actualizá el listado.",
   P3821: "El operador no está disponible. Actualizá el listado.",
@@ -41,16 +37,6 @@ async function runOperatorRpc(
     return { error: "No pudimos confirmar la operación. Actualizá el listado antes de reintentar." };
   }
   return { error: null };
-}
-
-export async function assignOperatorDistributor(_previous: OperatorActionState, formData: FormData): Promise<OperatorActionState> {
-  const result = await runOperatorRpc("assign_operator_distributor", {
-    p_user_id: String(formData.get("userId") ?? ""),
-    p_distributor_id: String(formData.get("distributorId") ?? ""),
-  }, "No pudimos vincular el operador. Intentá nuevamente.");
-  if (result.error) return result;
-  revalidatePath(OPERATORS_PATH);
-  redirect(`${OPERATORS_PATH}?tab=operadores&done=assigned`);
 }
 
 export async function revokeOperatorAccess(_previous: OperatorActionState, formData: FormData): Promise<OperatorActionState> {

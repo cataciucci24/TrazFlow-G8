@@ -5,6 +5,7 @@ import { getDistributorStockAlerts } from "@/lib/stock-alerts/queries";
 import { EmptyState, OrderStatusBadge, PageHeader, SectionHeader } from "@/components/ui/design-system";
 import type { OrderStatus } from "@/lib/types";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { LogisticsOverview } from "@/components/dashboard/logistics-overview";
 import { CreatedOrderNotice } from "@/components/ui/feedback";
 
@@ -12,30 +13,15 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const { created } = await searchParams;
   const profile = await requireUserProfile();
 
-  if (hasRole(profile, "warehouse_operator", "distributor_operator")) {
+  if (hasRole(profile, "driver_operator")) redirect("/dashboard/deliveries");
+
+  if (hasRole(profile, "warehouse_operator")) {
     const supabase = await createClient();
     let query = supabase.from("dispatch_orders").select("id, status, distributors ( name ), order_pallets ( validated_at )").order("created_at", { ascending: true });
-    query = hasRole(profile, "warehouse_operator")
-      ? query.eq("company_id", profile.companyId).in("status", ["draft", "validating", "has_discrepancy"])
-      : query.eq("status", "confirmed");
+    query = query.eq("company_id", profile.companyId).in("status", ["draft", "validating", "has_discrepancy"]);
     const { data: orders } = await query;
 
-    // TRZ-19: sin vínculo en distributor_users, RLS no le muestra ninguna orden.
-    if (hasRole(profile, "distributor_operator")) {
-      const { data: link } = await supabase.from("distributor_users").select("distributor_id").eq("user_id", profile.id).maybeSingle();
-      if (!link) {
-        return (
-          <div className="app-page">
-            <PageHeader title="Confirmar recepción" description="Recibí y validá los pallets que llegan a tu distribuidor." />
-            <p role="status" className="feedback feedback-warning">
-              Tu cuenta todavía no está vinculada a un distribuidor. Cuando el responsable logístico te asigne uno, vas a ver sus órdenes acá.
-            </p>
-          </div>
-        );
-      }
-    }
-
-    const heading = hasRole(profile, "warehouse_operator") ? "Confirmar despacho" : "Confirmar recepción";
+    const heading = "Confirmar despacho";
     const assignedOrders = (orders ?? []).filter((order) => (order.order_pallets ?? []).length > 0);
     return (
       <div className="app-page">

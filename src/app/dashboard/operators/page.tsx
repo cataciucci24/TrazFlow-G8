@@ -4,13 +4,12 @@ import { redirect } from "next/navigation";
 import { EmptyState, PageHeader, TableShell } from "@/components/ui/design-system";
 import { ApproveAccessRequest } from "@/components/approve-access-request";
 import { RejectAccessRequest } from "@/components/reject-access-request";
-import { AssignDistributorForm } from "@/components/operators/assign-distributor-form";
 import { OperatorAccessAction } from "@/components/operators/operator-access-action";
 import { hasRole, requireUserProfile } from "@/lib/auth/session";
 import { getPendingAccessRequests } from "@/lib/pending-access-requests/queries";
 import type { PendingAccessRequest } from "@/lib/pending-access-requests/types";
-import { getCompanyDistributors, getCompanyOperators } from "@/lib/operators/queries";
-import type { CompanyOperator, DistributorOption } from "@/lib/operators/types";
+import { getCompanyOperators } from "@/lib/operators/queries";
+import type { CompanyOperator } from "@/lib/operators/types";
 import { requestedRoles } from "@/lib/registration/options";
 
 export const metadata: Metadata = { title: "Operadores | TrazFlow" };
@@ -21,9 +20,8 @@ const dateFormatter = new Intl.DateTimeFormat("es-AR", {
 type Tab = "solicitudes" | "operadores";
 
 const doneMessages: Record<string, string> = {
-  approved: "Solicitud aprobada. El perfil operativo fue creado. Si es operador de distribuidor, vinculalo en la pestaña Operadores.",
+  approved: "Solicitud aprobada. El perfil operativo fue creado.",
   rejected: "Solicitud rechazada.",
-  assigned: "Distribuidor asignado.",
   revoked: "Acceso revocado. El historial del operador se conserva.",
   restored: "Acceso restaurado.",
 };
@@ -38,23 +36,21 @@ export default async function OperatorsPage({ searchParams }: {
 
   let requests: PendingAccessRequest[] = [];
   let operators: CompanyOperator[] = [];
-  let distributors: DistributorOption[] = [];
   let failed = false;
   try {
-    [requests, operators, distributors] = await Promise.all([
+    [requests, operators] = await Promise.all([
       getPendingAccessRequests(),
       getCompanyOperators(),
-      getCompanyDistributors(profile.companyId),
     ]);
   } catch (error) {
     console.error("Error consultando operadores y solicitudes", error);
     failed = true;
   }
 
-  const unlinked = operators.filter((operator) => operator.role === "distributor_operator" && !operator.revokedAt && !operator.distributorId).length;
+  const assignedDeliveries = operators.reduce((total, operator) => total + operator.inTransitOrders, 0);
   const tabs: { id: Tab; label: string; count: number }[] = [
     { id: "solicitudes", label: "Solicitudes", count: requests.length },
-    { id: "operadores", label: "Operadores", count: unlinked },
+    { id: "operadores", label: "Operadores", count: assignedDeliveries },
   ];
 
   return (
@@ -104,7 +100,7 @@ export default async function OperatorsPage({ searchParams }: {
       ) : (
         <TableShell label="Operadores de la empresa">
           <table className="data-table min-w-[960px]">
-            <thead><tr><th scope="col">Operador</th><th scope="col">Rol</th><th scope="col">Distribuidor</th><th scope="col">Acceso</th><th scope="col" className="text-center">Estado</th></tr></thead>
+            <thead><tr><th scope="col">Operador</th><th scope="col">Rol</th><th scope="col">Entregas en tránsito</th><th scope="col">Acceso</th><th scope="col" className="text-center">Estado</th></tr></thead>
             <tbody className="divide-y divide-stone-200">{operators.map((operator) => (
               <tr key={operator.userId}>
                 <td>
@@ -112,21 +108,7 @@ export default async function OperatorsPage({ searchParams }: {
                   <p className="break-all text-sm text-stone-500">{operator.email}</p>
                 </td>
                 <td>{requestedRoles[operator.role]}</td>
-                <td>
-                  {operator.role !== "distributor_operator" ? <span className="text-stone-400">—</span>
-                    : operator.revokedAt ? <span className="text-sm text-stone-500">Sin distribuidor (acceso revocado)</span>
-                    : (
-                      <div className="space-y-2">
-                        <AssignDistributorForm operator={operator} distributors={distributors} />
-                        {!operator.distributorId && (
-                          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-800">
-                            <svg viewBox="0 0 20 20" aria-hidden="true" className="size-4" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round"><circle cx="10" cy="10" r="7.25" /><path d="M10 6.5v4.25M10 13.5v.01" /></svg>
-                            Sin asignación
-                          </span>
-                        )}
-                      </div>
-                    )}
-                </td>
+                <td>{operator.role === "driver_operator" ? operator.inTransitOrders : <span className="text-stone-400">—</span>}</td>
                 <td>
                   <OperatorAccessAction operator={operator} />
                 </td>

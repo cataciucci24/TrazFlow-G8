@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getExpirationThresholds } from "@/lib/expiration/queries";
 import { classifyExpiration } from "@/lib/expiration/thresholds";
 import type { ProductUnit } from "@/lib/pallets/units";
+import { normalizePalletStatus, type StoredPalletStatus } from "@/lib/pallets/status";
 import type { ExistingProduct, ExpirationAlert, Lot, Pallet, PalletWithHistory } from "@/lib/types";
 
 type RawProduct = { name: string; sku: string; unit_of_measure: ProductUnit };
@@ -16,10 +17,14 @@ type RawProduct = { name: string; sku: string; unit_of_measure: ProductUnit };
 type RawPalletRow = {
   id: string;
   qr_code: string;
-  status: Pallet["status"];
+  status: StoredPalletStatus;
   current_location: string | null;
+  current_location_id?: string | null;
   quantity: number | null;
   created_at: string;
+  source_system?: "trazflow" | "erp";
+  external_id?: string | null;
+  synced_at?: string | null;
   batches:
     | { batch_number: string; products: RawProduct | RawProduct[] | null }
     | { batch_number: string; products: RawProduct | RawProduct[] | null }[]
@@ -43,19 +48,25 @@ function mapPalletRow(row: RawPalletRow): Pallet {
   return {
     id: row.id,
     qrCode: row.qr_code,
-    status: row.status,
+    status: normalizePalletStatus(row.status),
     currentLocation: row.current_location,
+    currentLocationId: row.current_location_id ?? null,
     productName: product?.name ?? "—",
     productSku: product?.sku ?? "—",
     batchNumber: batch?.batch_number ?? "—",
     quantity: row.quantity,
     // batches.product_id es obligatorio: el producto solo falta si la fila embebida no llegó.
     unitOfMeasure: product?.unit_of_measure ?? "unidades",
+    origin: {
+      sourceSystem: row.source_system ?? "trazflow",
+      externalId: row.external_id ?? null,
+      syncedAt: row.synced_at ?? null,
+    },
   };
 }
 
 const PALLET_SELECT =
-  "id, qr_code, status, current_location, quantity, created_at, batches ( batch_number, products ( name, sku, unit_of_measure ) )";
+  "id, qr_code, status, current_location, current_location_id, quantity, created_at, source_system, external_id, synced_at, batches ( batch_number, products ( name, sku, unit_of_measure ) )";
 
 /** Pallets de la empresa disponibles para asociar a una orden (en depósito, sin asignar). */
 export async function getAvailablePallets(companyId: string): Promise<Pallet[]> {
@@ -95,6 +106,20 @@ export async function getCompanyPallets(companyId: string): Promise<PalletWithHi
     ...mapPalletRow(row),
     hasHistory: (row.traceability_events?.[0]?.count ?? 0) > 0,
   }));
+}
+
+/** Pallets seleccionados para impresión; la empresa se valida otra vez en servidor. */
+export async function getCompanyPalletsByIds(companyId: string, ids: string[]): Promise<Pallet[]> {
+  if (ids.length === 0) return [];
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("pallets").select(PALLET_SELECT)
+    .eq("company_id", companyId).in("id", ids);
+  if (error) throw new Error("No se pudieron consultar los pallets para imprimir.", { cause: error });
+  const byId = new Map(((data ?? []) as unknown as RawPalletRow[]).map((row) => [row.id, mapPalletRow(row)]));
+  return ids.flatMap((id) => {
+    const pallet = byId.get(id);
+    return pallet ? [pallet] : [];
+  });
 }
 
 /** Mercadería cuya última actividad supera el umbral indicado, ordenada por antigüedad. */

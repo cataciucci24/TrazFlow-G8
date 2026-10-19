@@ -4,6 +4,7 @@ import Link from "next/link";
 import { PalletQrButton } from "@/components/pallets/pallet-qr-button";
 import { useMemo, useState } from "react";
 
+import { ErpOriginCell } from "@/components/erp/erp-origin";
 import { PalletActions } from "@/components/pallets/pallet-actions";
 import { PALLET_STATUS_LABELS } from "@/lib/pallets/labels";
 import type { ExistingProduct, PalletWithHistory, ProductBatch } from "@/lib/types";
@@ -14,8 +15,8 @@ const statusCards = [
   { value: "in_warehouse", tone: "sky" },
   { value: "assigned", tone: "violet" },
   { value: "in_transit", tone: "amber" },
-  { value: "received", tone: "green" },
-  { value: "discrepancy", tone: "red" },
+  { value: "delivered", tone: "green" },
+  { value: "delivery_discrepancy", tone: "red" },
 ] as const;
 
 
@@ -27,21 +28,25 @@ export function PalletTrackingPanel({
   existingBatches,
   existingProducts,
   initialStatus = "",
+  erpManaged = false,
 }: {
   pallets: PalletWithHistory[];
   existingBatches: ProductBatch[];
   existingProducts: ExistingProduct[];
   initialStatus?: string;
+  /** Con ERP, producto/lote/cantidad vienen de la sincronización: no se editan desde acá. */
+  erpManaged?: boolean;
 }) {
   const [search, setSearch] = useState("");
   const [location, setLocation] = useState("");
   const [status, setStatus] = useState(initialStatus);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const locations = useMemo(() => Array.from(new Set(pallets.map((pallet) => pallet.currentLocation?.trim() || ""))).sort((a, b) => a.localeCompare(b, "es-AR")), [pallets]);
   const query = normalize(search.trim());
   const visiblePallets = pallets.filter((pallet) =>
     (!location || (pallet.currentLocation?.trim() || "") === location) &&
     (!status || pallet.status === status) &&
-    (!query || [pallet.qrCode, pallet.productName, pallet.productSku, pallet.batchNumber].some((value) => normalize(value).includes(query))),
+    (!query || [pallet.qrCode, pallet.productName, pallet.productSku, pallet.batchNumber, pallet.origin?.externalId ?? ""].some((value) => normalize(value).includes(query))),
   );
   const hasFilters = Boolean(search || location || status);
 
@@ -55,7 +60,7 @@ export function PalletTrackingPanel({
     <section className="space-y-10" aria-label="Seguimiento de pallets">
       <FilterPanel label="Filtros de pallets" onClear={hasFilters ? clearFilters : undefined}>
         <label className="form-label">Buscar
-          <input value={search} onChange={(event) => setSearch(event.target.value)} type="search" placeholder="Código QR, producto, SKU o lote" className="form-control mt-2" />
+          <input value={search} onChange={(event) => setSearch(event.target.value)} type="search" placeholder="Código QR, producto, SKU, lote o id del ERP" className="form-control mt-2" />
         </label>
         <label className="form-label">Ubicación
           <select value={location} onChange={(event) => setLocation(event.target.value)} className="form-control mt-2">
@@ -82,17 +87,17 @@ export function PalletTrackingPanel({
       <div className="section-stack">
         <SectionHeader
           title="Pallets registrados"
-          action={<p role="status" className="text-sm text-stone-500">Mostrando {visiblePallets.length} de {pallets.length}</p>}
+          action={<div className="flex flex-wrap items-center gap-3"><p role="status" className="text-sm text-stone-500">Mostrando {visiblePallets.length} de {pallets.length}</p>{selectedIds.length > 0 && <Link href={`/dashboard/pallets/print?ids=${selectedIds.join(",")}`} className="button-primary button-sm">Imprimir selección ({selectedIds.length})</Link>}</div>}
         />
         {visiblePallets.length === 0 ? <div className="surface"><EmptyState
           title={pallets.length === 0 ? "Todavía no hay pallets" : "Sin resultados para estos filtros"}
           description={pallets.length === 0 ? "Los pallets registrados para tu empresa aparecerán acá." : "Cambiá la búsqueda o los filtros para encontrar otros pallets."}
           action={pallets.length > 0 && hasFilters ? <button type="button" onClick={clearFilters} className="button-secondary">Limpiar filtros</button> : undefined}
         /></div> : <TableShell label="Pallets registrados" mobileLayout="rows">
-          <table role="table" aria-label="Pallets registrados" className="data-table min-w-[780px]">
-            <thead role="rowgroup"><tr role="row"><th role="columnheader" scope="col">Código</th><th role="columnheader" scope="col">Producto</th><th role="columnheader" scope="col">Lote</th><th role="columnheader" scope="col">Estado</th><th role="columnheader" scope="col">Ubicación</th><th role="columnheader" scope="col" className="text-right">Acciones</th></tr></thead>
+          <table role="table" aria-label="Pallets registrados" className="data-table min-w-[900px]">
+            <thead role="rowgroup"><tr role="row"><th role="columnheader" scope="col"><span className="sr-only">Seleccionar</span></th><th role="columnheader" scope="col">Código</th><th role="columnheader" scope="col">Producto</th><th role="columnheader" scope="col">Lote</th><th role="columnheader" scope="col">Estado</th><th role="columnheader" scope="col">Ubicación</th><th role="columnheader" scope="col">Origen</th><th role="columnheader" scope="col" className="text-right">Acciones</th></tr></thead>
             <tbody role="rowgroup">
-              {visiblePallets.map((pallet) => <tr role="row" key={pallet.id}><td role="cell" data-label="Código" className="mobile-primary font-mono font-bold">{pallet.qrCode}</td><td role="cell" data-label="Producto" className="font-medium">{pallet.productName}</td><td role="cell" data-label="Lote" className="font-mono text-stone-600">{pallet.batchNumber}</td><td role="cell" data-label="Estado" className="mobile-priority"><PalletStatusBadge status={pallet.status} /></td><td role="cell" data-label="Ubicación" className="mobile-priority text-stone-500">{pallet.currentLocation ?? "—"}</td><td role="cell" data-label="Acciones" className="mobile-actions text-right"><div className="table-row-actions"><Link href={`/dashboard/traceability?qr=${encodeURIComponent(pallet.qrCode)}`} className="button-secondary button-sm">Ver trazabilidad</Link><PalletQrButton qrCode={pallet.qrCode} variant="compact" /><PalletActions pallet={pallet} existingBatches={existingBatches} existingProducts={existingProducts} /></div></td></tr>)}
+              {visiblePallets.map((pallet) => <tr role="row" key={pallet.id}><td role="cell" data-label="Seleccionar"><input type="checkbox" aria-label={`Seleccionar pallet ${pallet.qrCode}`} checked={selectedIds.includes(pallet.id)} onChange={(event) => setSelectedIds((current) => event.target.checked ? [...current, pallet.id] : current.filter((id) => id !== pallet.id))} /></td><td role="cell" data-label="Código" className="mobile-primary font-mono font-bold">{pallet.qrCode}</td><td role="cell" data-label="Producto" className="font-medium">{pallet.productName}</td><td role="cell" data-label="Lote" className="font-mono text-stone-600">{pallet.batchNumber}</td><td role="cell" data-label="Estado" className="mobile-priority"><PalletStatusBadge status={pallet.status} /></td><td role="cell" data-label="Ubicación" className="mobile-priority text-stone-500">{pallet.currentLocation ?? "—"}</td><td role="cell" data-label="Origen" className="mobile-wide"><ErpOriginCell origin={pallet.origin} /></td><td role="cell" data-label="Acciones" className="mobile-actions text-right"><div className="table-row-actions"><Link href={`/dashboard/traceability?qr=${encodeURIComponent(pallet.qrCode)}`} className="button-secondary button-sm">Ver trazabilidad</Link><PalletQrButton pallet={pallet} variant="compact" /><Link href={`/dashboard/pallets/print?ids=${pallet.id}`} className="button-secondary button-sm">Imprimir</Link><PalletActions pallet={pallet} existingBatches={existingBatches} existingProducts={existingProducts} allowEdit={!erpManaged && pallet.origin?.sourceSystem !== "erp"} /></div></td></tr>)}
             </tbody>
           </table>
         </TableShell>}

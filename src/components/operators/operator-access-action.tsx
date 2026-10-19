@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { restoreOperatorAccess, revokeOperatorAccess } from "@/lib/operators/actions";
-import { leavesDistributorUnattended, type CompanyOperator } from "@/lib/operators/types";
+import { hasActiveDeliveryAssignments, type CompanyOperator } from "@/lib/operators/types";
 
 /** TRZ-38: revocar el acceso de un operador activo o restaurarlo si estaba revocado. */
 export function OperatorAccessAction({ operator }: { operator: CompanyOperator }) {
@@ -23,13 +23,13 @@ export function OperatorAccessAction({ operator }: { operator: CompanyOperator }
           <input type="hidden" name="userId" value={operator.userId} />
           <p className="text-sm">
             {revoked
-              ? <>¿Restaurar el acceso de <strong>{operator.name}</strong>?{operator.role === "distributor_operator" && " Después tendrás que vincularlo a un distribuidor."}</>
+              ? <>¿Restaurar el acceso de <strong>{operator.name}</strong>?</>
               : <>¿Revocar el acceso de <strong>{operator.name}</strong>? Dejará de ver y operar en TrazFlow. Su historial se conserva.</>}
           </p>
-          {!revoked && leavesDistributorUnattended(operator) && (
+          {!revoked && hasActiveDeliveryAssignments(operator) && (
             <p className="feedback feedback-warning text-sm">
-              <strong>{operator.distributorName}</strong> tiene {operator.inTransitOrders} {operator.inTransitOrders === 1 ? "orden" : "órdenes"} en
-              tránsito y quedará sin operadores para recibirlas.
+              Tiene {operator.inTransitOrders} {operator.inTransitOrders === 1 ? "entrega" : "entregas"} en tránsito asignada{operator.inTransitOrders === 1 ? "" : "s"}.
+              Reasigná las órdenes antes de revocar el acceso.
             </p>
           )}
           <div className="flex flex-wrap gap-2">

@@ -1,3 +1,4 @@
+import { LocationHistory } from "@/components/locations/location-history";
 import Link from "next/link";
 import { PalletQrButton } from "@/components/pallets/pallet-qr-button";
 
@@ -6,6 +7,7 @@ import { EmptyState, PalletStatusBadge, SectionHeader } from "@/components/ui/de
 
 type PalletTraceabilityProps = {
   traceability: PalletTraceabilityData;
+  canPrint?: boolean;
 };
 
 const DATE_FORMATTER = new Intl.DateTimeFormat("es-AR", {
@@ -16,6 +18,7 @@ const DATE_FORMATTER = new Intl.DateTimeFormat("es-AR", {
 /** Presenta el estado actual y el recorrido real registrado en movements. */
 export function PalletTraceability({
   traceability,
+  canPrint = true,
 }: PalletTraceabilityProps) {
   const { pallet, movements } = traceability;
 
@@ -26,7 +29,8 @@ export function PalletTraceability({
           <div className="min-w-0">
             <div className="flex items-center gap-5">
               <h2 className="section-title min-w-0 break-all">Pallet {pallet.qrCode}</h2>
-              <PalletQrButton qrCode={pallet.qrCode} variant="icon" />
+              <PalletQrButton pallet={pallet} variant="icon" />
+              {canPrint && <Link href={`/dashboard/pallets/print?ids=${pallet.id}`} className="button-secondary button-sm">Imprimir etiqueta</Link>}
             </div>
             <p className="section-description">Identificación y estado actual del pallet.</p>
           </div>
@@ -55,6 +59,8 @@ export function PalletTraceability({
         </dl>
       </section>
 
+      <Link href={`/dashboard/locations?pallet=${pallet.id}`} className="button-secondary w-fit">Consultar o actualizar ubicación</Link>
+      <LocationHistory palletId={pallet.id} />
       <section className="section-stack">
         <SectionHeader title="Historial de movimientos" description="Recorrido cronológico registrado para este pallet." />
         <div className="surface p-5 sm:p-6">

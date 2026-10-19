@@ -18,7 +18,7 @@ export async function getAccessRequest(userId: string): Promise<AccessRequest | 
   // No interpretar valores desconocidos como un estado válido o solicitud ausente.
   if (
     !["pending", "approved", "rejected"].includes(data.status) ||
-    !["warehouse_operator", "distributor_operator"].includes(data.requested_role)
+    !["warehouse_operator", "driver_operator"].includes(data.requested_role)
   ) {
     throw new Error("La solicitud de acceso contiene valores no reconocidos.");
   }

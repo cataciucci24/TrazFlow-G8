@@ -1,54 +1,9 @@
-import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
-import { StockReportForm } from "@/components/stock-reporting/stock-report-form";
-import { hasRole, requireUserProfile } from "@/lib/auth/session";
-import { getStockReportingData } from "@/lib/stock-reporting/queries";
-import { EmptyState, InlineAlert, PageHeader, SectionHeader, TableShell } from "@/components/ui/design-system";
+import { requireUserProfile } from "@/lib/auth/session";
 
-export const metadata: Metadata = { title: "Mi stock | TrazFlow" };
-
-const NUMBER_FORMATTER = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 2 });
-const DATE_FORMATTER = new Intl.DateTimeFormat("es-AR", { dateStyle: "short", timeStyle: "short" });
-const EXPIRATION_FORMATTER = new Intl.DateTimeFormat("es-AR", { dateStyle: "short", timeZone: "UTC" });
-
+/** La carga de stock del destinatario quedó fuera del nuevo modelo ERP. */
 export default async function StockReportPage() {
-  const profile = await requireUserProfile();
-  if (!hasRole(profile, "distributor_operator")) redirect("/dashboard");
-
-  const data = await getStockReportingData(profile.id, profile.companyId);
-
-  return (
-    <div className="app-page">
-      <PageHeader eyebrow="Inventario de distribución" title="Mi stock" description="Mantené actualizado el stock disponible y el consumo diario estimado de cada producto." />
-
-      {!data.sourceAvailable ? (
-        <InlineAlert variant="warning">La carga de stock no está disponible por el momento.</InlineAlert>
-      ) : (
-        <>
-          {data.distributor ? (
-            <StockReportForm products={data.products} entries={data.entries} />
-          ) : (
-            <InlineAlert variant="danger">Tu cuenta debe estar asociada a una única distribuidora para informar stock.</InlineAlert>
-          )}
-
-          <section aria-labelledby="reported-stock-title" className="section-stack">
-            <SectionHeader id="reported-stock-title" title="Información reportada" description="El mismo producto puede volver a guardarse para actualizar sus valores." />
-            {data.entries.length === 0 ? (
-              <div className="surface"><EmptyState title="Todavía no informaste stock" description="Los productos guardados aparecerán acá con su cobertura estimada." /></div>
-            ) : (
-              <TableShell label="Stock informado por producto">
-                <table className="data-table min-w-[900px]">
-                  <thead><tr><th scope="col">Producto</th><th scope="col" className="table-secondary-column">Distribuidora</th><th scope="col" className="text-right">Stock actual</th><th scope="col">Lotes</th><th scope="col" className="text-right">Consumo diario</th><th scope="col" className="text-right">Días restantes</th><th scope="col">Actualizado</th></tr></thead>
-                  <tbody className="divide-y divide-stone-200">{data.entries.map((entry) => (
-                    <tr key={entry.id}><td><p className="font-medium">{entry.productName}</p><p className="table-secondary font-mono">{entry.productSku}</p><p className="table-secondary md:hidden">{entry.distributorName}</p></td><td className="table-secondary-column">{entry.distributorName}</td><td className="text-right font-mono">{NUMBER_FORMATTER.format(entry.currentStock)} <span className="table-secondary">{entry.unitOfMeasure}</span></td><td>{entry.batches.length === 0 ? <p className="table-secondary">Sin detalle por lote. Volvé a guardarlo para informar los lotes.</p> : <ul className="space-y-0.5">{entry.batches.map((batch) => <li key={batch.batchId} className="whitespace-nowrap"><span className="font-mono">{batch.batchNumber}</span> <span className="table-secondary">· {NUMBER_FORMATTER.format(batch.quantity)}{batch.expirationDate ? ` · vence ${EXPIRATION_FORMATTER.format(new Date(`${batch.expirationDate}T00:00:00Z`))}` : ""}</span></li>)}</ul>}</td><td className="text-right font-mono">{NUMBER_FORMATTER.format(entry.dailyConsumption)} <span className="table-secondary">{entry.unitOfMeasure}/día</span></td><td className="text-right font-mono font-semibold">{NUMBER_FORMATTER.format(entry.stockDays)}</td><td className="text-slate-500">{DATE_FORMATTER.format(new Date(entry.updatedAt))}</td></tr>
-                  ))}</tbody>
-                </table>
-              </TableShell>
-            )}
-          </section>
-        </>
-      )}
-    </div>
-  );
+  await requireUserProfile();
+  redirect("/dashboard");
 }

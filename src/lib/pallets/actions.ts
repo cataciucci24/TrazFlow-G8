@@ -5,6 +5,7 @@ import { isProductUnit, isValidQuantity, type ProductUnit } from "@/lib/pallets/
 import { revalidatePath } from "next/cache";
 
 import { hasRole, requireUserProfile } from "@/lib/auth/session";
+import { isErpEnabled } from "@/lib/erp-sync/enabled";
 import { createClient } from "@/lib/supabase/server";
 
 export type CreatePalletState = {
@@ -21,6 +22,9 @@ const UPDATE_ERROR = "No se pudieron guardar los cambios del pallet. Intentá nu
 const NOT_EDITABLE_ERROR = "Solo se pueden editar pallets en depósito.";
 const DELETE_ERROR = "No se pudo eliminar el pallet. Intentá nuevamente.";
 const HAS_HISTORY_ERROR = "No se puede eliminar un pallet con historial de trazabilidad.";
+// Con ERP, productos, lotes y stock se dan de alta en el ERP y llegan por sincronización (US-ERP-03).
+// El alta manual queda para las empresas sin ERP.
+const ERP_MANAGED_ERROR = "Tu empresa trabaja con un ERP: productos, lotes y pallets se importan desde la sincronización.";
 const QUANTITY_ERROR = "Ingresá una cantidad mayor que 0: entera en unidades o cajas, con hasta dos decimales en kilogramos.";
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
@@ -75,6 +79,7 @@ export async function createLot(
   if (!hasRole(profile, "logistics_manager")) {
     return { error: "Solo logística puede registrar lotes.", success: null };
   }
+  if (await isErpEnabled(profile.companyId)) return { error: ERP_MANAGED_ERROR, success: null };
 
   const productName = String(formData.get("productName") ?? "").trim();
   const productSku = String(formData.get("productSku") ?? "").trim();
@@ -126,6 +131,7 @@ export async function createPallet(
   if (!hasRole(profile, "logistics_manager")) {
     return { error: "Solo logística puede registrar pallets.", success: null };
   }
+  if (await isErpEnabled(profile.companyId)) return { error: ERP_MANAGED_ERROR, success: null };
 
   const productName = String(formData.get("productName") ?? "").trim();
   const productSku = String(formData.get("productSku") ?? "").trim();
@@ -178,11 +184,11 @@ export async function updatePallet(
   if (!hasRole(profile, "logistics_manager")) {
     return { error: "Solo logística puede editar pallets.", success: null };
   }
+  if (await isErpEnabled(profile.companyId)) return { error: ERP_MANAGED_ERROR, success: null };
 
   const productName = String(formData.get("productName") ?? "").trim();
   const productSku = String(formData.get("productSku") ?? "").trim();
   const batchNumber = String(formData.get("batchNumber") ?? "").trim();
-  const currentLocation = String(formData.get("currentLocation") ?? "").trim();
   const quantity = Number(formData.get("quantity") ?? 0);
 
   if (!productName || !productSku || !batchNumber) {
@@ -215,7 +221,7 @@ export async function updatePallet(
   // orden entre la lectura de arriba y este UPDATE.
   const { data: updated, error: updateError } = await supabase
     .from("pallets")
-    .update({ batch_id: batch.id, quantity, current_location: currentLocation || null })
+    .update({ batch_id: batch.id, quantity })
     .eq("id", palletId)
     .eq("company_id", profile.companyId)
     .eq("status", "in_warehouse")

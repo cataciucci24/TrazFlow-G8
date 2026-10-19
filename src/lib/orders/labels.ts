@@ -6,6 +6,6 @@ export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   validating: "Validando",
   has_discrepancy: "Con discrepancia",
   confirmed: "En tránsito",
-  received: "Recibida",
-  received_with_discrepancy: "Recibida con discrepancia",
+  delivered: "Entregada",
+  delivered_with_discrepancy: "Entregada con diferencia",
 };

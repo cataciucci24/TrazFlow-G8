@@ -5,6 +5,6 @@ export const PALLET_STATUS_LABELS: Record<PalletStatus, string> = {
   in_warehouse: "En depósito",
   assigned: "Asociado a orden",
   in_transit: "En tránsito",
-  received: "Recibido",
-  discrepancy: "Con discrepancia",
+  delivered: "Entregado",
+  delivery_discrepancy: "Entrega con diferencia",
 };

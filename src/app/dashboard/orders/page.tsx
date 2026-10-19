@@ -1,6 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireUserProfile, hasRole } from "@/lib/auth/session";
+import { ErpOriginCell } from "@/components/erp/erp-origin";
+import { ErpSyncPanel } from "@/components/erp/erp-sync-panel";
+import { isErpEnabled } from "@/lib/erp-sync/enabled";
+import { getLatestErpSyncRun } from "@/lib/erp-sync/queries";
 import { createClient } from "@/lib/supabase/server";
 import { EmptyState, OrderStatusBadge, PageHeader, TableShell } from "@/components/ui/design-system";
 import type { OrderStatus } from "@/lib/types";
@@ -14,10 +18,12 @@ export default async function OrdersPage() {
   const supabase = await createClient();
 
   const isLogisticsManager = hasRole(profile, "logistics_manager");
+  const showErpSync = isLogisticsManager && await isErpEnabled(profile.companyId);
+  const lastRun = showErpSync ? await getLatestErpSyncRun(profile.companyId) : null;
 
   const { data: orders, error } = await supabase
     .from("dispatch_orders")
-    .select("id, status, estimated_dispatch_date, created_at, notes, distributors ( name )")
+    .select("id, status, estimated_dispatch_date, created_at, notes, source_system, external_id, synced_at, distributors ( name )")
     .eq("company_id", profile.companyId)
     .order("created_at", { ascending: false });
 
@@ -40,14 +46,16 @@ export default async function OrdersPage() {
         ) : undefined}
       />
 
+      {showErpSync ? <ErpSyncPanel lastRun={lastRun} /> : null}
+
       {!orders || orders.length === 0 ? <div className="surface"><EmptyState title="Todavía no hay órdenes"
         description="Los envíos registrados para tu empresa aparecerán acá."
         action={isLogisticsManager ? <Link href="/dashboard/orders/new" className="button-primary">Nueva orden</Link> : undefined}
       /></div> : <TableShell label="Órdenes de despacho registradas" mobileLayout="rows">
-          <table role="table" aria-label="Órdenes de despacho registradas" className="data-table min-w-[780px]">
+          <table role="table" aria-label="Órdenes de despacho registradas" className="data-table min-w-[900px]">
             <thead role="rowgroup">
               <tr role="row">
-                <th role="columnheader" scope="col">Código</th><th role="columnheader" scope="col">Distribuidora</th><th role="columnheader" scope="col">Fecha despacho</th><th role="columnheader" scope="col">Estado</th><th role="columnheader" scope="col">Observaciones</th>
+                <th role="columnheader" scope="col">Código</th><th role="columnheader" scope="col">Distribuidora</th><th role="columnheader" scope="col">Fecha despacho</th><th role="columnheader" scope="col">Estado</th><th role="columnheader" scope="col">Origen</th><th role="columnheader" scope="col">Observaciones</th>
               </tr>
             </thead>
             <tbody role="rowgroup" className="divide-y divide-stone-200">
@@ -69,6 +77,9 @@ export default async function OrdersPage() {
                     </td>
                     <td role="cell" data-label="Estado" className="mobile-priority">
                       <OrderStatusBadge status={order.status as OrderStatus} />
+                    </td>
+                    <td role="cell" data-label="Origen" className="mobile-wide">
+                      <ErpOriginCell origin={{ sourceSystem: order.source_system, externalId: order.external_id, syncedAt: order.synced_at }} />
                     </td>
                     <td role="cell" data-label="Observaciones" className="mobile-wide max-w-72 text-slate-500">
                       {order.notes ?? "—"}

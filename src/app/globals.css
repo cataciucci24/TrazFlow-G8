@@ -41,6 +41,28 @@ button, summary, select { cursor: pointer; }
 :focus-visible { outline: 3px solid color-mix(in srgb, var(--focus) 40%, transparent); outline-offset: 2px; }
 ::selection { background: #fde68a; color: #78350f; }
 
+.label-sheet { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10mm; background: white; }
+.label-sheet-compact { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6mm; }
+.pallet-label { break-inside: avoid; border: 1px solid #a8a29e; border-radius: 8px; padding: 8mm; text-align: center; color: #000; background: #fff; }
+.label-sheet-compact .pallet-label { padding: 5mm; }
+.pallet-label-qr { margin-inline: auto; width: min(42mm, 100%); }
+.pallet-label-qr svg { display: block; width: 100%; height: auto; }
+.pallet-label-code { margin-top: 3mm; overflow-wrap: anywhere; font-family: ui-monospace, monospace; font-size: 10pt; font-weight: 700; }
+.pallet-label-data { margin-top: 4mm; display: grid; gap: 2mm; text-align: left; font-size: 9pt; }
+.pallet-label-data div { display: grid; grid-template-columns: 20mm 1fr; gap: 2mm; }
+.pallet-label-data dt { font-weight: 700; }
+
+@page { size: A4 portrait; margin: 10mm; }
+@media print {
+  body { background: #fff; }
+  body * { visibility: hidden; }
+  .print-root, .print-root * { visibility: visible; }
+  .print-root { position: absolute; inset: 0; width: 100%; }
+  .no-print { display: none !important; }
+  .label-sheet { gap: 8mm; }
+  .pallet-label { box-shadow: none; }
+}
+
 .app-page { display: flex; flex-direction: column; gap: 2.5rem; }
 .page-header { display: flex; flex-direction: column; gap: 1rem; }
 .page-title { color: var(--foreground); font-size: clamp(1.75rem, 3vw, 2.25rem); font-weight: 750; letter-spacing: -0.035em; line-height: 1.15; }

@@ -118,23 +118,24 @@ test("logística utiliza exclusivamente las dos consultas originales con la mism
   assert.deepEqual(calls, [{ name: "expiration", args: ["company-1"] }, { name: "stock", args: ["company-1"] }]);
 });
 
-for (const role of ["warehouse_operator", "distributor_operator"] as const) {
+for (const role of ["warehouse_operator"] as const) {
   test(`${role} conserva su consulta operativa y no recibe el centro logístico`, async () => {
     const { page, calls } = harness(role);
     const html = renderToStaticMarkup(await page.default({ searchParams: Promise.resolve({ created: "1" }) }));
-    assert.match(html, role === "warehouse_operator" ? /Confirmar despacho/ : /Confirmar recepción/);
+    assert.match(html, /Confirmar despacho/);
     assert.match(html, /href="\/dashboard\/orders\/order-1"/);
     assert.doesNotMatch(html, /Resumen operativo|Continuar la operación|Orden de despacho creada correctamente/);
     assert.equal(calls.filter((call) => call.name === "from" && call.args[0] === "dispatch_orders").length, 1);
-    if (role === "distributor_operator") {
-      assert.deepEqual(calls.slice(-4), [
-        { name: "from", args: ["distributor_users"] },
-        { name: "select", args: ["distributor_id"] },
-        { name: "eq", args: ["user_id", "user-1"] },
-        { name: "maybeSingle", args: [] },
-      ]);
-    }
     assert.equal(calls.filter((call) => call.name === "expiration" || call.name === "stock").length, 0);
-    assert.ok(calls.some((call) => call.name === "eq" && call.args[0] === (role === "warehouse_operator" ? "company_id" : "status") && call.args[1] === (role === "warehouse_operator" ? "company-1" : "confirmed")));
+    assert.ok(calls.some((call) => call.name === "eq" && call.args[0] === "company_id" && call.args[1] === "company-1"));
   });
 }
+
+test("driver_operator es redirigido a Mis entregas", async () => {
+  const { page, calls } = harness("driver_operator");
+  await assert.rejects(
+    () => page.default({ searchParams: Promise.resolve({}) }),
+    (error: unknown) => typeof error === "object" && error !== null && "digest" in error && String(error.digest).includes("/dashboard/deliveries"),
+  );
+  assert.equal(calls.filter((call) => call.name === "expiration" || call.name === "stock").length, 0);
+});

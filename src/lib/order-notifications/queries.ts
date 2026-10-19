@@ -14,7 +14,7 @@ type RawOrderNotification = {
  * `order_notifications_select` ya filtra por company_id y por
  * `visible_roles`, así que esta query devuelve exactamente lo que le
  * corresponde ver al rol autenticado (logistics_manager o
- * warehouse_operator); para distributor_operator devuelve siempre vacío.
+ * warehouse_operator); para choferes devuelve siempre vacío.
  */
 export async function getOrderNotifications(
   orderId: string,
