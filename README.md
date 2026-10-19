@@ -68,9 +68,9 @@ Run the app against the **local** Supabase stack (Docker), not the shared cloud 
 
    | Email | Password | Role |
    |---|---|---|
-   | `logistica@trazflow.test` | `trazflow123` | `logistics_manager` |
-   | `deposito@trazflow.test` | `trazflow123` | `warehouse_operator` |
-   | `chofer@trazflow.test` | `trazflow123` | `driver_operator` |
+   | `logistica@trazflow.test` | `test1234` | `logistics_manager` |
+   | `deposito@trazflow.test` | `test1234` | `warehouse_operator` |
+   | `chofer@trazflow.test` | `test1234` | `driver_operator` |
 
 5. The seed loads no ERP data. Sign in as `logistica@trazflow.test` and follow [Syncing master data and orders](#syncing-master-data-and-orders-us-erp-03) (link the mock warehouse to `DEP-01`, then **Sincronizar con ERP**) to import products, lots, pallets and orders from the mock.
 

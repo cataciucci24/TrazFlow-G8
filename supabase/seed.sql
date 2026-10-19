@@ -7,7 +7,7 @@
 --   logistica@trazflow.test  logistics_manager
 --   deposito@trazflow.test   warehouse_operator
 --   chofer@trazflow.test     driver_operator
--- Contraseña de los tres: trazflow123
+-- Contraseña de los tres: test1234
 --
 -- No carga datos del ERP: productos, lotes, pallets y órdenes los genera la sincronización con ERP_PROVIDER=mock.
 --
@@ -43,7 +43,7 @@ new_auth_users as (
   )
   select
     '00000000-0000-0000-0000-000000000000', id, 'authenticated', 'authenticated', email,
-    extensions.crypt('trazflow123', extensions.gen_salt('bf')), now(),
+    extensions.crypt('test1234', extensions.gen_salt('bf')), now(),
     '{"provider": "email", "providers": ["email"]}'::jsonb, jsonb_build_object('name', name), now(), now(),
     '', '', '', '', '', '', '', ''
   from seed_users
