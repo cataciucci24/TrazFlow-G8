@@ -2,9 +2,11 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 
 import { createClient } from "@/lib/supabase/server";
 import { hasRole, requireUserProfile } from "@/lib/auth/session";
+import { processCompanyErpOutbox } from "@/lib/erp-outbox/run";
 
 export type CreateDispatchOrderState = {
   errors: {
@@ -285,9 +287,15 @@ const CONFIRM_MESSAGES: Record<ConfirmDispatchOutcome, string> = {
 
 /**
  * Confirma una orden de despacho una vez validada la carga (US5). La
- * transición 'draft' -> 'confirmed', el pase de los pallets a in_transit y el
- * evento dispatch_confirmed se resuelven atómicamente en el RPC
+ * transición 'draft' -> 'confirmed', el pase de los pallets a in_transit, el
+ * evento dispatch_confirmed y, si la orden vino del ERP, el reporte en
+ * erp_outbox_events (US-ERP-04) se resuelven atómicamente en el RPC
  * `confirm_dispatch_order`.
+ *
+ * El envío al ERP corre después de responder (`after`), fuera de la
+ * transacción: si el ERP falla o tarda, el despacho ya quedó confirmado y el
+ * reporte queda pendiente con backoff. Cada confirmación también reintenta los
+ * reportes de la empresa cuyo backoff ya venció.
  */
 export async function confirmDispatchOrder(
   orderId: string,
@@ -315,6 +323,12 @@ export async function confirmDispatchOrder(
   if (row.outcome === "confirmed") {
     revalidatePath(`/dashboard/orders/${orderId}`);
     revalidatePath("/dashboard");
+    after(() =>
+      processCompanyErpOutbox({
+        db: { rpc: (fn, args) => supabase.rpc(fn, args) },
+        companyId: profile.companyId,
+      }),
+    );
   }
 
   return {
