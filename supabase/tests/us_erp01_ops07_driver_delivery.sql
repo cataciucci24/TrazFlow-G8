@@ -87,12 +87,13 @@ select pg_temp.assert_true(
   (select count(*) from delivery_discrepancies where order_id = 'd7000000-0000-0000-0000-000000000001' and discrepancy_type = 'damaged') = 1,
   'la diferencia debe quedar asociada a orden, pallet y chofer'
 );
+
+select set_config('request.jwt.claim.sub', 'd1000000-0000-0000-0000-000000000001', true);
+-- La notificación es para logística: la RLS de order_notifications se la oculta al chofer.
 select pg_temp.assert_true(
   (select count(*) from order_notifications where order_id = 'd7000000-0000-0000-0000-000000000001' and event_type = 'delivery_closed_with_discrepancy') = 1,
   'logística debe recibir una notificación al cerrar con diferencia'
 );
-
-select set_config('request.jwt.claim.sub', 'd1000000-0000-0000-0000-000000000001', true);
 select assign_order_driver('d7000000-0000-0000-0000-000000000002', 'd1000000-0000-0000-0000-000000000002');
 select pg_temp.assert_true(
   (select driver_id = 'd1000000-0000-0000-0000-000000000002' from dispatch_orders where id = 'd7000000-0000-0000-0000-000000000002'),
