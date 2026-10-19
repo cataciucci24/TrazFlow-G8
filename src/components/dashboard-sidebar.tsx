@@ -63,6 +63,7 @@ export function DashboardSidebar({ role }: DashboardSidebarProps) {
         { href: "/dashboard/lots", label: "Lotes", icon: <LotIcon />, active: isLots },
         { href: "/dashboard/stagnant", label: "Mercadería inmovilizada", icon: <StagnantIcon />, active: isStagnant },
         { href: "/dashboard/operators", label: "Operadores", icon: <OrdersIcon />, active: pathname.startsWith("/dashboard/operators") },
+        { href: "/dashboard/integrations", label: "Integración ERP", icon: <IntegrationIcon />, active: pathname.startsWith("/dashboard/integrations") },
       ]
     : role === "driver_operator"
       ? [{ href: "/dashboard/deliveries", label: "Mis entregas", icon: <ScanIcon />, active: pathname.startsWith("/dashboard/deliveries") }]
@@ -166,6 +167,10 @@ function LotIcon() {
 
 function ScanIcon() {
   return <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5 fill-none stroke-current" strokeWidth="2"><path d="M4 9V5h4M20 9V5h-4M4 15v4h4M20 15v4h-4M8 8h3v3H8zM13 8h3v3h-3zM8 13h3v3H8zM13 13h3v3h-3z" /></svg>;
+}
+
+function IntegrationIcon() {
+  return <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5 fill-none stroke-current" strokeWidth="2"><path d="M4 7h11M12 4l3 3-3 3" /><path d="M20 17H9M12 14l-3 3 3 3" /></svg>;
 }
 
 function StagnantIcon() {
