@@ -43,6 +43,43 @@ Details, counters and limitations: [`docs/erp-sync.md`](docs/erp-sync.md).
 
 Logistics managers get **Integración ERP** (`/dashboard/integrations`): ERP connection status (healthcheck), last sync, dispatched orders not yet reported to the ERP, and a filterable, paginated history of syncs and dispatch reports with sanitized error details. From there they can sync, retry a failed dispatch report (same payload, audited, sent right away) and send due pending reports. `ERP_SYNC_STALE_AFTER_HOURS` (server-only, default 24) sets when the last successful sync is shown as outdated. Badges, permissions, known risks and a manual test checklist: [`docs/erp-integration-panel.md`](docs/erp-integration-panel.md).
 
+## Local development
+
+Run the app against the **local** Supabase stack (Docker), not the shared cloud database. Syncing with the ERP mock writes data, so never set `ERP_PROVIDER` while pointing at the cloud.
+
+1. Start the stack and build the database from scratch (migrations + [`supabase/seed.sql`](supabase/seed.sql)):
+
+   ```bash
+   npx supabase start
+   npx supabase db reset
+   ```
+
+2. Create `.env.development.local` (git-ignored, read only by `next dev`, takes precedence over `.env.local`) with the values from `npx supabase status`:
+
+   ```bash
+   ERP_PROVIDER=mock
+   NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=<ANON_KEY or PUBLISHABLE_KEY>
+   ```
+
+3. Run `npm run dev` and restart it whenever a `.env*` file changes (Next.js reads them only at startup).
+
+4. Sign in with one of the seeded test users (company **TrazFlow Demo**). These passwords are public and only exist in the local database:
+
+   | Email | Password | Role |
+   |---|---|---|
+   | `logistica@trazflow.test` | `test1234` | `logistics_manager` |
+   | `deposito@trazflow.test` | `test1234` | `warehouse_operator` |
+   | `chofer@trazflow.test` | `test1234` | `driver_operator` |
+
+5. The seed loads no ERP data. Sign in as `logistica@trazflow.test` and follow [Syncing master data and orders](#syncing-master-data-and-orders-us-erp-03) (link the mock warehouse to `DEP-01`, then **Sincronizar con ERP**) to import products, lots, pallets and orders from the mock.
+
+Troubleshooting:
+
+- *"La integración con el ERP no está configurada"*: `ERP_PROVIDER` is missing or the dev server was not restarted.
+- *"No pudimos cargar esta pantalla"*: the local database is missing migrations. Run `npx supabase migration up --local --include-all`, or `npx supabase db reset` to rebuild it (this erases local data).
+- Accounts from the cloud database do not exist locally; use the seeded users above. Mail sent by the local stack (sign-up confirmations) goes to Mailpit at http://127.0.0.1:54324.
+
 ## Getting Started
 
 First, run the development server:
