@@ -17,6 +17,7 @@ const SYNCED_PATHS = [
   "/dashboard/inventory",
   "/dashboard/traceability",
   "/dashboard/alerts",
+  "/dashboard/integrations",
 ];
 
 /** Sincronización manual con el ERP. Solo logística; la RPC vuelve a verificar empresa y rol. */

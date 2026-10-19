@@ -39,6 +39,10 @@ What gets imported: products, lots, one pallet per stock balance (lot × warehou
 
 Details, counters and limitations: [`docs/erp-sync.md`](docs/erp-sync.md).
 
+### Integration panel (US-ERP-05)
+
+Logistics managers get **Integración ERP** (`/dashboard/integrations`): ERP connection status (healthcheck), last sync, dispatched orders not yet reported to the ERP, and a filterable, paginated history of syncs and dispatch reports with sanitized error details. From there they can sync, retry a failed dispatch report (same payload, audited, sent right away) and send due pending reports. `ERP_SYNC_STALE_AFTER_HOURS` (server-only, default 24) sets when the last successful sync is shown as outdated. Badges, permissions, known risks and a manual test checklist: [`docs/erp-integration-panel.md`](docs/erp-integration-panel.md).
+
 ## Getting Started
 
 First, run the development server:

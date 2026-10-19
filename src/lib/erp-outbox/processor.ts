@@ -1,0 +1,255 @@
+import "server-only";
+
+import type { ErpClient } from "../erp/client.ts";
+import { ErpError, isErpError, type DispatchReport, type DispatchReportResult } from "../erp/types.ts";
+import { dispatchReportProblems } from "../erp/validation.ts";
+import { emptyErpOutboxRunSummary, type ErpOutboxRunSummary } from "./types.ts";
+
+/**
+ * Procesador del outbox de reportes al ERP (US-ERP-04).
+ *
+ * Por cada evento: erp_outbox_claim (transacción corta que lo marca `processing`) → reportDispatch con el
+ * payload guardado, fuera de cualquier transacción → erp_outbox_mark_sent | erp_outbox_mark_failed. El
+ * backoff, el máximo de intentos y el lease los decide la base (20261019140000_erp_dispatch_outbox.sql):
+ * acá solo se clasifica el error. El payload y la clave nunca se rearman: se reenvían tal cual.
+ */
+
+/** Lo único que el procesador necesita de Supabase: llamar RPC. */
+export type ErpOutboxDb = {
+  rpc(fn: string, args: Record<string, unknown>): PromiseLike<{
+    data: unknown;
+    error: { message: string; code?: string } | null;
+  }>;
+};
+
+/**
+ * Campos que se pueden loguear. Lista cerrada a propósito: nunca el payload (operador, pallets), ni
+ * credenciales, headers o errores crudos de terceros.
+ */
+export type ErpOutboxLogFields = {
+  eventId?: string;
+  attempt?: number;
+  provider?: string;
+  code?: string;
+  /** Solo mensajes de ErpError, que ya vienen sanitizados. */
+  message?: string;
+  status?: string | null;
+  erpReference?: string;
+  duplicate?: boolean;
+  durationMs?: number;
+  claimed?: number;
+};
+
+export type ErpOutboxLogger = {
+  info(event: string, fields: ErpOutboxLogFields): void;
+  warn(event: string, fields: ErpOutboxLogFields): void;
+  error(event: string, fields: ErpOutboxLogFields): void;
+};
+
+const LOG_FIELDS: ReadonlyArray<keyof ErpOutboxLogFields> = [
+  "eventId", "attempt", "provider", "code", "message", "status", "erpReference", "duplicate", "durationMs", "claimed",
+];
+
+/** Copia solo los campos permitidos: aunque alguien pase un objeto de más, no llega al log. */
+export function safeLogFields(fields: ErpOutboxLogFields): ErpOutboxLogFields {
+  const safe: Record<string, unknown> = {};
+  for (const key of LOG_FIELDS) {
+    if (fields[key] !== undefined) safe[key] = fields[key];
+  }
+  return safe as ErpOutboxLogFields;
+}
+
+export const consoleErpOutboxLogger: ErpOutboxLogger = {
+  info: (event, fields) => console.info(`[erp-outbox] ${event}`, JSON.stringify(safeLogFields(fields))),
+  warn: (event, fields) => console.warn(`[erp-outbox] ${event}`, JSON.stringify(safeLogFields(fields))),
+  error: (event, fields) => console.error(`[erp-outbox] ${event}`, JSON.stringify(safeLogFields(fields))),
+};
+
+/** Timeout propio del procesador, por encima de ERP_TIMEOUT_MS y por debajo del lease (2 min). */
+export const DEFAULT_REPORT_TIMEOUT_MS = 30_000;
+
+export type ProcessErpOutboxParams = {
+  /** Cliente autenticado como un usuario de logística o depósito: solo procesa eventos de su empresa. */
+  db: ErpOutboxDb;
+  /** Se llama una vez por corrida y solo si hay algo para enviar. */
+  getClient: () => ErpClient;
+  /** Máximo de eventos por corrida (la base lo limita a 50). */
+  limit?: number;
+  /** Solo los eventos de esta orden. Sin valor, todos los vencidos de la empresa. */
+  aggregateId?: string | null;
+  timeoutMs?: number;
+  logger?: ErpOutboxLogger;
+};
+
+/** No se pudieron tomar eventos (permisos, base caída). No se tocó nada. */
+export class ErpOutboxClaimError extends Error {
+  readonly code: string | null;
+
+  constructor(message: string, code: string | null) {
+    super(message);
+    this.name = "ErpOutboxClaimError";
+    this.code = code;
+  }
+}
+
+type ClaimedEvent = {
+  id: string;
+  idempotencyKey: string;
+  payload: unknown;
+  attempts: number;
+};
+
+type Failure = { code: string; message: string; retryable: boolean };
+
+export async function processErpOutbox(params: ProcessErpOutboxParams): Promise<ErpOutboxRunSummary> {
+  const { db } = params;
+  const logger = params.logger ?? consoleErpOutboxLogger;
+  const timeoutMs = params.timeoutMs ?? DEFAULT_REPORT_TIMEOUT_MS;
+  const summary = emptyErpOutboxRunSummary();
+
+  const claimed = await db.rpc("erp_outbox_claim", {
+    p_limit: params.limit ?? 10,
+    p_aggregate_id: params.aggregateId ?? null,
+  });
+  if (claimed.error) {
+    logger.error("claim_failed", { code: claimed.error.code });
+    throw new ErpOutboxClaimError(
+      claimed.error.code === "42501"
+        ? "No tenés permisos para procesar reportes al ERP."
+        : "No se pudieron leer los reportes pendientes al ERP.",
+      claimed.error.code ?? null,
+    );
+  }
+
+  const events = parseClaimedEvents(claimed.data);
+  summary.claimed = events.length;
+  if (!events.length) return summary;
+  logger.info("claimed", { claimed: events.length });
+
+  let client: ErpClient | null = null;
+  let clientFailure: Failure | null = null;
+  try {
+    client = params.getClient();
+  } catch (error) {
+    clientFailure = classify(error);
+  }
+
+  for (const event of events) {
+    const startedAt = Date.now();
+    const base = { eventId: event.id, attempt: event.attempts, provider: client?.provider };
+    let result: DispatchReportResult | null = null;
+    let failure: Failure | null = clientFailure;
+
+    if (!failure && client) {
+      try {
+        const report = toDispatchReport(event);
+        result = await withTimeout(client.reportDispatch(report), timeoutMs);
+        if (typeof result?.erpReference !== "string" || !result.erpReference.trim()) {
+          throw new ErpError("invalid_response", "El ERP no devolvió la referencia del despacho.");
+        }
+      } catch (error) {
+        result = null;
+        failure = classify(error);
+      }
+    }
+    const durationMs = Date.now() - startedAt;
+
+    if (result) {
+      const { data, error } = await db.rpc("erp_outbox_mark_sent", {
+        p_event_id: event.id,
+        p_attempt: event.attempts,
+        p_erp_reference: result.erpReference,
+        p_duplicate: result.duplicate === true,
+      });
+      if (error || data !== true) {
+        summary.unrecorded += 1;
+        logger.error("sent_not_recorded", { ...base, code: error?.code, erpReference: result.erpReference, durationMs });
+        continue;
+      }
+      summary.sent += 1;
+      if (result.duplicate) summary.duplicates += 1;
+      logger.info("sent", { ...base, erpReference: result.erpReference, duplicate: result.duplicate === true, durationMs });
+      continue;
+    }
+
+    const { code, message, retryable } = failure ?? classify(null);
+    const { data, error } = await db.rpc("erp_outbox_mark_failed", {
+      p_event_id: event.id,
+      p_attempt: event.attempts,
+      p_error_code: code,
+      p_error_message: message,
+      p_retryable: retryable,
+    });
+    if (error || (data !== "pending" && data !== "failed")) {
+      summary.unrecorded += 1;
+      logger.error("failure_not_recorded", { ...base, code, durationMs });
+      continue;
+    }
+    if (data === "pending") {
+      summary.retrying += 1;
+      logger.warn("retry_scheduled", { ...base, code, message, status: data, durationMs });
+    } else {
+      summary.failed += 1;
+      logger.error("failed", { ...base, code, message, status: data, durationMs });
+    }
+  }
+
+  return summary;
+}
+
+function parseClaimedEvents(data: unknown): ClaimedEvent[] {
+  if (!Array.isArray(data)) return [];
+  return data.flatMap((row) => {
+    if (!row || typeof row !== "object") return [];
+    const { id, idempotency_key: idempotencyKey, payload, attempts } = row as Record<string, unknown>;
+    if (typeof id !== "string" || typeof idempotencyKey !== "string" || typeof attempts !== "number") return [];
+    return [{ id, idempotencyKey, payload, attempts }];
+  });
+}
+
+/** El payload guardado tiene que ser un DispatchReport válido y con la clave del evento. */
+function toDispatchReport(event: ClaimedEvent): DispatchReport {
+  if (!event.payload || typeof event.payload !== "object" || Array.isArray(event.payload)) {
+    throw new ErpError("validation", "El reporte guardado no tiene el formato del contrato.");
+  }
+  const report = event.payload as DispatchReport;
+  if (report.idempotencyKey !== event.idempotencyKey) {
+    throw new ErpError("validation", "La clave de idempotencia del reporte no coincide con la del evento.");
+  }
+  let problems: string[];
+  try {
+    problems = dispatchReportProblems(report);
+  } catch {
+    problems = ["el reporte guardado no tiene el formato del contrato"];
+  }
+  if (problems.length) {
+    throw new ErpError("validation", `Reporte de despacho inválido: ${problems.join("; ")}`.slice(0, 480));
+  }
+  return report;
+}
+
+/**
+ * ErpError trae su propia clasificación (docs/erp-contract.md §6). Cualquier otro error es inesperado: se
+ * reintenta (puede ser transitorio) con un mensaje genérico, sin detalles que puedan filtrar datos.
+ */
+function classify(error: unknown): Failure {
+  if (isErpError(error)) {
+    return { code: error.code, message: error.message, retryable: error.retryable };
+  }
+  return { code: "unknown", message: "Error inesperado al reportar el despacho al ERP.", retryable: true };
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new ErpError("timeout", `El ERP no respondió en ${Math.round(timeoutMs / 1000)} s.`)),
+      timeoutMs,
+    );
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
