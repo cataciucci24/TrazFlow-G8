@@ -180,8 +180,8 @@ panel de integración.
 
 ## 7. Mock (`ERP_PROVIDER=mock`)
 
-- Fixtures deterministas en `src/lib/erp/fixtures.ts`: 4 productos (uno inactivo), 4 lotes, stock por lote y
-  4 órdenes (3 abiertas, 1 entregada). Los ids imitan los de ERPNext.
+- Fixtures deterministas en `src/lib/erp/fixtures.ts`: 4 productos (uno inactivo), 5 lotes, stock por lote y
+  5 órdenes (4 abiertas, 1 entregada). Los ids imitan los de ERPNext.
 - Estado en memoria por proceso: reportar un despacho marca la orden como entregada y guarda la clave. Reiniciar
   el servidor vuelve a los fixtures.
 - Fallas permanentes con `ERP_MOCK_SCENARIO` (`validation` solo afecta a `reportDispatch`).

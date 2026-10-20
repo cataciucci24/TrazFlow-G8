@@ -26,12 +26,14 @@ export const MOCK_ERP_FIXTURES: MockErpFixtures = {
     { externalId: "L-2026-0915", productExternalId: "ACE-500", lotNumber: "L-2026-0915", manufacturingDate: "2026-09-15", expirationDate: "2027-03-31", active: true, updatedAt: T0 },
     { externalId: "L-2026-0921", productExternalId: "ACE-500", lotNumber: "L-2026-0921", manufacturingDate: "2026-09-21", expirationDate: "2027-04-15", active: true, updatedAt: T0 },
     { externalId: "ARR-2026-08", productExternalId: "ARR-1KG", lotNumber: "ARR-2026-08", manufacturingDate: "2026-08-01", expirationDate: "2027-08-01", active: true, updatedAt: T0 },
+    { externalId: "ARR-2026-10", productExternalId: "ARR-1KG", lotNumber: "ARR-2026-10", manufacturingDate: "2026-10-01", expirationDate: "2027-10-01", active: true, updatedAt: T0 },
     { externalId: "QSO-2026-1003", productExternalId: "QSO-HORMA", lotNumber: "QSO-2026-1003", manufacturingDate: "2026-10-03", expirationDate: "2026-12-03", active: true, updatedAt: T1 },
   ],
   stock: [
     { productExternalId: "ACE-500", lotExternalId: "L-2026-0915", warehouseExternalId: WAREHOUSE, quantity: 120, uom: "Caja" },
     { productExternalId: "ACE-500", lotExternalId: "L-2026-0921", warehouseExternalId: WAREHOUSE, quantity: 80, uom: "Caja" },
     { productExternalId: "ARR-1KG", lotExternalId: "ARR-2026-08", warehouseExternalId: WAREHOUSE, quantity: 200, uom: "Caja" },
+    { productExternalId: "ARR-1KG", lotExternalId: "ARR-2026-10", warehouseExternalId: WAREHOUSE, quantity: 150, uom: "Caja" },
     { productExternalId: "QSO-HORMA", lotExternalId: "QSO-2026-1003", warehouseExternalId: WAREHOUSE, quantity: 356.5, uom: "Kg" },
   ],
   orders: [
@@ -67,6 +69,18 @@ export const MOCK_ERP_FIXTURES: MockErpFixtures = {
       scheduledDate: "2026-10-21",
       lines: [
         { externalId: "SAL-ORD-2026-00014-1", productExternalId: "ARR-1KG", quantity: 200, uom: "Caja", warehouseExternalId: WAREHOUSE },
+      ],
+      updatedAt: T1,
+    },
+    {
+      // Orden para la demo: pide exactamente el saldo del lote ARR-2026-10 (un solo pallet de 150 cajas).
+      contractVersion: ERP_CONTRACT_VERSION,
+      externalId: "SAL-ORD-2026-00015",
+      status: "pending",
+      customer: { externalId: "CUST-SUR", name: "Almacén del Sur" },
+      scheduledDate: "2026-10-21",
+      lines: [
+        { externalId: "SAL-ORD-2026-00015-1", productExternalId: "ARR-1KG", quantity: 150, uom: "Caja", warehouseExternalId: WAREHOUSE },
       ],
       updatedAt: T1,
     },
