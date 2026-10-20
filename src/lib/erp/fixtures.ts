@@ -59,6 +59,18 @@ export const MOCK_ERP_FIXTURES: MockErpFixtures = {
       updatedAt: T1,
     },
     {
+      // Orden para practicar la demo: pide exactamente el saldo del lote ARR-2026-08 (un solo pallet de 200 cajas).
+      contractVersion: ERP_CONTRACT_VERSION,
+      externalId: "SAL-ORD-2026-00014",
+      status: "pending",
+      customer: { externalId: "CUST-NORTE", name: "Distribuidora Norte" },
+      scheduledDate: "2026-10-21",
+      lines: [
+        { externalId: "SAL-ORD-2026-00014-1", productExternalId: "ARR-1KG", quantity: 200, uom: "Caja", warehouseExternalId: WAREHOUSE },
+      ],
+      updatedAt: T1,
+    },
+    {
       contractVersion: ERP_CONTRACT_VERSION,
       externalId: "SAL-ORD-2026-00009",
       status: "delivered",
