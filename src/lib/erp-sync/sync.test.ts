@@ -72,7 +72,7 @@ test("aplica productos, lotes, stock y órdenes en orden, con las unidades tradu
 
   // El mock solo devuelve órdenes abiertas; se manda solo la cabecera.
   const orders = calls[4].args.p_records as Record<string, unknown>[];
-  assert.equal(orders.length, 2);
+  assert.equal(orders.length, 3);
   assert.deepEqual(Object.keys(orders[0]).sort(), ["customer", "externalId", "scheduledDate", "status"]);
   assert.equal(calls[5].args.p_error, null);
 });

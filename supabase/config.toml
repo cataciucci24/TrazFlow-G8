@@ -64,6 +64,9 @@ schema_paths = []
 
 [db.seed]
 # If enabled, seeds the database after migrations during a db reset.
+# seed.sql crea usuarios con contraseñas de prueba: es SOLO para la base local (`supabase start` / `supabase db reset`).
+# Contra la nube no usar nunca `db push --include-seed` (seed.sql aborta si la base ya tiene datos) ni
+# `db reset --linked` / `--db-url`, que además de borrar la base cargarían el seed.
 enabled = true
 # Specifies an ordered list of seed files to load during db reset.
 # Supports glob patterns relative to supabase directory: "./seeds/*.sql"

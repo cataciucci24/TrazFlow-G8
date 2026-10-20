@@ -64,21 +64,21 @@ test("updatedSince filtra productos y lotes pero no el stock", async () => {
 
 test("pullDispatchOrders solo trae órdenes abiertas", async () => {
   const orders = await client().pullDispatchOrders();
-  assert.deepEqual(orders.map((order) => order.externalId), ["SAL-ORD-2026-00012", "SAL-ORD-2026-00013"]);
+  assert.deepEqual(orders.map((order) => order.externalId), ["SAL-ORD-2026-00012", "SAL-ORD-2026-00013", "SAL-ORD-2026-00014"]);
 });
 
 test("los datos devueltos son copias: modificarlos no altera el mock", async () => {
   const erp = client();
   const orders = await erp.pullDispatchOrders();
   orders[0].status = "cancelled";
-  assert.equal((await erp.pullDispatchOrders()).length, 2);
+  assert.equal((await erp.pullDispatchOrders()).length, 3);
 });
 
 test("reportDispatch acepta el despacho y cierra la orden", async () => {
   const erp = client();
   const result = await erp.reportDispatch(report());
   assert.deepEqual(result, { erpReference: "MOCK-DN-0001", duplicate: false, acceptedAt: NOW.toISOString() });
-  assert.deepEqual((await erp.pullDispatchOrders()).map((order) => order.externalId), ["SAL-ORD-2026-00013"]);
+  assert.deepEqual((await erp.pullDispatchOrders()).map((order) => order.externalId), ["SAL-ORD-2026-00013", "SAL-ORD-2026-00014"]);
 });
 
 test("reintentar con la misma clave devuelve el mismo resultado marcado como duplicado", async () => {
