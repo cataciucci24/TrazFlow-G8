@@ -12,21 +12,28 @@ test("una persona que vuelve del registro ve la confirmación y puede iniciar se
 });
 
 test("el login informa credenciales inválidas sin exponer detalles internos", async ({ page }) => {
-  // Simula la respuesta de autenticación para que la demo no dependa de una cuenta real.
-  await page.route("http://127.0.0.1:54321/**", async (route) => {
-    await route.fulfill({
-      status: 400,
-      contentType: "application/json",
-      body: JSON.stringify({ code: "invalid_credentials", message: "Invalid login credentials" }),
-    });
-  });
-
+  // El login actual es cliente. El fixture responde un rechazo real por HTTP.
   await page.goto("/login");
   await page.getByLabel("Email").fill("operador@trazflow.test");
   await page.getByLabel("Contraseña").fill("clave-incorrecta");
+  const responsePromise = page.waitForResponse(response => response.url().includes('/auth/v1/token'));
   await page.getByRole("button", { name: "Ingresar" }).click();
+  const response = await responsePromise;
+  expect(response.status()).toBe(400);
+  expect(await response.json()).toMatchObject({ code: 'invalid_credentials' });
+  expect(response.request().postDataJSON()).toMatchObject({ email: 'operador@trazflow.test', password: 'clave-incorrecta' });
 
   await expect(page.getByText("El email o la contraseña no son correctos.")).toBeVisible();
   await expect(page).toHaveURL(/\/login$/);
   await expect(page.getByRole("button", { name: "Ingresar" })).toBeEnabled();
+});
+
+test("una caída de red tiene un mensaje distinto al rechazo de credenciales", async ({ page }) => {
+  await page.route('**/auth/v1/token**', route => route.abort('connectionrefused'));
+  await page.goto('/login');
+  await page.getByLabel('Email').fill('chofer@trazflow.test');
+  await page.getByLabel('Contraseña').fill('test1234');
+  await page.getByRole('button', { name: 'Ingresar' }).click();
+  await expect(page.getByText('No se pudo ingresar. Revisá tu conexión e intentá nuevamente.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Ingresar' })).toBeEnabled();
 });
