@@ -9,6 +9,7 @@
     "lint": "eslint",
     "test": "node --import ./scripts/test-server-only.mjs --test \"src/**/*.test.ts\"",
     "test:unit": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test"
   },
   "dependencies": {
@@ -26,6 +27,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitest/coverage-v8": "^3.2.7",
     "eslint": "^9",
     "eslint-config-next": "16.3.3",
     "supabase": "^2.117.0",

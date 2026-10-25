@@ -10,8 +10,9 @@ export default defineConfig({
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
-    command: "npm run dev -- --hostname 127.0.0.1",
+    command: "npm run dev -- --webpack --hostname 127.0.0.1",
     url: "http://127.0.0.1:3000/login",
+    timeout: 120_000,
     reuseExistingServer: !process.env.CI,
     env: {
       NEXT_PUBLIC_SUPABASE_URL: "http://127.0.0.1:54321",
