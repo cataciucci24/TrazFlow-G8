@@ -28,6 +28,10 @@ insert into auth.users (id, email) values
 insert into companies (id, name) values
   ('a2030000-0000-0000-0000-000000000001', 'TRZ103 A'),
   ('a2030000-0000-0000-0000-000000000002', 'TRZ103 B');
+-- TRZ-101: las empresas nuevas no reciben un depósito automático; en el onboarding se carga DEP-01.
+insert into public.warehouses (company_id, code, name)
+  select id, 'DEP-01', 'Depósito principal' from public.companies c
+  where not exists (select 1 from public.warehouses w where w.company_id = c.id);
 insert into users (id, company_id, name, email, role) values
   ('a1030000-0000-0000-0000-000000000001', 'a2030000-0000-0000-0000-000000000001', 'Logística', 'trz103-manager@test.local', 'logistics_manager'),
   ('a1030000-0000-0000-0000-000000000002', 'a2030000-0000-0000-0000-000000000001', 'Depósito', 'trz103-warehouse@test.local', 'warehouse_operator'),

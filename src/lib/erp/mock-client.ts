@@ -21,9 +21,9 @@ import {
   assertValidDeliveryReceipt,
   assertValidDeliveryReport,
   assertValidDispatchReport,
+  assertValidErpWarehouses,
   assertValidIdempotencyKey,
 } from "./validation.ts";
-import { assertValidDispatchReport, assertValidErpWarehouses, assertValidIdempotencyKey } from "./validation.ts";
 
 export type MockErpClientOptions = {
   /** Falla permanente de todas las llamadas. `validation` solo afecta a las que escriben (reportes y remitos). */
