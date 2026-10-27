@@ -334,7 +334,7 @@ export async function confirmDispatchOrder(
     revalidatePath("/dashboard");
     after(() =>
       processCompanyErpOutbox({
-        db: { rpc: (fn, args) => supabase.rpc(fn, args) },
+        db: { rpc: (fn, args) => supabase.rpc(fn, args), storage: supabase.storage },
         companyId: profile.companyId,
       }),
     );

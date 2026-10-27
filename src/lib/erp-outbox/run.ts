@@ -28,3 +28,26 @@ export async function processCompanyErpOutbox(params: {
     return null;
   }
 }
+
+/**
+ * TRZ-103: manda al ERP la entrega y los remitos firmados de una orden apenas el chofer los registra, con la
+ * sesión del chofer (las RPC erp_outbox_driver_* lo limitan a los eventos de entrega de esa orden suya). Se
+ * llama en un after(): el chofer no espera al ERP. Si el ERP falla, el evento queda con su backoff para los
+ * procesadores de siempre. Nunca lanza.
+ */
+export async function processDriverDeliveryEvents(params: {
+  db: ErpOutboxDb;
+  companyId: string;
+  orderId: string;
+}): Promise<ErpOutboxRunSummary | null> {
+  if (!(await isErpEnabled(params.companyId))) return null;
+  try {
+    return await processErpOutbox({
+      db: params.db,
+      getClient: () => getErpClient(params.companyId),
+      driverOrderId: params.orderId,
+    });
+  } catch {
+    return null;
+  }
+}

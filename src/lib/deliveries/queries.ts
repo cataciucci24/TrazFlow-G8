@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import type { AssignedDelivery, DeliveryPallet } from "@/lib/deliveries/types";
+import type { DeliveryReceiptSummary } from "@/lib/deliveries/receipts";
 import type { OrderStatus } from "@/lib/types";
 import { isProductUnit } from "@/lib/pallets/units";
 
@@ -45,5 +46,22 @@ export async function getOrderDeliveryPallets(orderId: string): Promise<Delivery
     unitOfMeasure: isProductUnit(row.unit_of_measure) ? row.unit_of_measure : "unidades",
     deliveryOutcome: row.delivery_outcome,
     processedAt: row.processed_at,
+  }));
+}
+
+/** Remitos firmados de una orden (TRZ-103). RLS: logística y depósito de la empresa, o el chofer asignado. */
+export async function getOrderDeliveryReceipts(orderId: string): Promise<DeliveryReceiptSummary[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("order_delivery_receipts")
+    .select("id, file_name, content_type, size_bytes, created_at")
+    .eq("order_id", orderId)
+    .order("created_at", { ascending: true });
+  if (error) throw new Error("No se pudieron consultar los remitos de la entrega.", { cause: error });
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    fileName: row.file_name,
+    contentType: row.content_type,
+    sizeBytes: row.size_bytes,
+    createdAt: row.created_at,
   }));
 }

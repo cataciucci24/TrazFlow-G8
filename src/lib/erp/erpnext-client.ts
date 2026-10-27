@@ -6,6 +6,11 @@ import {
   ErpError,
   erpErrorCodeFromStatus,
   isErpError,
+  type DeliveryDiscrepancyKind,
+  type DeliveryPalletOutcome,
+  type DeliveryReceipt,
+  type DeliveryReport,
+  type DeliveryReportResult,
   type DispatchDocumentStatus,
   type DispatchReport,
   type DispatchReportResult,
@@ -18,7 +23,12 @@ import {
   type ErpPullOptions,
   type ErpStockBalance,
 } from "./types.ts";
-import { assertValidDispatchReport, assertValidIdempotencyKey } from "./validation.ts";
+import {
+  assertValidDeliveryReceipt,
+  assertValidDeliveryReport,
+  assertValidDispatchReport,
+  assertValidIdempotencyKey,
+} from "./validation.ts";
 
 /**
  * Adaptador REST de ERPNext / Frappe (v15). Ver la sección "ERPNext" de docs/erp-contract.md para el mapeo de
@@ -38,6 +48,9 @@ export const ERPNEXT_CUSTOM_FIELDS = {
   operator: "trazflow_operator", // Delivery Note, Data
   palletCode: "trazflow_pallet_code", // Delivery Note Item, Data
 } as const;
+
+/** Etiqueta (tag de Frappe) que deja TrazFlow en un remito cuya entrega cerró con diferencias (TRZ-103). */
+export const ERPNEXT_REVIEW_TAG = "TrazFlow: revisar entrega";
 
 const OPEN_SALES_ORDER_STATUSES = ["To Deliver and Bill", "To Deliver"];
 
@@ -113,6 +126,67 @@ export type ErpNextDeliveryNote = ErpNextDeliveryNoteRef & {
 };
 
 type Filter = [string, string, unknown];
+
+/* ---------- Entrega (TRZ-103) → ERPNext ---------- */
+
+const OUTCOME_LABELS: Record<DeliveryPalletOutcome, string> = {
+  delivered: "Entregado",
+  missing: "Faltante",
+  damaged: "Dañado",
+};
+
+const DISCREPANCY_LABELS: Record<DeliveryDiscrepancyKind, string> = {
+  missing: "Faltante",
+  surplus: "Sobrante",
+  damaged: "Dañado",
+  wrong_order: "No corresponde a la orden",
+};
+
+/** Marca que identifica el comentario de una entrega: con ella se detecta un reintento (idempotencia). */
+export function deliveryCommentMarker(idempotencyKey: string): string {
+  return `[trazflow:${idempotencyKey}]`;
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+/** Comentario del Delivery Note con el resultado por pallet. HTML simple, que es lo que muestra Frappe. */
+export function buildDeliveryComment(report: DeliveryReport): string {
+  const parts = [
+    `<p><b>Entrega informada por TrazFlow</b> ${escapeHtml(deliveryCommentMarker(report.idempotencyKey))}</p>`,
+  ];
+  if (report.needsReview) {
+    parts.push("<p><b>⚠ La entrega cerró con diferencias: revisar antes de confirmar el remito.</b></p>");
+  }
+  parts.push(
+    `<p>Chofer: ${escapeHtml(report.driver.name || report.driver.id)} · Fecha: ${escapeHtml(isoToFrappeDatetime(report.deliveredAt))}</p>`,
+    `<p>Pallets:</p><ul>${report.lines
+      .map((line) => `<li>${escapeHtml(line.palletCode)}: ${OUTCOME_LABELS[line.outcome]}</li>`)
+      .join("")}</ul>`,
+  );
+  if (report.discrepancies.length) {
+    parts.push(`<p>Diferencias:</p><ul>${report.discrepancies
+      .map((difference) => `<li>${escapeHtml(difference.palletCode ?? "sin código")}: ${DISCREPANCY_LABELS[difference.type]}</li>`)
+      .join("")}</ul>`);
+  }
+  return parts.join("");
+}
+
+const RECEIPT_EXTENSIONS: Record<string, string> = {
+  "image/jpeg": ".jpg",
+  "image/png": ".png",
+  "image/webp": ".webp",
+  "image/heic": ".heic",
+  "image/heif": ".heif",
+  "application/pdf": ".pdf",
+};
+
+/** Nombre fijo por clave: es lo que permite reconocer un remito ya adjuntado. */
+export function deliveryReceiptFileName(receipt: Pick<DeliveryReceipt, "idempotencyKey" | "contentType">): string {
+  const slug = receipt.idempotencyKey.replace(/[^A-Za-z0-9-]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+  return `trazflow-${slug}${RECEIPT_EXTENSIONS[receipt.contentType] ?? ""}`;
+}
 
 /* ---------- Mapeo ERPNext → contrato ---------- */
 
@@ -384,6 +458,84 @@ export class ErpNextClient implements ErpClient {
     return mapDeliveryNoteStatus(notes);
   }
 
+  /**
+   * TRZ-103: comentario en el Delivery Note del despacho con el resultado por pallet y, si hubo diferencias, la
+   * etiqueta ERPNEXT_REVIEW_TAG. El remito no se confirma. Primero la etiqueta y después el comentario: si algo
+   * falla en el medio, el reintento vuelve a poner la etiqueta (no se duplica) y recién ahí crea el comentario,
+   * que es lo que marca la entrega como informada.
+   */
+  async reportDelivery(report: DeliveryReport): Promise<DeliveryReportResult> {
+    assertValidDeliveryReport(report);
+    const note = await this.#requireDispatchNote(report.dispatchIdempotencyKey);
+
+    const existing = await this.#list<{ name: string; creation: string }>(
+      "Comment",
+      ["name", "creation"],
+      [
+        ["reference_doctype", "=", "Delivery Note"],
+        ["reference_name", "=", note.name],
+        ["content", "like", `%${deliveryCommentMarker(report.idempotencyKey)}%`],
+      ],
+      1,
+    );
+    if (existing[0]) return duplicateResult({ name: note.name, creation: existing[0].creation });
+
+    if (report.needsReview) {
+      await this.#request("POST", "/api/method/frappe.desk.doctype.tag.tag.add_tag", {
+        tag: ERPNEXT_REVIEW_TAG,
+        dt: "Delivery Note",
+        dn: note.name,
+      });
+    }
+    await this.#request("POST", resourcePath("Comment"), {
+      comment_type: "Comment",
+      reference_doctype: "Delivery Note",
+      reference_name: note.name,
+      content: buildDeliveryComment(report),
+    });
+    return { erpReference: note.name, duplicate: false, acceptedAt: this.#now().toISOString() };
+  }
+
+  /** TRZ-103: adjunta el remito firmado al Delivery Note del despacho, como archivo privado. */
+  async attachDeliveryReceipt(receipt: DeliveryReceipt, content: Uint8Array): Promise<DeliveryReportResult> {
+    assertValidDeliveryReceipt(receipt, content);
+    const note = await this.#requireDispatchNote(receipt.dispatchIdempotencyKey);
+    const fileName = deliveryReceiptFileName(receipt);
+
+    const existing = await this.#list<{ name: string; creation: string }>(
+      "File",
+      ["name", "creation"],
+      [
+        ["attached_to_doctype", "=", "Delivery Note"],
+        ["attached_to_name", "=", note.name],
+        ["file_name", "=", fileName],
+      ],
+      1,
+    );
+    if (existing[0]) return duplicateResult({ name: note.name, creation: existing[0].creation });
+
+    const form = new FormData();
+    form.append("file", new Blob([content as Uint8Array<ArrayBuffer>], { type: receipt.contentType }), fileName);
+    form.append("is_private", "1");
+    form.append("doctype", "Delivery Note");
+    form.append("docname", note.name);
+    const body = await this.#request<{ message?: { name?: unknown } }>("POST", "/api/method/upload_file", form);
+    if (typeof body.message?.name !== "string" || !body.message.name) throw invalidResponse("upload_file sin el archivo creado");
+    return { erpReference: note.name, duplicate: false, acceptedAt: this.#now().toISOString() };
+  }
+
+  /** El Delivery Note que generó el despacho. Si todavía no existe, la entrega llegó antes: se reintenta. */
+  async #requireDispatchNote(dispatchIdempotencyKey: string): Promise<ErpNextDeliveryNoteRef> {
+    const note = await this.#findDeliveryNote(dispatchIdempotencyKey);
+    if (!note) {
+      throw new ErpError(
+        "not_ready",
+        `Todavía no hay remito en ERPNext para ${dispatchIdempotencyKey}: se reintenta cuando se informe el despacho.`,
+      );
+    }
+    return note;
+  }
+
   /** Misma clave y mismo contenido → duplicado; misma clave con otro contenido → conflict, como en el mock. */
   async #resolveExisting(ref: ErpNextDeliveryNoteRef, report: DispatchReport): Promise<DispatchReportResult> {
     const body = await this.#request<{ data?: ErpNextDeliveryNote }>(
@@ -441,7 +593,9 @@ export class ErpNextClient implements ErpClient {
     return body.message as T;
   }
 
+  /** JSON por defecto; un FormData se manda como multipart (upload_file) y fetch arma el Content-Type. */
   async #request<T>(method: "GET" | "POST", path: string, payload?: unknown): Promise<T> {
+    const multipart = payload instanceof FormData;
     let response: Response;
     try {
       response = await this.#fetch(`${this.#baseUrl}${path}`, {
@@ -449,9 +603,9 @@ export class ErpNextClient implements ErpClient {
         headers: {
           Authorization: this.#authorization,
           Accept: "application/json",
-          ...(payload === undefined ? {} : { "Content-Type": "application/json" }),
+          ...(payload === undefined || multipart ? {} : { "Content-Type": "application/json" }),
         },
-        body: payload === undefined ? undefined : JSON.stringify(payload),
+        body: payload === undefined ? undefined : multipart ? payload : JSON.stringify(payload),
         signal: AbortSignal.timeout(this.#timeoutMs),
         cache: "no-store",
       });

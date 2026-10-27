@@ -130,6 +130,8 @@ function spyClient(inner: ErpClient = new MockErpClient()) {
       return inner.reportDispatch(sent);
     },
     getDispatchStatus: (key) => inner.getDispatchStatus(key),
+    reportDelivery: (report) => inner.reportDelivery(report),
+    attachDeliveryReceipt: (receipt, content) => inner.attachDeliveryReceipt(receipt, content),
   };
   return { client, received };
 }

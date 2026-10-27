@@ -45,6 +45,8 @@ interface ErpClient {
   pullDispatchOrders(options?: { updatedSince?: string }): Promise<ErpDispatchOrder[]>;
   reportDispatch(report: DispatchReport): Promise<DispatchReportResult>;
   getDispatchStatus(idempotencyKey: string): Promise<DispatchDocumentStatus>; // TRZ-100, §5.2
+  reportDelivery(report: DeliveryReport): Promise<DeliveryReportResult>; // TRZ-103, §5.3
+  attachDeliveryReceipt(receipt: DeliveryReceipt, content: Uint8Array): Promise<DeliveryReportResult>; // TRZ-103, §5.3
 }
 ```
 
@@ -197,6 +199,27 @@ type DispatchDocumentStatus = {
   (`assertValidDispatchDocumentStatus`). Los errores son los de §6.
 - Quién la llama y dónde se guarda: [`erp-sync.md`](erp-sync.md), "Estado del remito".
 
+### 5.3 Entrega y remito firmado (TRZ-103)
+
+Dos operaciones aditivas que van al **mismo documento que generó el despacho** (`dispatchIdempotencyKey`):
+
+- `reportDelivery(report)`: cómo cerró la entrega. Clave `delivery:{orderExternalId}`. Lleva el chofer, la fecha, el
+  resultado de cada pallet esperado (`delivered` / `missing` / `damaged`), todas las diferencias (también
+  `surplus` y `wrong_order`) y `needsReview`, que es `true` si hubo alguna diferencia.
+- `attachDeliveryReceipt(receipt, content)`: el remito firmado (foto o PDF, hasta 10 MB). Clave
+  `delivery-receipt:{orderExternalId}:{id}`, una por archivo. El contenido no se guarda en el outbox: el procesador
+  lo baja del bucket privado `delivery-receipts` al enviarlo.
+
+Las dos son idempotentes por clave y **nunca confirman** el documento. Si el documento del despacho todavía no existe
+(el despacho sigue en el outbox), fallan con `not_ready`, que se reintenta.
+
+Los eventos los encola la base: `delivery_confirmed` con un trigger cuando la orden pasa a `delivered` /
+`delivered_with_discrepancy`, y `delivery_receipt_attached` en `register_delivery_receipt`, después de que el chofer
+sube el archivo (`20261028130000_trz103_delivery_receipts.sql`). Solo para órdenes que vinieron del ERP. Se envían
+enseguida, en un `after()` de la acción del chofer, con RPC propias del chofer que solo le dejan tomar los eventos de
+entrega de sus órdenes (`erp_outbox_driver_claim` / `_mark_sent` / `_mark_failed`, `20261028130100`). Si el ERP falla,
+quedan con el backoff de siempre para el próximo procesamiento ("Enviar pendientes ahora", despachos o el cron).
+
 ## 6. Errores
 
 Todas las operaciones fallan con `ErpError { code, retryable, status, message }`. El `message` está sanitizado (sin
@@ -215,6 +238,7 @@ panel de integración.
 | `conflict` | 409 | No | Clave de idempotencia usada con otro contenido. | Requiere atención. |
 | `invalid_response` | — | No | La respuesta no respeta el contrato. | Requiere atención. |
 | `config` | — | No | Falta o es inválida la configuración. | Requiere atención. |
+| `not_ready` | — | Sí | Falta algo previo en el ERP (la entrega llegó antes que el remito del despacho). | Reintento con backoff. |
 
 ## 7. Mock (`ERP_PROVIDER=mock`)
 
@@ -249,6 +273,9 @@ API REST de Frappe (`/api/resource/<Doctype>` y `/api/method/<ruta>`), autentica
 | Estado del remito | `GET /api/resource/Delivery Note` con `fields = ["name", "docstatus"]` y filtro `trazflow_idempotency_key = <clave>`, **incluyendo los anulados** (a diferencia del lookup del reporte, que filtra `docstatus != 2`) | `docstatus` 0 → `draft`, 1 → `confirmed`, 2 → `cancelled`; ninguno → `not_found`. Con varios, prioridad 1 > 0 > 2. `name` → `erpReference`. |
 | Reporte | `GET /api/resource/Delivery Note` filtrando por la clave; si existe, `GET` del remito para comparar el contenido (duplicado o `conflict`); si no, `GET` de la Sales Order y `POST /api/resource/Delivery Note` | Remito **en borrador** (docstatus 0) contra la orden (`against_sales_order`, `so_detail`), con `batch_no` y `use_serial_batch_fields` por línea. La orden tiene que estar confirmada y en `To Deliver and Bill` / `To Deliver`, y cada `orderLineExternalId` informado tiene que ser de la orden; si no, `validation`. |
 
+| Entrega (TRZ-103) | Busca el Delivery Note del despacho (`trazflow_idempotency_key = dispatch:…`, sin anulados); `GET /api/resource/Comment` filtrando por el remito y la marca `[trazflow:delivery:…]`; si no está, `POST /api/method/frappe.desk.doctype.tag.tag.add_tag` (solo con diferencias) y `POST /api/resource/Comment` | Comentario HTML con chofer, fecha y resultado por pallet. Con diferencias, además la etiqueta **"TrazFlow: revisar entrega"** en el remito. |
+| Remito firmado (TRZ-103) | Mismo Delivery Note; `GET /api/resource/File` por `attached_to_name` y `file_name`; si no está, `POST /api/method/upload_file` (multipart, `is_private = 1`) | Archivo privado adjunto al remito, con nombre fijo por clave (`trazflow-delivery-receipt-….jpg`). |
+
 Decisiones y requisitos de la instancia:
 
 - **Remito en borrador.** TrazFlow no submitea el Delivery Note: el submit es lo que mueve stock en ERPNext y queda
@@ -280,6 +307,8 @@ Decisiones y requisitos de la instancia:
   get_batch_qty, Sales Order), cuerpo exacto del Delivery Note, idempotencia y carrera 409, traducción de errores
   HTTP, timeout/red, sanitización de mensajes y `getDispatchStatus` (borrador, confirmado, anulado, no encontrado,
   varios remitos, errores HTTP y respuesta inválida).
+- `erpnext-delivery.test.ts` (TRZ-103): comentario y etiqueta de la entrega, adjunto del remito, duplicados,
+  `not_ready` sin remito del despacho y que nunca se modifica ni confirma el Delivery Note.
 - `index.test.ts`: factory y validación de entorno (incluido `ERP_MOCK_DISPATCH_STATUS`).
 - `types.test.ts`: clave de idempotencia y clasificación de errores.
 - `server-boundary.test.ts`: los módulos con entorno o red importan `server-only`, ninguna variable ERP usa

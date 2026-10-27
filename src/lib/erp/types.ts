@@ -142,6 +142,69 @@ export function isDispatchDocumentState(value: unknown): value is DispatchDocume
   return DISPATCH_DOCUMENT_STATUSES.some((status) => status === value);
 }
 
+/* ---------- Entrega (TRZ-103) ---------- */
+// Operaciones agregadas al contrato v1 por TRZ-103. Son aditivas: los reportes de despacho no cambian.
+
+/** Resultado de un pallet esperado al cerrar la entrega (order_pallets.delivery_outcome). */
+export const DELIVERY_PALLET_OUTCOMES = ["delivered", "missing", "damaged"] as const;
+export type DeliveryPalletOutcome = (typeof DELIVERY_PALLET_OUTCOMES)[number];
+
+/** Diferencias que registra el chofer (delivery_discrepancies.discrepancy_type). */
+export const DELIVERY_DISCREPANCY_TYPES = ["missing", "surplus", "damaged", "wrong_order"] as const;
+export type DeliveryDiscrepancyKind = (typeof DELIVERY_DISCREPANCY_TYPES)[number];
+
+/**
+ * Entrega cerrada por el chofer: resultado por pallet y diferencias. Un reporte por orden, con la clave
+ * `delivery:{orderExternalId}`. Va al mismo documento que generó el despacho (`dispatchIdempotencyKey`).
+ */
+export type DeliveryReport = {
+  contractVersion: ErpContractVersion;
+  idempotencyKey: string;
+  orderExternalId: string;
+  dispatchIdempotencyKey: string;
+  deliveredAt: string;
+  driver: { id: string; name: string | null };
+  /** true si la entrega cerró con diferencias: el ERP la tiene que dejar marcada para revisión. */
+  needsReview: boolean;
+  lines: Array<{ palletCode: string; outcome: DeliveryPalletOutcome }>;
+  discrepancies: Array<{ palletCode: string | null; type: DeliveryDiscrepancyKind }>;
+};
+
+/**
+ * Remito firmado que subió el chofer (foto o PDF). La clave es `delivery-receipt:{orderExternalId}:{id}`: uno por
+ * archivo. El contenido viaja aparte (ver ErpClient.attachDeliveryReceipt), no en el outbox.
+ */
+export type DeliveryReceipt = {
+  contractVersion: ErpContractVersion;
+  idempotencyKey: string;
+  orderExternalId: string;
+  dispatchIdempotencyKey: string;
+  fileName: string;
+  contentType: string;
+  sizeBytes: number;
+  uploadedAt: string;
+};
+
+export type DeliveryReportResult = {
+  /** Documento del ERP donde quedó registrada la entrega (en ERPNext, el Delivery Note del despacho). */
+  erpReference: string;
+  /** true si el ERP ya tenía esta clave: no se volvió a registrar. */
+  duplicate: boolean;
+  acceptedAt: string;
+};
+
+/** Hasta 10 MB, igual que el bucket delivery-receipts. */
+export const DELIVERY_RECEIPT_MAX_BYTES = 10 * 1024 * 1024;
+export const DELIVERY_RECEIPT_CONTENT_TYPES = [
+  "image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "application/pdf",
+] as const;
+
+export function buildDeliveryIdempotencyKey(orderExternalId: string): string {
+  const id = orderExternalId.trim();
+  if (!id) throw new Error("orderExternalId vacío: no se puede armar la clave de idempotencia");
+  return `delivery:${id}`;
+}
+
 export type ErpHealth = {
   provider: ErpProvider;
   ok: true;
@@ -171,9 +234,10 @@ export type ErpErrorCode =
   | "timeout"
   | "network" // no hubo respuesta HTTP
   | "unavailable" // 5xx
-  | "invalid_response"; // respuesta que no respeta el contrato
+  | "invalid_response" // respuesta que no respeta el contrato
+  | "not_ready"; // falta algo previo en el ERP (p. ej. la entrega llega antes que el remito del despacho)
 
-const RETRYABLE_CODES: ReadonlySet<ErpErrorCode> = new Set(["rate_limited", "timeout", "network", "unavailable"]);
+const RETRYABLE_CODES: ReadonlySet<ErpErrorCode> = new Set(["rate_limited", "timeout", "network", "unavailable", "not_ready"]);
 
 /**
  * Error tipado del ERP. `message` está sanitizado: nunca contiene credenciales, headers ni trazas del ERP, así que

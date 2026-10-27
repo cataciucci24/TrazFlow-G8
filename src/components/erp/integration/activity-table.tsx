@@ -4,7 +4,7 @@ import { formatSyncedAt } from "@/components/erp/erp-origin";
 import { IntegrationBadgeView } from "@/components/erp/integration/integration-badge";
 import { EmptyState, TableShell } from "@/components/ui/design-system";
 import { activityBadge } from "@/lib/erp-integration/status";
-import { ACTIVITY_KIND_LABELS, ACTIVITY_STATUS_LABELS, ERP_DOCUMENT_STATUS_LABELS, type ActivityRow } from "@/lib/erp-integration/types";
+import { ACTIVITY_STATUS_LABELS, activityKindLabel, ERP_DOCUMENT_STATUS_LABELS, type ActivityRow } from "@/lib/erp-integration/types";
 
 export function ActivityTable({ rows, detailHref, emptyTitle, emptyDescription, emptyAction }: {
   rows: ActivityRow[];
@@ -33,7 +33,7 @@ export function ActivityTable({ rows, detailHref, emptyTitle, emptyDescription, 
           {rows.map((row) => (
             <tr role="row" key={`${row.kind}:${row.id}`}>
               <td role="cell" data-label="Fecha" className="mobile-primary text-stone-700">{formatSyncedAt(row.occurredAt)}</td>
-              <td role="cell" data-label="Tipo">{ACTIVITY_KIND_LABELS[row.kind]}</td>
+              <td role="cell" data-label="Tipo">{activityKindLabel(row.kind)}</td>
               <td role="cell" data-label="Estado" className="mobile-priority">
                 <IntegrationBadgeView badge={activityBadge(row.kind, row.status)} detail={ACTIVITY_STATUS_LABELS[row.status]} />
                 {row.attempts !== null ? <span className="ml-2 text-xs text-stone-500">{row.attempts} intento(s)</span> : null}
@@ -45,7 +45,7 @@ export function ActivityTable({ rows, detailHref, emptyTitle, emptyDescription, 
                       {row.orderExternalId ?? "Orden sin id externo"}
                       {row.palletCount !== null ? <span className="block font-sans text-stone-500">{row.palletCount} pallet(s)</span> : null}
                       {row.erpReference ? <span className="block font-sans text-stone-500">Remito {row.erpReference}</span> : null}
-                      {row.status === "sent"
+                      {row.status === "sent" && row.kind === "dispatch_confirmed"
                         ? <span className="block font-sans text-stone-500">Remito en el ERP: {row.erpDocumentStatus ? ERP_DOCUMENT_STATUS_LABELS[row.erpDocumentStatus] : "Sin consultar"}</span>
                         : null}
                     </>}
