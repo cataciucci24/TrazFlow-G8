@@ -7,19 +7,38 @@ import { Modal } from "@/components/ui/modal";
 import { palletLabelContent } from "@/lib/pallet-labels/selection";
 import type { Pallet } from "@/lib/types";
 
-/** Muestra el QR y descarga la misma información que contiene la etiqueta impresa. */
+/** Botón que muestra el QR y descarga la misma información que contiene la etiqueta impresa. */
 export function PalletQrButton({ pallet, variant = "default" }: { pallet: Pallet; variant?: "default" | "compact" | "icon" }) {
   const { qrCode } = pallet;
   const [open, setOpen] = useState(false);
+  const showQr = () => setOpen(true);
+
+  return <>
+    {variant === "icon" ? (
+      <button type="button" className="button-secondary button-icon" onClick={showQr} aria-label={`Ver QR del pallet ${qrCode}`} title="Ver QR">
+        <svg viewBox="0 0 24 24" aria-hidden="true" className="size-5" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinejoin="round">
+          <rect x="3.5" y="3.5" width="6" height="6" rx="1" /><rect x="14.5" y="3.5" width="6" height="6" rx="1" /><rect x="3.5" y="14.5" width="6" height="6" rx="1" />
+          <path d="M14.5 14.5h2.5v2.5h-2.5zM18 18h2.5v2.5H18zM14.5 20.5H17M20.5 14.5V17" strokeLinecap="round" />
+        </svg>
+      </button>
+    ) : <button type="button" className={`button-secondary whitespace-nowrap${variant === "compact" ? " button-sm" : ""}`} onClick={showQr}>QR</button>}
+    <PalletQrDialog pallet={pallet} open={open} onClose={() => setOpen(false)} />
+  </>;
+}
+
+/**
+ * Diálogo del QR del pallet, separado del botón para poder abrirlo también desde el menú "⋯" de la fila. Se monta
+ * de nuevo en cada apertura: arranca generando la imagen.
+ */
+export function PalletQrDialog({ pallet, open, onClose }: { pallet: Pallet; open: boolean; onClose: () => void }) {
+  return open ? <PalletQrModal pallet={pallet} onClose={onClose} /> : null;
+}
+
+function PalletQrModal({ pallet, onClose }: { pallet: Pallet; onClose: () => void }) {
+  const { qrCode } = pallet;
   const imageRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState(false);
-  const [loading, setLoading] = useState(false);
-
-  function showQr() {
-    setError(false);
-    setLoading(true);
-    setOpen(true);
-  }
+  const [loading, setLoading] = useState(true);
 
   function downloadLabel() {
     const source = imageRef.current?.querySelector("svg");
@@ -85,7 +104,6 @@ export function PalletQrButton({ pallet, variant = "default" }: { pallet: Pallet
   }
 
   useEffect(() => {
-    if (!open) return;
     let active = true;
     async function generateQr() {
       try {
@@ -105,23 +123,15 @@ export function PalletQrButton({ pallet, variant = "default" }: { pallet: Pallet
     }
     void generateQr();
     return () => { active = false; };
-  }, [open, qrCode]);
+  }, [qrCode]);
 
-  return <>
-    {variant === "icon" ? (
-      <button type="button" className="button-secondary button-icon" onClick={showQr} aria-label={`Ver QR del pallet ${qrCode}`} title="Ver QR">
-        <svg viewBox="0 0 24 24" aria-hidden="true" className="size-5" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinejoin="round">
-          <rect x="3.5" y="3.5" width="6" height="6" rx="1" /><rect x="14.5" y="3.5" width="6" height="6" rx="1" /><rect x="3.5" y="14.5" width="6" height="6" rx="1" />
-          <path d="M14.5 14.5h2.5v2.5h-2.5zM18 18h2.5v2.5H18zM14.5 20.5H17M20.5 14.5V17" strokeLinecap="round" />
-        </svg>
-      </button>
-    ) : <button type="button" className={`button-secondary whitespace-nowrap${variant === "compact" ? " button-sm" : ""}`} onClick={showQr}>QR</button>}
-    <Modal open={open} onClose={() => setOpen(false)} title="QR del pallet" description="Escaneá este código o descargá la etiqueta completa del pallet."
-      actions={<><button type="button" onClick={downloadLabel} disabled={loading || error} className="button-primary">Descargar etiqueta</button><button type="button" onClick={() => setOpen(false)} className="button-secondary">Cerrar</button></>}>
+  return (
+    <Modal open onClose={onClose} title="QR del pallet" description="Escaneá este código o descargá la etiqueta completa del pallet."
+      actions={<><button type="button" onClick={downloadLabel} disabled={loading || error} className="button-primary">Descargar etiqueta</button><button type="button" onClick={onClose} className="button-secondary">Cerrar</button></>}>
       {loading && <LoadingState label="Generando imagen QR…" />}
       {error && <InlineAlert variant="danger">No se pudo mostrar el QR. Cerrá e intentá nuevamente.</InlineAlert>}
       <div ref={imageRef} className="mx-auto mt-4 w-fit bg-white" />
       <p className="mt-3 break-all font-mono text-xs">{qrCode}</p>
     </Modal>
-  </>;
+  );
 }

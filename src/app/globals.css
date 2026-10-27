@@ -178,6 +178,17 @@ button, summary, select { cursor: pointer; }
 :is(.button-primary, .button-secondary, .button-ghost, .button-danger, .filter-chip):disabled { cursor: not-allowed; opacity: 0.6; }
 :is(.button-primary, .button-secondary, .button-ghost, .button-danger)[aria-busy="true"] { cursor: progress; }
 .button-icon { width: 2.75rem; flex: none; padding: 0.65rem; }
+/* Menú "⋯" de una fila (RowActionsMenu). Se dibuja en body con posición fija: no lo corta el scroll de las tablas. */
+.row-actions-trigger { min-width: 2.75rem; min-height: 2.75rem; padding: 0.3rem; }
+@media (min-width: 768px) { .row-actions-trigger { min-height: 2.25rem; } }
+.row-actions-menu { z-index: 30; display: grid; min-width: 13rem; max-width: calc(100vw - 1rem); max-height: calc(100dvh - 1rem); overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--border-strong); border-radius: 0.75rem; background: var(--surface); padding: 0.25rem; box-shadow: 0 12px 32px rgb(28 25 23 / 0.16); }
+.row-actions-item { display: flex; width: 100%; min-height: 2.75rem; align-items: center; gap: 0.25rem; border-radius: 0.5rem; padding: 0.5rem 0.75rem; text-align: left; font-size: 0.875rem; font-weight: 600; color: var(--foreground); text-decoration: none; overflow-wrap: anywhere; }
+.row-actions-item:hover, .row-actions-item:focus { background: var(--surface-subtle); outline: none; }
+.row-actions-item:focus-visible { outline: 3px solid color-mix(in srgb, var(--focus) 40%, transparent); outline-offset: -3px; }
+.row-actions-item-danger { color: var(--danger); }
+.row-actions-item[aria-disabled="true"] { display: block; cursor: not-allowed; color: var(--muted); }
+.row-actions-item[aria-disabled="true"]:hover { background: transparent; }
+.row-actions-reason { font-weight: 400; }
 /* Variante baja para acciones dentro de tablas y tarjetas. */
 .button-sm { min-height: 2rem; padding: 0.3rem 0.75rem; border-radius: 0.6rem; font-size: 0.8125rem; }
 .filter-chip { border-color: var(--border); padding: 0.5rem 0.75rem; background: var(--surface); color: #6b625b; font-size: 0.8125rem; }

@@ -19,6 +19,26 @@ Objetivo: que logística detecte fallas de sincronización o de reporte al ERP s
 
 Si `ERP_PROVIDER` no está definido, la página muestra un estado vacío ("no configurada").
 
+### Estado del remito (TRZ-100)
+
+En cada reporte **enviado**, la lista de Actividad muestra "Remito en el ERP: …" y el detalle agrega el campo
+*Remito en el ERP* (con la hora de la última consulta) y la línea de la orden de cada pallet
+(`orderLineExternalId`, o "sin línea"):
+
+| `erp_document_status` | Se muestra |
+|---|---|
+| `null` | Sin consultar |
+| `draft` | Borrador |
+| `confirmed` | Confirmado |
+| `cancelled` | Anulado |
+| `not_found` | No encontrado |
+| `not_tracked` | Sin seguimiento (reportes anteriores a TRZ-100, que no se consultan) |
+
+El estado lo actualiza cada sincronización (ver [`erp-sync.md`](erp-sync.md), "Estado del remito"); desde el panel
+no se consulta. `erp_integration_activity()` devuelve la columna `erp_document_status` y
+`erp_integration_event_detail()` los campos `erpDocumentStatus`, `erpDocumentCheckedAt` y
+`erpDocumentConfirmedSeenAt` (20261028100300).
+
 ### Filtros (todos en la URL, se pueden compartir)
 
 | Parámetro | Valores |

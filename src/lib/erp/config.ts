@@ -1,12 +1,12 @@
 import "server-only";
 
 import { ErpError, isErpProvider, type ErpProvider } from "./types.ts";
-import { isMockScenario, type MockScenario } from "./mock-scenarios.ts";
+import { isMockDispatchStatus, isMockScenario, type MockDispatchStatus, type MockScenario } from "./mock-scenarios.ts";
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 
 export type ErpConfig =
-  | { provider: "mock"; mockScenario: MockScenario }
+  | { provider: "mock"; mockScenario: MockScenario; mockDispatchStatus: MockDispatchStatus }
   | {
       provider: "erpnext";
       baseUrl: string;
@@ -23,6 +23,7 @@ type Env = Record<string, string | undefined>;
  *
  * - ERP_PROVIDER: `mock` (por defecto) | `erpnext`.
  * - ERP_MOCK_SCENARIO: solo mock. `ok` (por defecto) | `timeout` | `unauthorized` | `validation` | `server_error`.
+ * - ERP_MOCK_DISPATCH_STATUS: solo mock. Estado que informa getDispatchStatus: `confirmed` (por defecto) | `draft`.
  * - ERP_BASE_URL, ERP_API_KEY, ERP_API_SECRET: obligatorias con erpnext.
  * - ERP_TIMEOUT_MS: opcional, 10000 por defecto.
  */
@@ -36,7 +37,11 @@ export function readErpConfig(env: Env = process.env): ErpConfig {
   if (provider === "mock") {
     const scenario = env.ERP_MOCK_SCENARIO?.trim() || "ok";
     if (!isMockScenario(scenario)) throw new ErpError("config", `ERP_MOCK_SCENARIO inválido: "${scenario}".`);
-    return { provider, mockScenario: scenario };
+    const dispatchStatus = env.ERP_MOCK_DISPATCH_STATUS?.trim() || "confirmed";
+    if (!isMockDispatchStatus(dispatchStatus)) {
+      throw new ErpError("config", `ERP_MOCK_DISPATCH_STATUS inválido: "${dispatchStatus}". Valores posibles: confirmed, draft.`);
+    }
+    return { provider, mockScenario: scenario, mockDispatchStatus: dispatchStatus };
   }
 
   const missing = ["ERP_BASE_URL", "ERP_API_KEY", "ERP_API_SECRET"].filter((name) => !env[name]?.trim());

@@ -142,8 +142,13 @@ export type Pallet = {
   quantity: number | null;
   /** Unidad de su producto. */
   unitOfMeasure: ProductUnit;
-  /** De dónde vino: alta en TrazFlow o saldo de stock importado del ERP (US-ERP-03). */
+  /**
+   * De dónde vino: alta en TrazFlow o, antes de TRZ-100, un saldo de stock importado del ERP como pallet
+   * ("heredado": external_id 'stock:{lote}@{depósito}').
+   */
   origin?: ErpOrigin;
+  /** Origen del lote: los pallets de lotes del ERP se arman contra su saldo (TRZ-100). */
+  lotSourceSystem?: "trazflow" | "erp";
 };
 
 /** Pallet con la marca de si ya tiene eventos de trazabilidad (la base impide eliminarlo). */

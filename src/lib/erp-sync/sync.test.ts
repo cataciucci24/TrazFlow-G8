@@ -9,30 +9,42 @@ import { ErpSyncStartError, syncCompanyFromErp, type ErpSyncDb } from "./sync.ts
 
 type Call = { fn: string; args: Record<string, unknown> };
 
-/** Base falsa: registra las RPC y cierra el run como lo haría erp_sync_finish. */
-function fakeDb(options: { failOn?: string; startError?: string } = {}) {
+type DueEvent = { id: string; idempotency_key: string };
+
+/**
+ * Base falsa: registra las RPC y cierra el run como lo haría erp_sync_finish (partial si se auditaron errores).
+ * `due` = reportes cuyo remito hay que consultar (erp_outbox_dispatch_documents_due).
+ */
+function fakeDb(options: { failOn?: string; startError?: string; due?: DueEvent[] } = {}) {
   const calls: Call[] = [];
   const applied: string[] = [];
+  let savedErrors: unknown[] = [];
   const db: ErpSyncDb = {
     async rpc(fn, args) {
       calls.push({ fn, args });
+      if (fn === options.failOn) return { data: null, error: { message: "db down", code: "08006" } };
+      if (fn === "erp_outbox_dispatch_documents_due") return { data: options.due ?? [], error: null };
+      if (fn === "erp_outbox_record_dispatch_document") return { data: true, error: null };
+      if (fn === "erp_sync_save_dispatch_documents") {
+        savedErrors = args.p_errors as unknown[];
+        return { data: null, error: null };
+      }
       if (fn === "erp_sync_start") {
         return options.startError
           ? { data: null, error: { message: "boom", code: options.startError } }
           : { data: "run-1", error: null };
       }
-      if (fn === options.failOn) return { data: null, error: { message: "db down", code: "08006" } };
       if (fn === "erp_sync_finish") {
         const fatal = args.p_error as string | null;
         return {
           data: {
             id: "run-1",
-            status: fatal ? (applied.length ? "partial" : "failed") : "success",
+            status: fatal ? (applied.length ? "partial" : "failed") : savedErrors.length ? "partial" : "success",
             provider: "mock",
             started_at: "2026-10-19T12:00:00Z",
             finished_at: "2026-10-19T12:00:01Z",
             counters: Object.fromEntries(applied.map((entity) => [entity, { received: 1 }])),
-            errors: [],
+            errors: savedErrors,
             error_message: fatal,
           },
           error: null,
@@ -47,13 +59,15 @@ function fakeDb(options: { failOn?: string; startError?: string } = {}) {
 
 const base = { companyId: "company-1", actorId: "user-1", provider: "mock" };
 
-test("aplica productos, lotes, stock y órdenes en orden, con las unidades traducidas", async () => {
+test("consulta remitos y aplica productos, lotes, stock y órdenes en orden, con las unidades traducidas", async () => {
   const { db, calls } = fakeDb();
   const run = await syncCompanyFromErp({ ...base, db, getClient: () => new MockErpClient() });
 
   assert.equal(run.status, "success");
   assert.deepEqual(calls.map((call) => call.fn), [
     "erp_sync_start",
+    "erp_outbox_dispatch_documents_due",
+    "erp_sync_save_dispatch_documents",
     "erp_sync_apply_products",
     "erp_sync_apply_lots",
     "erp_sync_apply_stock",
@@ -62,19 +76,73 @@ test("aplica productos, lotes, stock y órdenes en orden, con las unidades tradu
   ]);
   assert.deepEqual(calls[0].args, { p_company_id: "company-1", p_actor_id: "user-1", p_provider: "mock" });
 
-  const products = calls[1].args.p_records as { externalId: string; unit: string }[];
+  assert.deepEqual(calls[1].args, { p_company_id: "company-1", p_limit: 20 });
+  const products = calls[3].args.p_records as { externalId: string; unit: string }[];
   assert.equal(products.length, MOCK_ERP_FIXTURES.products.length);
   assert.deepEqual(products.find((product) => product.externalId === "QSO-HORMA")?.unit, "kilogramos");
 
-  const stock = calls[3].args.p_records as { unit: string; quantity: number }[];
+  const stock = calls[5].args.p_records as { unit: string; quantity: number }[];
   assert.ok(stock.every((balance) => balance.unit));
   assert.ok(stock.some((balance) => balance.quantity === 356.5));
 
-  // El mock solo devuelve órdenes abiertas; se manda solo la cabecera.
-  const orders = calls[4].args.p_records as Record<string, unknown>[];
+  // El mock solo devuelve órdenes abiertas; se mandan con sus líneas (TRZ-100) y la unidad traducida.
+  const orders = calls[6].args.p_records as { externalId: string; lines: Record<string, unknown>[] }[];
   assert.equal(orders.length, 4);
-  assert.deepEqual(Object.keys(orders[0]).sort(), ["customer", "externalId", "scheduledDate", "status"]);
-  assert.equal(calls[5].args.p_error, null);
+  assert.deepEqual(Object.keys(orders[0]).sort(), ["customer", "externalId", "lines", "scheduledDate", "status"]);
+  assert.deepEqual(orders.find((order) => order.externalId === "SAL-ORD-2026-00013")?.lines, [{
+    externalId: "SAL-ORD-2026-00013-1",
+    productExternalId: "QSO-HORMA",
+    quantity: 48.25,
+    uom: "Kg",
+    unit: "kilogramos",
+    warehouseExternalId: "Depósito Central - SRV",
+  }]);
+  assert.equal(calls[7].args.p_error, null);
+});
+
+test("consulta los remitos ANTES de traer el stock, para liberar los pallets en la misma corrida", async () => {
+  const { db, calls } = fakeDb({ due: [{ id: "event-1", idempotency_key: "dispatch:SAL-ORD-2026-00012" }] });
+  const order: string[] = [];
+  const client = new MockErpClient();
+  const getDispatchStatus = client.getDispatchStatus.bind(client);
+  const pullMasterData = client.pullMasterData.bind(client);
+  client.getDispatchStatus = async (key) => { order.push("getDispatchStatus"); return getDispatchStatus(key); };
+  client.pullMasterData = async (options) => { order.push("pullMasterData"); return pullMasterData(options); };
+
+  const run = await syncCompanyFromErp({ ...base, db, getClient: () => client });
+
+  assert.equal(run.status, "success");
+  assert.deepEqual(order, ["getDispatchStatus", "pullMasterData"]);
+  const recorded = calls.find((call) => call.fn === "erp_outbox_record_dispatch_document");
+  assert.deepEqual(recorded?.args, { p_event_id: "event-1", p_status: "confirmed", p_erp_reference: null });
+  const saved = calls.find((call) => call.fn === "erp_sync_save_dispatch_documents");
+  assert.deepEqual(saved?.args.p_counters, { received: 1, draft: 0, confirmed: 1, cancelled: 0, not_found: 0, failed: 0 });
+  assert.ok(calls.findIndex((call) => call.fn === "erp_sync_save_dispatch_documents")
+    < calls.findIndex((call) => call.fn === "erp_sync_apply_stock"));
+});
+
+test("si falla la consulta de remitos, la sincronización sigue y queda parcial", async () => {
+  const { db, calls } = fakeDb({ due: [{ id: "event-1", idempotency_key: "dispatch:SAL-ORD-2026-00012" }] });
+  const client = new MockErpClient();
+  client.getDispatchStatus = async () => { throw new ErpError("unavailable", "Error interno del ERP (mock).", { status: 500 }); };
+
+  const run = await syncCompanyFromErp({ ...base, db, getClient: () => client });
+
+  assert.equal(run.status, "partial");
+  assert.equal(run.errorMessage, null);
+  assert.deepEqual(run.errors, [{
+    external_id: "dispatch:SAL-ORD-2026-00012",
+    message: "Al consultar el remito en el ERP: Error interno del ERP (mock).",
+  }]);
+  assert.ok(calls.some((call) => call.fn === "erp_sync_apply_orders"), "sigue con productos, lotes, stock y órdenes");
+});
+
+test("si no se puede guardar la consulta de remitos, la corrida se corta sin traer maestros", async () => {
+  const { db, calls } = fakeDb({ failOn: "erp_sync_save_dispatch_documents" });
+  const run = await syncCompanyFromErp({ ...base, db, getClient: () => new MockErpClient() });
+  assert.equal(run.status, "failed");
+  assert.equal(run.errorMessage, "No se pudo guardar la consulta de remitos en TrazFlow.");
+  assert.ok(!calls.some((call) => call.fn === "erp_sync_apply_products"));
 });
 
 test("nunca manda un QR ni datos del proveedor en los registros", async () => {
@@ -90,7 +158,10 @@ test("si el ERP no responde, cierra el run como fallido con el mensaje sanitizad
 
   assert.equal(run.status, "failed");
   assert.match(run.errorMessage ?? "", /^Al leer productos, lotes y stock del ERP: El ERP no respondió a tiempo/);
-  assert.deepEqual(calls.map((call) => call.fn), ["erp_sync_start", "erp_sync_finish"]);
+  // Sin reportes para consultar, no se le pregunta nada al ERP antes de los maestros.
+  assert.deepEqual(calls.map((call) => call.fn), [
+    "erp_sync_start", "erp_outbox_dispatch_documents_due", "erp_sync_save_dispatch_documents", "erp_sync_finish",
+  ]);
 });
 
 test("si fallan las órdenes después de aplicar maestros, el run queda parcial", async () => {
@@ -126,6 +197,7 @@ test("un error inesperado no filtra detalles a la auditoría", async () => {
     pullMasterData: async () => { throw new TypeError("Authorization: token abc:def"); },
     pullDispatchOrders: async () => [],
     reportDispatch: async () => { throw new Error("no"); },
+    getDispatchStatus: async () => { throw new Error("no"); },
   };
   const run = await syncCompanyFromErp({ ...base, db, getClient: () => leaky });
   assert.equal(run.errorMessage, "Error inesperado durante la sincronización.");

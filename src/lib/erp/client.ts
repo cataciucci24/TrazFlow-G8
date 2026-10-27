@@ -1,4 +1,5 @@
 import type {
+  DispatchDocumentStatus,
   DispatchReport,
   DispatchReportResult,
   ErpDispatchOrder,
@@ -29,4 +30,11 @@ export interface ErpClient {
    * devuelve el resultado original con `duplicate: true` en vez de registrar otra salida.
    */
   reportDispatch(report: DispatchReport): Promise<DispatchReportResult>;
+
+  /**
+   * Estado en el ERP del documento que generó el reporte con esa clave (TRZ-100). Sirve para saber cuándo el ERP
+   * ya descontó el stock de lo despachado. Si hay varios documentos con la misma clave (uno anulado y uno
+   * corregido) gana el confirmado, después el borrador y por último el anulado.
+   */
+  getDispatchStatus(idempotencyKey: string): Promise<DispatchDocumentStatus>;
 }

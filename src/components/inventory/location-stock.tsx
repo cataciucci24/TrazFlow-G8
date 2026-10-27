@@ -1,8 +1,16 @@
 import Link from "next/link";
 
+import { PalletRowActions } from "@/components/pallets/pallet-actions";
 import { PalletStatusBadge, TableShell } from "@/components/ui/design-system";
 import { PRODUCT_UNITS } from "@/lib/pallets/units";
-import type { Pallet } from "@/lib/types";
+import type { ExistingProduct, Pallet, PalletWithHistory, ProductBatch } from "@/lib/types";
+
+/** Lo que necesita el menú "⋯" de cada pallet para editar (mismas reglas que en Pallets). */
+export type PalletActionsContext = {
+  existingBatches: ProductBatch[];
+  existingProducts: ExistingProduct[];
+  erpManaged: boolean;
+};
 
 const formatQuantity = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 20 });
 
@@ -22,8 +30,8 @@ export function locationHref(location: string | null) {
 }
 
 /** Agrupa pallets por ubicación, ordenadas alfabéticamente ("sin ubicación" primero). */
-export function groupByLocation(pallets: Pallet[]) {
-  const groups = new Map<string | null, Pallet[]>();
+export function groupByLocation<T extends Pallet>(pallets: T[]) {
+  const groups = new Map<string | null, T[]>();
   for (const pallet of pallets) {
     const key = locationOf(pallet);
     const group = groups.get(key);
@@ -65,8 +73,13 @@ export function LocationStockCard({ location, pallets }: { location: string | nu
   );
 }
 
-/** Totales y tabla de pallets de una ubicación. */
-export function LocationStockTable({ location, pallets, filtered = false }: { location: string | null; pallets: Pallet[]; filtered?: boolean }) {
+/** Totales y tabla de pallets de una ubicación, con el menú "⋯" de acciones de cada pallet. */
+export function LocationStockTable({ location, pallets, actions, filtered = false }: {
+  location: string | null;
+  pallets: PalletWithHistory[];
+  actions: PalletActionsContext;
+  filtered?: boolean;
+}) {
   const label = locationLabel(location);
   const { totals, undefinedCount } = summarizeStock(pallets);
   return (
@@ -87,8 +100,8 @@ export function LocationStockTable({ location, pallets, filtered = false }: { lo
           <caption className="sr-only">Pallets en {label}</caption>
           <thead>
             <tr>
-              {["Código QR", "Producto", "SKU", "Lote", "Cantidad", "Estado", "Ubicación"].map((heading) => (
-                <th key={heading} scope="col" className={["SKU", "Lote"].includes(heading) ? "table-secondary-column" : heading === "Cantidad" ? "text-right" : undefined}>{heading}</th>
+              {["Código QR", "Producto", "SKU", "Lote", "Cantidad", "Estado", "Ubicación", "Acciones"].map((heading) => (
+                <th key={heading} scope="col" className={["SKU", "Lote"].includes(heading) ? "table-secondary-column" : ["Cantidad", "Acciones"].includes(heading) ? "text-right" : undefined}>{heading}</th>
               ))}
             </tr>
           </thead>
@@ -104,6 +117,9 @@ export function LocationStockTable({ location, pallets, filtered = false }: { lo
                   <PalletStatusBadge status={pallet.status} />
                 </td>
                 <td className="max-w-64 break-words text-slate-500">{locationLabel(locationOf(pallet))}</td>
+                <td className="text-right">
+                  <PalletRowActions pallet={pallet} existingBatches={actions.existingBatches} existingProducts={actions.existingProducts} erpManaged={actions.erpManaged} />
+                </td>
               </tr>
             ))}
           </tbody>

@@ -9,18 +9,19 @@ export type { ErpClient } from "./client.ts";
 export * from "./types.ts";
 
 /**
- * El mock guarda en memoria los reportes recibidos; se reutiliza una instancia por escenario para que los
- * duplicados se detecten entre requests del mismo proceso.
+ * El mock guarda en memoria los reportes recibidos; se reutiliza una instancia por escenario (y estado de remito)
+ * para que los duplicados se detecten entre requests del mismo proceso.
  */
 const mockClients = new Map<string, MockErpClient>();
 
 export function createErpClient(config: ErpConfig): ErpClient {
   switch (config.provider) {
     case "mock": {
-      let client = mockClients.get(config.mockScenario);
+      const key = `${config.mockScenario}:${config.mockDispatchStatus}`;
+      let client = mockClients.get(key);
       if (!client) {
-        client = new MockErpClient({ scenario: config.mockScenario });
-        mockClients.set(config.mockScenario, client);
+        client = new MockErpClient({ scenario: config.mockScenario, dispatchStatus: config.mockDispatchStatus });
+        mockClients.set(key, client);
       }
       return client;
     }
