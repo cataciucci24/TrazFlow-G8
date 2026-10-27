@@ -6,7 +6,9 @@ import { hasRole, requireUserProfile } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { NewDispatchOrderForm } from "@/components/orders/new-dispatch-order-form";
 import { getAvailablePallets } from "@/lib/pallets/queries";
-import { PageHeader } from "@/components/ui/design-system";
+import { InlineAlert, PageHeader } from "@/components/ui/design-system";
+import { isErpEnabled } from "@/lib/erp-sync/enabled";
+import { canCreateManualOrders, ERP_ORDERS_NOTICE } from "@/lib/orders/erp-policy";
 
 export const metadata: Metadata = {
   title: "Nueva orden de despacho | TrazFlow",
@@ -17,6 +19,16 @@ export default async function NewDispatchOrderPage() {
 
   if (!hasRole(profile, "logistics_manager")) {
     redirect("/dashboard");
+  }
+
+  // Con ERP, las órdenes solo entran por la sincronización (TRZ-102): se explica en lugar del formulario.
+  if (!canCreateManualOrders(await isErpEnabled(profile.companyId))) {
+    return (
+      <div className="app-page">
+        <PageHeader title="Nueva orden de despacho" description="Las órdenes de tu empresa vienen del ERP." action={<Link href="/dashboard/orders" className="button-secondary">Volver</Link>} />
+        <InlineAlert announce={false}>{ERP_ORDERS_NOTICE}</InlineAlert>
+      </div>
+    );
   }
 
   const supabase = await createClient();

@@ -7,6 +7,8 @@ import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { hasRole, requireUserProfile } from "@/lib/auth/session";
 import { processCompanyErpOutbox } from "@/lib/erp-outbox/run";
+import { isErpEnabled } from "@/lib/erp-sync/enabled";
+import { canCreateManualOrders, ERP_MANAGED_ORDERS_ERROR } from "@/lib/orders/erp-policy";
 
 export type CreateDispatchOrderState = {
   errors: {
@@ -59,6 +61,9 @@ export async function createDispatchOrder(
       ...EMPTY_STATE,
       errors: { form: "No tenés permisos para crear órdenes de despacho." },
     };
+  }
+  if (!canCreateManualOrders(await isErpEnabled(profile.companyId))) {
+    return { ...EMPTY_STATE, errors: { form: ERP_MANAGED_ORDERS_ERROR } };
   }
 
   const distributorId = String(formData.get("distributorId") ?? "").trim();

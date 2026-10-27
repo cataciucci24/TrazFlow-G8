@@ -27,6 +27,18 @@ lotes además tienen `external_active` (`false` = deshabilitado en el ERP; no se
 - Se ocultan los formularios de alta de producto, lote y pallet, y la edición de pallets. Las Server Actions
   `createLot`, `createPallet` y `updatePallet` también lo rechazan del lado servidor. El código de alta manual
   sigue intacto para las empresas sin ERP.
+- **Las órdenes de despacho solo entran por la sincronización (TRZ-102).** Órdenes no muestra "Nueva orden" sino
+  el aviso "Las órdenes se crean en el ERP y entran a TrazFlow al sincronizar.", `/dashboard/orders/new` muestra
+  ese aviso en lugar del formulario, y `createDispatchOrder` rechaza la creación del lado servidor (después del
+  chequeo de rol y antes de escribir; la decisión está en `src/lib/orders/erp-policy.ts`). Motivo: el contrato
+  del ERP no permite crear órdenes, y `confirm_dispatch_order` solo genera el reporte al ERP si la orden tiene
+  `external_id`; una orden manual se despacharía sin informarse y el ERP seguiría contando ese stock.
+  - La protección es solo del servidor. La base no sabe si el ERP está activo (es una variable de entorno del
+    servidor, global), así que no hay trigger: con la policy `orders_insert`, un `logistics_manager` que
+    escribiera directo contra la API de Supabase podría insertar una orden manual. Cuando exista un flag de ERP
+    por empresa en la base, conviene sumar ahí un trigger que rechace los inserts con `source_system = 'trazflow'`.
+  - Las órdenes manuales creadas antes de activar el ERP eran datos de prueba y se borran a mano junto con sus
+    pallets; no se conservan ni se listan como "no informadas al ERP".
 - Pallets y Órdenes muestran el panel *Integración ERP* (solo logística) y la columna *Origen* (badge ERP,
   identificador externo y última sincronización).
 

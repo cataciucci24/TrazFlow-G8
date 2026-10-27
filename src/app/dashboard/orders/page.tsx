@@ -5,8 +5,9 @@ import { ErpOriginCell } from "@/components/erp/erp-origin";
 import { ErpSyncPanel } from "@/components/erp/erp-sync-panel";
 import { isErpEnabled } from "@/lib/erp-sync/enabled";
 import { getLatestErpSyncRun } from "@/lib/erp-sync/queries";
+import { canCreateManualOrders, ERP_ORDERS_NOTICE } from "@/lib/orders/erp-policy";
 import { createClient } from "@/lib/supabase/server";
-import { EmptyState, OrderStatusBadge, PageHeader, TableShell } from "@/components/ui/design-system";
+import { EmptyState, InlineAlert, OrderStatusBadge, PageHeader, TableShell } from "@/components/ui/design-system";
 import type { OrderStatus } from "@/lib/types";
 
 export const metadata: Metadata = {
@@ -18,7 +19,10 @@ export default async function OrdersPage() {
   const supabase = await createClient();
 
   const isLogisticsManager = hasRole(profile, "logistics_manager");
-  const showErpSync = isLogisticsManager && await isErpEnabled(profile.companyId);
+  const erpEnabled = await isErpEnabled(profile.companyId);
+  const showErpSync = isLogisticsManager && erpEnabled;
+  // Con ERP, las órdenes solo entran por la sincronización (TRZ-102).
+  const canCreateOrders = isLogisticsManager && canCreateManualOrders(erpEnabled);
   const lastRun = showErpSync ? await getLatestErpSyncRun(profile.companyId) : null;
 
   const { data: orders, error } = await supabase
@@ -36,7 +40,7 @@ export default async function OrdersPage() {
       <PageHeader
         title="Órdenes de despacho"
         description="Gestioná y consultá el estado de los envíos a cada distribuidora."
-        action={isLogisticsManager ? (
+        action={canCreateOrders ? (
           <Link
             href="/dashboard/orders/new"
             className="button-primary gap-2"
@@ -46,11 +50,13 @@ export default async function OrdersPage() {
         ) : undefined}
       />
 
+      {isLogisticsManager && erpEnabled ? <InlineAlert announce={false}>{ERP_ORDERS_NOTICE}</InlineAlert> : null}
+
       {showErpSync ? <ErpSyncPanel lastRun={lastRun} /> : null}
 
       {!orders || orders.length === 0 ? <div className="surface"><EmptyState title="Todavía no hay órdenes"
         description="Los envíos registrados para tu empresa aparecerán acá."
-        action={isLogisticsManager ? <Link href="/dashboard/orders/new" className="button-primary">Nueva orden</Link> : undefined}
+        action={canCreateOrders ? <Link href="/dashboard/orders/new" className="button-primary">Nueva orden</Link> : undefined}
       /></div> : <TableShell label="Órdenes de despacho registradas" mobileLayout="rows">
           <table role="table" aria-label="Órdenes de despacho registradas" className="data-table min-w-[900px]">
             <thead role="rowgroup">
