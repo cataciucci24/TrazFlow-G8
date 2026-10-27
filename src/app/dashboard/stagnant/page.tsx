@@ -8,6 +8,10 @@ import { getRedistributionSuggestions } from "@/lib/redistribution/queries";
 import type { PalletStatus } from "@/lib/types";
 import { EmptyState, PageHeader, PalletStatusBadge, SectionHeader, SummaryCard, TableShell } from "@/components/ui/design-system";
 import { RedistributionSuggestions } from "@/components/stagnant/redistribution-suggestions";
+import { ErpWarehouseRedistribution } from "@/components/stagnant/erp-warehouse-redistribution";
+import { isErpEnabled } from "@/lib/erp-sync/enabled";
+import { getErpStockOverview } from "@/lib/erp-stock/queries";
+import { suggestWarehouseRedistributions } from "@/lib/redistribution/erp-warehouses";
 
 export const metadata: Metadata = {
   title: "Mercadería inmovilizada | TrazFlow",
@@ -41,7 +45,10 @@ export default async function StagnantInventoryPage({
     ? (params.status as "all" | PalletStatus)
     : "all";
   const stalePallets = await getStalePallets(profile.companyId, thresholdDays);
-  const redistribution = await getRedistributionSuggestions(profile.companyId, stalePallets);
+  // TRZ-72: con ERP, la redistribución se calcula entre depósitos con los saldos del ERP; sin ERP, como antes.
+  const erpEnabled = await isErpEnabled(profile.companyId);
+  const erpStock = erpEnabled ? await getErpStockOverview() : null;
+  const redistribution = erpStock ? null : await getRedistributionSuggestions(profile.companyId, stalePallets);
   const visiblePallets = stalePallets.filter(
     (pallet) => selectedStatus === "all" || pallet.status === selectedStatus,
   );
@@ -64,7 +71,10 @@ export default async function StagnantInventoryPage({
         <SummaryCard label="UMBRAL ACTUAL" value={`${thresholdDays} días`} />
       </section>
 
-      <RedistributionSuggestions suggestions={redistribution.suggestions} stockSourceAvailable={redistribution.stockSourceAvailable} />
+      {erpStock
+        ? <ErpWarehouseRedistribution suggestions={suggestWarehouseRedistributions(erpStock)}
+            syncedAt={erpStock.reduce<string | null>((min, row) => (!min || row.oldestSyncedAt < min ? row.oldestSyncedAt : min), null)} />
+        : redistribution && <RedistributionSuggestions suggestions={redistribution.suggestions} stockSourceAvailable={redistribution.stockSourceAvailable} />}
 
       <section className="section-stack">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
