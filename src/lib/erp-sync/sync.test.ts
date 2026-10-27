@@ -205,6 +205,8 @@ test("un error inesperado no filtra detalles a la auditoría", async () => {
     pullDispatchOrders: async () => [],
     reportDispatch: async () => { throw new Error("no"); },
     getDispatchStatus: async () => { throw new Error("no"); },
+    reportDelivery: async () => { throw new Error("no"); },
+    attachDeliveryReceipt: async () => { throw new Error("no"); },
   };
   const run = await syncCompanyFromErp({ ...base, db, getClient: () => leaky });
   assert.equal(run.errorMessage, "Error inesperado durante la sincronización.");

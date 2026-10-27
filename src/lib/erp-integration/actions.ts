@@ -34,7 +34,7 @@ export async function retryErpOutboxEvent(eventId: string): Promise<IntegrationA
   const enabled = await isErpEnabled(profile.companyId);
   const supabase = await createClient();
   const result = await retryFailedErpEvent({
-    db: { rpc: (fn, args) => supabase.rpc(fn, args) },
+    db: { rpc: (fn, args) => supabase.rpc(fn, args), storage: supabase.storage },
     eventId,
     getClient: enabled ? () => getErpClient(profile.companyId) : null,
   });
@@ -52,7 +52,7 @@ export async function processErpOutboxNow(): Promise<IntegrationActionState> {
 
   const supabase = await createClient();
   const result = await processDueErpEvents({
-    db: { rpc: (fn, args) => supabase.rpc(fn, args) },
+    db: { rpc: (fn, args) => supabase.rpc(fn, args), storage: supabase.storage },
     getClient: () => getErpClient(profile.companyId),
   });
   if ("error" in result) return { status: "error", message: result.error };

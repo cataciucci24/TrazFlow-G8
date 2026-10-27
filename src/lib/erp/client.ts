@@ -1,4 +1,7 @@
 import type {
+  DeliveryReceipt,
+  DeliveryReport,
+  DeliveryReportResult,
   DispatchDocumentStatus,
   DispatchReport,
   DispatchReportResult,
@@ -37,4 +40,17 @@ export interface ErpClient {
    * corregido) gana el confirmado, después el borrador y por último el anulado.
    */
   getDispatchStatus(idempotencyKey: string): Promise<DispatchDocumentStatus>;
+
+  /**
+   * Informa cómo cerró la entrega (TRZ-103): resultado por pallet y diferencias, en el documento que generó el
+   * despacho. Idempotente por `report.idempotencyKey`. Si ese documento todavía no existe falla con `not_ready`
+   * (reintentable). Nunca confirma el documento: eso lo hace administración en el ERP.
+   */
+  reportDelivery(report: DeliveryReport): Promise<DeliveryReportResult>;
+
+  /**
+   * Adjunta el remito firmado (foto o PDF) al documento del despacho (TRZ-103). Idempotente por
+   * `receipt.idempotencyKey`. Mismo `not_ready` si el documento todavía no existe.
+   */
+  attachDeliveryReceipt(receipt: DeliveryReceipt, content: Uint8Array): Promise<DeliveryReportResult>;
 }

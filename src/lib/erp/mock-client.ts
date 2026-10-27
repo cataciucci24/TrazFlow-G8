@@ -6,6 +6,9 @@ import type { MockDispatchStatus, MockScenario } from "./mock-scenarios.ts";
 import {
   ERP_CONTRACT_VERSION,
   ErpError,
+  type DeliveryReceipt,
+  type DeliveryReport,
+  type DeliveryReportResult,
   type DispatchDocumentStatus,
   type DispatchReport,
   type DispatchReportResult,
@@ -14,10 +17,16 @@ import {
   type ErpMasterData,
   type ErpPullOptions,
 } from "./types.ts";
+import {
+  assertValidDeliveryReceipt,
+  assertValidDeliveryReport,
+  assertValidDispatchReport,
+  assertValidIdempotencyKey,
+} from "./validation.ts";
 import { assertValidDispatchReport, assertValidErpWarehouses, assertValidIdempotencyKey } from "./validation.ts";
 
 export type MockErpClientOptions = {
-  /** Falla permanente de todas las llamadas. `validation` solo afecta a reportDispatch. */
+  /** Falla permanente de todas las llamadas. `validation` solo afecta a las que escriben (reportes y remitos). */
   scenario?: MockScenario;
   /** Fallas de una sola vez, consumidas en orden por las próximas llamadas (para probar reintentos). */
   failures?: MockScenario[];
@@ -27,7 +36,16 @@ export type MockErpClientOptions = {
   dispatchStatus?: MockDispatchStatus;
 };
 
-type Operation = "healthcheck" | "pullMasterData" | "pullDispatchOrders" | "reportDispatch" | "getDispatchStatus";
+type Operation =
+  | "healthcheck"
+  | "pullMasterData"
+  | "pullDispatchOrders"
+  | "reportDispatch"
+  | "getDispatchStatus"
+  | "reportDelivery"
+  | "attachDeliveryReceipt";
+
+const WRITE_OPERATIONS: ReadonlySet<Operation> = new Set(["reportDispatch", "reportDelivery", "attachDeliveryReceipt"]);
 
 type StoredReport = { fingerprint: string; result: DispatchReportResult };
 
@@ -44,6 +62,8 @@ export class MockErpClient implements ErpClient {
   readonly #data: MockErpFixtures;
   readonly #now: () => Date;
   readonly #reports = new Map<string, StoredReport>();
+  /** Entregas y remitos informados (TRZ-103), por clave. */
+  readonly #deliveries = new Map<string, StoredReport>();
   readonly #dispatchStatus: MockDispatchStatus;
 
   constructor(options: MockErpClientOptions = {}) {
@@ -136,9 +156,43 @@ export class MockErpClient implements ErpClient {
     return { status: this.#dispatchStatus, erpReference: stored?.result.erpReference ?? null };
   }
 
+  /**
+   * Registra la entrega en memoria (TRZ-103). Como getDispatchStatus, no exige que el despacho esté en esta
+   * instancia: el mock no guarda estado entre procesos y no queremos entregas trabadas en local.
+   */
+  async reportDelivery(report: DeliveryReport): Promise<DeliveryReportResult> {
+    this.#simulate("reportDelivery");
+    assertValidDeliveryReport(report);
+    return this.#storeDelivery(report.idempotencyKey, report.dispatchIdempotencyKey, stableStringify(report));
+  }
+
+  async attachDeliveryReceipt(receipt: DeliveryReceipt, content: Uint8Array): Promise<DeliveryReportResult> {
+    this.#simulate("attachDeliveryReceipt");
+    assertValidDeliveryReceipt(receipt, content);
+    const fingerprint = `${stableStringify(receipt)}:${content.byteLength}`;
+    return this.#storeDelivery(receipt.idempotencyKey, receipt.dispatchIdempotencyKey, fingerprint);
+  }
+
+  #storeDelivery(key: string, dispatchKey: string, fingerprint: string): DeliveryReportResult {
+    const previous = this.#deliveries.get(key);
+    if (previous) {
+      if (previous.fingerprint !== fingerprint) {
+        throw new ErpError("conflict", `La clave ${key} ya se usó con otro contenido.`, { status: 409 });
+      }
+      return { ...previous.result, duplicate: true };
+    }
+    const result: DeliveryReportResult = {
+      erpReference: this.#reports.get(dispatchKey)?.result.erpReference ?? `MOCK-DN-${dispatchKey.replace(/^dispatch:/, "")}`,
+      duplicate: false,
+      acceptedAt: this.#now().toISOString(),
+    };
+    this.#deliveries.set(key, { fingerprint, result });
+    return { ...result };
+  }
+
   #simulate(operation: Operation): void {
     const scenario = this.#failures.shift() ?? this.#scenario;
-    if (scenario === "validation" && operation !== "reportDispatch") return;
+    if (scenario === "validation" && !WRITE_OPERATIONS.has(operation)) return;
     switch (scenario) {
       case "ok":
         return;

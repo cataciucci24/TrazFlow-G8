@@ -19,6 +19,19 @@ export const ACTIVITY_KIND_LABELS: Record<ActivityKind, string> = {
   dispatch_confirmed: "Reporte de despacho",
 };
 
+/**
+ * Nombre de cualquier evento del outbox, también los de entrega de TRZ-103 (que todavía no tienen filtro propio
+ * en el panel: aparecen en la actividad sin filtrar).
+ */
+const OUTBOX_EVENT_LABELS: Record<string, string> = {
+  delivery_confirmed: "Informe de entrega",
+  delivery_receipt_attached: "Remito firmado",
+};
+
+export function activityKindLabel(kind: string): string {
+  return (ACTIVITY_KIND_LABELS as Record<string, string>)[kind] ?? OUTBOX_EVENT_LABELS[kind] ?? kind;
+}
+
 export const ACTIVITY_STATUS_LABELS: Record<ActivityStatus, string> = {
   running: "En curso",
   success: "Completa",

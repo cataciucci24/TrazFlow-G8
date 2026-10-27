@@ -4,6 +4,12 @@ import {
   isDispatchDocumentState,
   type DispatchDocumentStatus,
   type DispatchReport,
+  DELIVERY_DISCREPANCY_TYPES,
+  DELIVERY_PALLET_OUTCOMES,
+  DELIVERY_RECEIPT_CONTENT_TYPES,
+  DELIVERY_RECEIPT_MAX_BYTES,
+  type DeliveryReceipt,
+  type DeliveryReport,
   type ErpWarehouse,
 } from "./types.ts";
 
@@ -56,6 +62,64 @@ export function assertValidDispatchDocumentStatus(value: unknown): asserts value
   }
 }
 
+/* ---------- Entrega (TRZ-103) ---------- */
+
+function commonDeliveryProblems(value: { contractVersion: unknown; idempotencyKey?: string; orderExternalId?: string; dispatchIdempotencyKey?: string }): string[] {
+  const problems: string[] = [];
+  if (value.contractVersion !== ERP_CONTRACT_VERSION) problems.push(`contractVersion ${String(value.contractVersion)} no soportada`);
+  if (typeof value.idempotencyKey !== "string" || !value.idempotencyKey.trim()) problems.push("idempotencyKey es obligatoria");
+  if (typeof value.orderExternalId !== "string" || !value.orderExternalId.trim()) problems.push("orderExternalId es obligatorio");
+  if (typeof value.dispatchIdempotencyKey !== "string" || !value.dispatchIdempotencyKey.trim()) {
+    problems.push("dispatchIdempotencyKey es obligatoria");
+  }
+  return problems;
+}
+
+/** Problemas de forma del reporte de entrega. Vacío = válido. */
+export function deliveryReportProblems(report: DeliveryReport): string[] {
+  const problems = commonDeliveryProblems(report);
+  if (typeof report.deliveredAt !== "string" || Number.isNaN(Date.parse(report.deliveredAt))) problems.push("deliveredAt no es una fecha ISO 8601");
+  if (typeof report.driver?.id !== "string" || !report.driver.id.trim()) problems.push("driver.id es obligatorio");
+  if (typeof report.needsReview !== "boolean") problems.push("needsReview debe ser booleano");
+  if (!Array.isArray(report.lines) || !report.lines.length) problems.push("la entrega no tiene pallets");
+  if (!Array.isArray(report.discrepancies)) problems.push("discrepancies debe ser una lista");
+
+  report.lines?.forEach?.((line, index) => {
+    if (typeof line?.palletCode !== "string" || !line.palletCode.trim()) problems.push(`lines[${index}].palletCode es obligatorio`);
+    if (!DELIVERY_PALLET_OUTCOMES.some((outcome) => outcome === line?.outcome)) problems.push(`lines[${index}].outcome inválido`);
+  });
+  report.discrepancies?.forEach?.((difference, index) => {
+    if (!DELIVERY_DISCREPANCY_TYPES.some((type) => type === difference?.type)) problems.push(`discrepancies[${index}].type inválido`);
+  });
+  const hasDifferences = (report.discrepancies?.length ?? 0) > 0 || report.lines?.some?.((line) => line?.outcome !== "delivered");
+  if (hasDifferences && report.needsReview !== true) problems.push("una entrega con diferencias tiene que quedar para revisión");
+  return problems;
+}
+
+export function assertValidDeliveryReport(report: DeliveryReport): void {
+  const problems = deliveryReportProblems(report);
+  if (problems.length) throw new ErpError("validation", `Reporte de entrega inválido: ${problems.join("; ")}`);
+}
+
+/** Problemas de forma del remito firmado y su contenido. Vacío = válido. */
+export function deliveryReceiptProblems(receipt: DeliveryReceipt, content?: Uint8Array): string[] {
+  const problems = commonDeliveryProblems(receipt);
+  if (typeof receipt.fileName !== "string" || !receipt.fileName.trim()) problems.push("fileName es obligatorio");
+  if (!DELIVERY_RECEIPT_CONTENT_TYPES.some((type) => type === receipt.contentType)) problems.push("contentType no es una foto ni un PDF");
+  if (!Number.isInteger(receipt.sizeBytes) || receipt.sizeBytes < 1 || receipt.sizeBytes > DELIVERY_RECEIPT_MAX_BYTES) {
+    problems.push("sizeBytes fuera de rango (hasta 10 MB)");
+  }
+  if (typeof receipt.uploadedAt !== "string" || Number.isNaN(Date.parse(receipt.uploadedAt))) problems.push("uploadedAt no es una fecha ISO 8601");
+  if (content !== undefined) {
+    if (!(content instanceof Uint8Array) || content.byteLength === 0) problems.push("el archivo está vacío");
+    else if (content.byteLength > DELIVERY_RECEIPT_MAX_BYTES) problems.push("el archivo supera los 10 MB");
+  }
+  return problems;
+}
+
+export function assertValidDeliveryReceipt(receipt: DeliveryReceipt, content: Uint8Array): void {
+  const problems = deliveryReceiptProblems(receipt, content);
+  if (problems.length) throw new ErpError("validation", `Remito de entrega inválido: ${problems.join("; ")}`);
 /**
  * Forma de `ErpMasterData.warehouses` (TRZ-101). Vacío = válido. Solo la forma: un externalId repetido o vacío
  * se audita por registro en la sincronización (erp_sync_apply_warehouses), igual que productos y lotes.
