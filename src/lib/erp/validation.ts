@@ -1,4 +1,10 @@
-import { ERP_CONTRACT_VERSION, ErpError, type DispatchReport } from "./types.ts";
+import {
+  ERP_CONTRACT_VERSION,
+  ErpError,
+  isDispatchDocumentState,
+  type DispatchDocumentStatus,
+  type DispatchReport,
+} from "./types.ts";
 
 /** Problemas de forma del reporte, antes de enviarlo a cualquier proveedor. Vacío = válido. */
 export function dispatchReportProblems(report: DispatchReport): string[] {
@@ -31,4 +37,20 @@ export function dispatchReportProblems(report: DispatchReport): string[] {
 export function assertValidDispatchReport(report: DispatchReport): void {
   const problems = dispatchReportProblems(report);
   if (problems.length) throw new ErpError("validation", `Reporte de despacho inválido: ${problems.join("; ")}`);
+}
+
+/** La clave de getDispatchStatus tiene que venir con contenido. */
+export function assertValidIdempotencyKey(idempotencyKey: string): void {
+  if (typeof idempotencyKey !== "string" || !idempotencyKey.trim()) {
+    throw new ErpError("validation", "idempotencyKey es obligatoria para consultar el remito.");
+  }
+}
+
+/** Respuesta de getDispatchStatus de cualquier proveedor: si no respeta el contrato, es invalid_response. */
+export function assertValidDispatchDocumentStatus(value: unknown): asserts value is DispatchDocumentStatus {
+  const record = value && typeof value === "object" ? (value as Record<string, unknown>) : null;
+  const reference = record?.erpReference;
+  if (!record || !isDispatchDocumentState(record.status) || (reference !== null && (typeof reference !== "string" || !reference.trim()))) {
+    throw new ErpError("invalid_response", "El ERP respondió el estado del remito con un formato inesperado.");
+  }
 }

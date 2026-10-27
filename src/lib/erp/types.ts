@@ -120,6 +120,28 @@ export type DispatchReportResult = {
   acceptedAt: string;
 };
 
+/**
+ * Estado en el ERP del documento que generó un reporte de despacho (en ERPNext, el Delivery Note). Operación
+ * agregada al contrato v1 por TRZ-100: es aditiva, los payloads existentes no cambian.
+ *   - draft: el remito existe pero nadie lo confirmó; el stock del ERP todavía no bajó.
+ *   - confirmed: confirmado; el ERP ya descontó el stock.
+ *   - cancelled: anulado; el stock nunca salió del ERP.
+ *   - not_found: no hay remito con esa clave (p. ej. se borró el borrador).
+ */
+export const DISPATCH_DOCUMENT_STATUSES = ["draft", "confirmed", "cancelled", "not_found"] as const;
+
+export type DispatchDocumentState = (typeof DISPATCH_DOCUMENT_STATUSES)[number];
+
+export type DispatchDocumentStatus = {
+  status: DispatchDocumentState;
+  /** Documento del ERP (p. ej. MAT-DN-2026-00001), o null si no se conoce. */
+  erpReference: string | null;
+};
+
+export function isDispatchDocumentState(value: unknown): value is DispatchDocumentState {
+  return DISPATCH_DOCUMENT_STATUSES.some((status) => status === value);
+}
+
 export type ErpHealth = {
   provider: ErpProvider;
   ok: true;

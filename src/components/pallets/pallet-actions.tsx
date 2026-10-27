@@ -21,12 +21,15 @@ export function PalletActions({
   existingBatches,
   existingProducts,
   allowEdit = true,
+  quantityOnly = false,
 }: {
   pallet: PalletWithHistory;
   existingBatches: ProductBatch[];
   existingProducts: ExistingProduct[];
-  /** false con ERP: producto, lote y cantidad vienen de la sincronización (US-ERP-03). */
+  /** false si el pallet no se puede editar desde TrazFlow (p. ej. heredado de un saldo del ERP). */
   allowEdit?: boolean;
+  /** Con ERP (TRZ-100) solo se edita la cantidad: producto y lote vienen del ERP. */
+  quantityOnly?: boolean;
 }) {
   const notify = useFeedback();
   const [state, setState] = useState(INITIAL_STATE);
@@ -41,11 +44,11 @@ export function PalletActions({
   const formRef = useRef<HTMLFormElement>(null);
   // Un pallet con eventos de trazabilidad no se elimina: la base lo impide para
   // conservar el historial.
-  // Un saldo importado del ERP tampoco: la base lo impide y la próxima sincronización lo volvería a crear.
+  // Un pallet heredado de un saldo del ERP tampoco: la base lo impide para conservar su trazabilidad.
   const isImported = pallet.origin?.sourceSystem === "erp";
   const mayDelete = pallet.status === "in_warehouse" && !pallet.hasHistory && !isImported;
   const notDeletableReason = isImported
-    ? "Importado del ERP: no se elimina desde TrazFlow"
+    ? "Heredado de un saldo del ERP: no se elimina desde TrazFlow"
     : pallet.hasHistory
       ? "Tiene historial de trazabilidad: no se puede eliminar"
       : "Solo se pueden eliminar pallets en depósito";
@@ -91,15 +94,21 @@ export function PalletActions({
   return (
     <div className="inline-flex flex-col items-end gap-2">
       {mayEdit && <button type="button" onClick={() => { setState(INITIAL_STATE); setProduct(palletProduct); setIsDirty(false); setIsOpen(true); }} className="button-secondary button-sm">Editar</button>}
-      <Modal open={mayEdit && isOpen} onClose={closeForm} title="Editar pallet"
-        description="Actualizá su producto, lote o ubicación. Cerrá o cancelá para descartar los datos sin guardar."
+      <Modal open={mayEdit && isOpen} onClose={closeForm} title={quantityOnly ? "Editar cantidad del pallet" : "Editar pallet"}
+        description={quantityOnly
+          ? "Con el ERP activo solo se cambia la cantidad, sin superar el saldo disponible del lote."
+          : "Actualizá su producto, lote o ubicación. Cerrá o cancelá para descartar los datos sin guardar."}
         busy={isPending} dismissOnBackdrop={false} dismissOnEscape={!isDirty}>
         <form ref={formRef} onSubmit={handleSubmitEdit} onChange={() => setIsDirty(true)} aria-busy={isPending}>
           <fieldset disabled={isPending} className="grid min-w-0 gap-4">
             {state.error && <InlineAlert variant="danger">{state.error}</InlineAlert>}
             {state.success && <InlineAlert variant="success">{state.success}</InlineAlert>}
-            <ProductField existingProducts={existingProducts} defaultSku={product.sku} defaultName={pallet.productName} onChange={setProduct} />
-            <LotField productSku={product.sku} existingBatches={existingBatches} defaultValue={pallet.batchNumber} />
+            {quantityOnly
+              ? <p className="text-sm text-stone-600">{pallet.productName} ({pallet.productSku}) · Lote <span className="font-mono">{pallet.batchNumber}</span></p>
+              : <>
+                  <ProductField existingProducts={existingProducts} defaultSku={product.sku} defaultName={pallet.productName} onChange={setProduct} />
+                  <LotField productSku={product.sku} existingBatches={existingBatches} defaultValue={pallet.batchNumber} />
+                </>}
             <p className="break-all text-xs text-stone-500">Código QR (no editable): <span className="font-mono">{pallet.qrCode}</span></p>
             <PalletField label={product.unitOfMeasure ? `Cantidad (${product.unitOfMeasure})` : "Cantidad"} name="quantity" type="number" step={quantityStep(product.unitOfMeasure)} defaultValue={pallet.quantity === null ? "" : String(pallet.quantity)} />
             <p className="text-sm text-stone-500">Ubicación: {pallet.currentLocation ?? "Sin asignar"}. Los cambios se registran desde Ubicaciones.</p>

@@ -6,6 +6,7 @@ import {
   frappeDatetimeToIso,
   frappeErrorMessage,
   isoToFrappeDatetime,
+  mapDeliveryNoteStatus,
   mapSalesOrderStatus,
   type ErpNextDeliveryNote,
   type ErpNextSalesOrder,
@@ -380,4 +381,48 @@ test("conversión de fechas de Frappe", () => {
   assert.equal(frappeDatetimeToIso("2026-10-10 09:00:00.123456"), "2026-10-10T12:00:00.123Z");
   assert.equal(frappeDatetimeToIso("2026-10-10"), "2026-10-10T03:00:00.000Z");
   assert.equal(isoToFrappeDatetime("2026-10-10T12:00:00.123Z"), "2026-10-10 09:00:00");
+});
+
+/* ---------- getDispatchStatus (TRZ-100) ---------- */
+
+const notesFor = (...notes: { name: string; docstatus: number }[]) =>
+  on("GET", "/api/resource/Delivery Note", { body: { data: notes } });
+
+test("getDispatchStatus busca el remito por la clave, incluyendo los anulados", async () => {
+  const { client, calls } = fakeErp(notesFor({ name: "MAT-DN-2026-00001", docstatus: 0 }));
+  assert.deepEqual(await client.getDispatchStatus("dispatch:SAL-ORD-2026-00012"), { status: "draft", erpReference: "MAT-DN-2026-00001" });
+  assert.equal(calls.length, 1);
+  assert.deepEqual(filtersOf(calls[0]), [["trazflow_idempotency_key", "=", "dispatch:SAL-ORD-2026-00012"]]);
+  assert.deepEqual(JSON.parse(calls[0].url.searchParams.get("fields") ?? "[]"), ["name", "docstatus"]);
+  assert.equal(calls[0].method, "GET");
+});
+
+test("getDispatchStatus: borrador, confirmado, anulado y no encontrado", async () => {
+  const status = async (...notes: { name: string; docstatus: number }[]) =>
+    fakeErp(notesFor(...notes)).client.getDispatchStatus("dispatch:X");
+  assert.deepEqual(await status({ name: "DN-1", docstatus: 0 }), { status: "draft", erpReference: "DN-1" });
+  assert.deepEqual(await status({ name: "DN-1", docstatus: 1 }), { status: "confirmed", erpReference: "DN-1" });
+  assert.deepEqual(await status({ name: "DN-1", docstatus: 2 }), { status: "cancelled", erpReference: "DN-1" });
+  assert.deepEqual(await status(), { status: "not_found", erpReference: null });
+});
+
+test("getDispatchStatus con varios remitos: gana el confirmado, después el borrador, después el anulado", async () => {
+  assert.deepEqual(mapDeliveryNoteStatus([{ name: "DN-1", docstatus: 2 }, { name: "DN-1-1", docstatus: 1 }]), { status: "confirmed", erpReference: "DN-1-1" });
+  assert.deepEqual(mapDeliveryNoteStatus([{ name: "DN-1", docstatus: 2 }, { name: "DN-1-1", docstatus: 0 }]), { status: "draft", erpReference: "DN-1-1" });
+  assert.deepEqual(mapDeliveryNoteStatus([{ name: "DN-1", docstatus: 2 }, { name: "DN-2", docstatus: 2 }]), { status: "cancelled", erpReference: "DN-1" });
+  const { client } = fakeErp(notesFor({ name: "DN-1", docstatus: 2 }, { name: "DN-1-1", docstatus: 1 }));
+  assert.deepEqual(await client.getDispatchStatus("dispatch:X"), { status: "confirmed", erpReference: "DN-1-1" });
+});
+
+test("getDispatchStatus: errores HTTP, respuesta inválida y clave vacía", async () => {
+  const replying = (status: number) => fakeErp(on("GET", "/api/resource/Delivery Note", { status, body: {} })).client;
+  await rejectsWith(replying(403).getDispatchStatus("dispatch:X"), "unauthorized", 403);
+  await rejectsWith(replying(500).getDispatchStatus("dispatch:X"), "unavailable", 500);
+  await rejectsWith(replying(429).getDispatchStatus("dispatch:X"), "rate_limited", 429);
+  await rejectsWith(fakeErp(() => new TypeError("fetch failed")).client.getDispatchStatus("dispatch:X"), "network");
+  await rejectsWith(fakeErp(on("GET", "/api/resource/Delivery Note", { body: {} })).client.getDispatchStatus("dispatch:X"), "invalid_response");
+  await rejectsWith(fakeErp(notesFor({ name: "DN-1", docstatus: 7 })).client.getDispatchStatus("dispatch:X"), "invalid_response");
+  const { client, calls } = fakeErp();
+  await rejectsWith(client.getDispatchStatus(""), "validation");
+  assert.equal(calls.length, 0, "sin clave no se llama al ERP");
 });

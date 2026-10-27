@@ -3,7 +3,9 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { hasRole, requireUserProfile } from "@/lib/auth/session";
-import { getDispatchOrderDetail } from "@/lib/orders/queries";
+import { getDispatchOrderDetail, getOrderLinesComparison } from "@/lib/orders/queries";
+import { isErpEnabled } from "@/lib/erp-sync/enabled";
+import { OrderLinesSummary } from "@/components/orders/order-lines-summary";
 import { getAvailablePallets, getPalletsForOrder } from "@/lib/pallets/queries";
 import { ORDER_STATUS_LABELS } from "@/lib/orders/labels";
 import { AssociatePalletsForm } from "@/components/orders/associate-pallets-form";
@@ -56,6 +58,8 @@ export default async function DispatchOrderDetailPage({
   const needsPalletValidations = isWarehouseOperator || canAssociate;
 
   const canSeeNotifications = isLogisticsManager || isWarehouseOperator;
+  // TRZ-100: pedido vs. armado, solo para órdenes del ERP y con la integración activa.
+  const showLines = order.origin?.sourceSystem === "erp" && (await isErpEnabled(profile.companyId));
 
   const [
     associatedPallets,
@@ -64,6 +68,7 @@ export default async function DispatchOrderDetailPage({
     dispatchDiscrepancies,
     dispatchScanHistory,
     orderNotifications,
+    linesComparison,
   ] = await Promise.all([
     getPalletsForOrder(id),
     canAssociate ? getAvailablePallets(profile.companyId) : Promise.resolve([]),
@@ -73,6 +78,7 @@ export default async function DispatchOrderDetailPage({
       : Promise.resolve([]),
     isWarehouseOperator ? getOrderScanHistory(id, "dispatch") : Promise.resolve([]),
     canSeeNotifications ? getOrderNotifications(id) : Promise.resolve([]),
+    showLines ? getOrderLinesComparison(id) : Promise.resolve(null),
   ]);
 
   const validatedAtByPalletId = new Map(
@@ -97,6 +103,7 @@ export default async function DispatchOrderDetailPage({
           dispatchDiscrepancies={dispatchDiscrepancies}
           initialScanHistory={dispatchScanHistory}
         />
+        {linesComparison ? <OrderLinesSummary {...linesComparison} /> : null}
         {canConfirm && <ConfirmDispatchButton orderId={order.id} missingPalletsCount={missingPalletsCount} />}
         <OrderNotificationsPanel notifications={orderNotifications} />
       </div>
@@ -169,6 +176,8 @@ export default async function DispatchOrderDetailPage({
       )}
 
       <OrderNotificationsPanel notifications={orderNotifications} />
+
+      {linesComparison ? <OrderLinesSummary {...linesComparison} /> : null}
 
       <section className="section-stack">
         <SectionHeader title="Pallets asociados" description="Mercadería vinculada actualmente a esta orden." />

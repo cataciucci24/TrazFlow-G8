@@ -137,3 +137,34 @@ test("fallas de una sola vez permiten probar reintentos", async () => {
   const result = await erp.reportDispatch(report());
   assert.equal(result.duplicate, false);
 });
+
+test("getDispatchStatus: un reporte recibido figura confirmado, con su referencia", async () => {
+  const erp = client();
+  const result = await erp.reportDispatch(report());
+  assert.deepEqual(await erp.getDispatchStatus(report().idempotencyKey), { status: "confirmed", erpReference: result.erpReference });
+});
+
+test("getDispatchStatus: una clave que el mock no tiene en memoria responde confirmado sin referencia", async () => {
+  // El proceso se reinició u otra instancia (Vercel) recibió el reporte: no se dejan pallets trabados.
+  assert.deepEqual(await client().getDispatchStatus("dispatch:SAL-ORD-2026-00099"), { status: "confirmed", erpReference: null });
+});
+
+test("getDispatchStatus: con dispatchStatus draft simula el remito sin confirmar", async () => {
+  const erp = client({ dispatchStatus: "draft" });
+  const result = await erp.reportDispatch(report());
+  assert.deepEqual(await erp.getDispatchStatus(report().idempotencyKey), { status: "draft", erpReference: result.erpReference });
+});
+
+test("getDispatchStatus: clave vacía y escenarios de falla", async () => {
+  await rejectsWith(client().getDispatchStatus(" "), "validation");
+  await rejectsWith(client({ scenario: "timeout" }).getDispatchStatus("dispatch:X"), "timeout");
+  await rejectsWith(client({ scenario: "server_error" }).getDispatchStatus("dispatch:X"), "unavailable", 500);
+  // El escenario validation solo afecta a reportDispatch.
+  assert.equal((await client({ scenario: "validation" }).getDispatchStatus("dispatch:X")).status, "confirmed");
+});
+
+test("reportar un despacho no descuenta stock en el mock", async () => {
+  const erp = client();
+  await erp.reportDispatch(report());
+  assert.deepEqual((await erp.pullMasterData()).stock, MOCK_ERP_FIXTURES.stock);
+});

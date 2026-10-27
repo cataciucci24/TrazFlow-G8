@@ -101,7 +101,7 @@ function LastRun({ run }: { run: ErpSyncRunSummary }) {
                       `${counters.unchanged ?? 0} sin cambios`,
                       counters.protected ? `${counters.protected} con progreso local (no se tocaron)` : null,
                       counters.skipped ? `${counters.skipped} cerradas en el ERP` : null,
-                      counters.absent ? `${counters.absent} sin saldo en el ERP (se conservan)` : null,
+                      counters.absent ? `${counters.absent} ya no vienen del ERP (quedan en 0)` : null,
                       counters.failed ? `${counters.failed} con error` : null,
                     ].filter(Boolean).join(" · ")
                   : "No se procesó"}
@@ -110,6 +110,18 @@ function LastRun({ run }: { run: ErpSyncRunSummary }) {
           );
         })}
       </dl>
+      {run.counters.dispatch_documents?.received ? (
+        <p className="text-xs text-stone-600">
+          {ERP_SYNC_ENTITY_LABELS.dispatch_documents}: {[
+            `${run.counters.dispatch_documents.received} consultados`,
+            run.counters.dispatch_documents.confirmed ? `${run.counters.dispatch_documents.confirmed} confirmados` : null,
+            run.counters.dispatch_documents.draft ? `${run.counters.dispatch_documents.draft} en borrador` : null,
+            run.counters.dispatch_documents.cancelled ? `${run.counters.dispatch_documents.cancelled} anulados` : null,
+            run.counters.dispatch_documents.not_found ? `${run.counters.dispatch_documents.not_found} no encontrados` : null,
+            run.counters.dispatch_documents.failed ? `${run.counters.dispatch_documents.failed} con error` : null,
+          ].filter(Boolean).join(" · ")}.
+        </p>
+      ) : null}
       {run.errors.length > 0 ? (
         <details className="rounded-lg border border-amber-200 bg-amber-50 p-3">
           <summary className="cursor-pointer font-medium text-amber-900">

@@ -7,6 +7,7 @@ import type {
   ActivityKind,
   ActivityRow,
   ActivityStatus,
+  ErpDocumentStatus,
   IntegrationEventDetail,
   IntegrationFilters,
   IntegrationSummary,
@@ -37,6 +38,7 @@ type ActivityRpcRow = {
   pallet_count: number | null;
   erp_reference: string | null;
   provider: string | null;
+  erp_document_status: ErpDocumentStatus | null;
   total_count: number;
 };
 
@@ -89,6 +91,7 @@ export async function getIntegrationActivity(filters: IntegrationFilters, pageSi
     palletCount: row.pallet_count,
     erpReference: row.erp_reference,
     provider: row.provider,
+    erpDocumentStatus: row.erp_document_status ?? null,
   }));
   return toPage(rows, Number(raw[0]?.total_count ?? 0), filters.page, pageSize);
 }

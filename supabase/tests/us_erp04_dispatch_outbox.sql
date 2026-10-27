@@ -57,6 +57,15 @@ insert into batches (id, product_id, batch_number, quantity, external_id, source
 insert into batches (id, product_id, batch_number, quantity) values
   ('f5000000-0000-0000-0000-000000000009', 'f4000000-0000-0000-0000-000000000009', 'MAN-1', 10);
 
+-- TRZ-100: los pallets de lotes del ERP se arman contra el saldo del ERP (tope por saldo).
+insert into erp_warehouse_mappings (company_id, external_warehouse_id, created_by) values
+  ('f2000000-0000-0000-0000-000000000001', 'Central', 'f1000000-0000-0000-0000-000000000002'),
+  ('f2000000-0000-0000-0000-000000000002', 'Central', 'f1000000-0000-0000-0000-000000000005');
+insert into erp_stock_balances (company_id, batch_id, external_warehouse_id, warehouse_code, quantity) values
+  ('f2000000-0000-0000-0000-000000000001', 'f5000000-0000-0000-0000-000000000001', 'Central', 'DEP-01', 120),
+  ('f2000000-0000-0000-0000-000000000001', 'f5000000-0000-0000-0000-000000000002', 'Central', 'DEP-01', 356.5),
+  ('f2000000-0000-0000-0000-000000000002', 'f5000000-0000-0000-0000-000000000003', 'Central', 'DEP-01', 7);
+
 insert into pallets (id, company_id, batch_id, qr_code, status, quantity) values
   -- Orden SO-1: dos pallets de dos lotes.
   ('f6000000-0000-0000-0000-000000000001', 'f2000000-0000-0000-0000-000000000001', 'f5000000-0000-0000-0000-000000000001', 'PAL-ERP04-B', 'assigned', 45),
@@ -74,6 +83,12 @@ insert into dispatch_orders (id, company_id, distributor_id, created_by, status,
   ('f7000000-0000-0000-0000-000000000004', 'f2000000-0000-0000-0000-000000000002', 'f3000000-0000-0000-0000-000000000002', 'f1000000-0000-0000-0000-000000000005', 'draft', current_date, 'SO-B', 'erp');
 insert into dispatch_orders (id, company_id, distributor_id, created_by, status, estimated_dispatch_date) values
   ('f7000000-0000-0000-0000-000000000003', 'f2000000-0000-0000-0000-000000000001', 'f3000000-0000-0000-0000-000000000001', 'f1000000-0000-0000-0000-000000000002', 'draft', current_date);
+
+-- TRZ-100: líneas de SO-1 (como las deja la sincronización). Aceite en una sola línea; queso en dos.
+insert into dispatch_order_lines (company_id, order_id, external_id, product_id, quantity, external_uom) values
+  ('f2000000-0000-0000-0000-000000000001', 'f7000000-0000-0000-0000-000000000001', 'SO-1-1', 'f4000000-0000-0000-0000-000000000001', 45, 'Caja'),
+  ('f2000000-0000-0000-0000-000000000001', 'f7000000-0000-0000-0000-000000000001', 'SO-1-2', 'f4000000-0000-0000-0000-000000000002', 10, 'Kg'),
+  ('f2000000-0000-0000-0000-000000000001', 'f7000000-0000-0000-0000-000000000001', 'SO-1-3', 'f4000000-0000-0000-0000-000000000002', 10.5, 'Kg');
 
 insert into order_pallets (order_id, pallet_id, expected, detected_at_dispatch, validated_at, validated_by) values
   ('f7000000-0000-0000-0000-000000000001', 'f6000000-0000-0000-0000-000000000001', true, true, now(), 'f1000000-0000-0000-0000-000000000001'),
@@ -181,8 +196,9 @@ begin
   perform pg_temp.assert_true(event.payload->'operator' = '{"id":"f1000000-0000-0000-0000-000000000001","name":"Operador Depósito A"}'::jsonb, 'operador');
   perform pg_temp.assert_true(event.payload->'lines' = $json$[
     {"orderLineExternalId":null,"palletCode":"PAL-ERP04-A","productExternalId":"QSO","lotExternalId":"Q-1","quantity":20.5,"uom":"Kg"},
-    {"orderLineExternalId":null,"palletCode":"PAL-ERP04-B","productExternalId":"ACE-500","lotExternalId":"L-2026-0915","quantity":45,"uom":"Caja"}
-  ]$json$::jsonb, 'una línea por pallet, ordenadas, con lote físico y unidad del ERP: ' || (event.payload->'lines')::text);
+    {"orderLineExternalId":"SO-1-1","palletCode":"PAL-ERP04-B","productExternalId":"ACE-500","lotExternalId":"L-2026-0915","quantity":45,"uom":"Caja"}
+  ]$json$::jsonb, 'una línea por pallet, ordenadas, con lote físico y unidad del ERP; la línea de la orden solo si hay '
+    'una sola del producto (TRZ-100): ' || (event.payload->'lines')::text);
 end;
 $$;
 

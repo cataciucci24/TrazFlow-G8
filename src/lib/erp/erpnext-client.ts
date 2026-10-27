@@ -6,6 +6,7 @@ import {
   ErpError,
   erpErrorCodeFromStatus,
   isErpError,
+  type DispatchDocumentStatus,
   type DispatchReport,
   type DispatchReportResult,
   type ErpDispatchOrder,
@@ -17,7 +18,7 @@ import {
   type ErpPullOptions,
   type ErpStockBalance,
 } from "./types.ts";
-import { assertValidDispatchReport } from "./validation.ts";
+import { assertValidDispatchReport, assertValidIdempotencyKey } from "./validation.ts";
 
 /**
  * Adaptador REST de ERPNext / Frappe (v15). Ver la sección "ERPNext" de docs/erp-contract.md para el mapeo de
@@ -93,6 +94,9 @@ export type ErpNextSalesOrder = {
 };
 
 type ErpNextDeliveryNoteRef = { name: string; creation: string };
+
+/** Remito con su estado: 0 borrador, 1 confirmado (submitted), 2 anulado. */
+export type ErpNextDeliveryNoteState = { name: string; docstatus: 0 | 1 | 2 };
 
 export type ErpNextDeliveryNote = ErpNextDeliveryNoteRef & {
   posting_date: string;
@@ -241,6 +245,19 @@ function linesFingerprint(items: ErpNextDeliveryNote["items"]): string {
     .join("\n");
 }
 
+/**
+ * Estado del remito de un despacho a partir de los Delivery Notes con su clave de idempotencia. Si hay varios
+ * (uno anulado y su corrección), gana el confirmado, después el borrador y por último el anulado. Ninguno:
+ * not_found (en ERPNext se puede borrar un borrador).
+ */
+export function mapDeliveryNoteStatus(notes: ErpNextDeliveryNoteState[]): DispatchDocumentStatus {
+  for (const [docstatus, status] of [[1, "confirmed"], [0, "draft"], [2, "cancelled"]] as const) {
+    const note = notes.find((candidate) => candidate.docstatus === docstatus);
+    if (note) return { status, erpReference: note.name };
+  }
+  return { status: "not_found", erpReference: null };
+}
+
 /* ---------- Cliente ---------- */
 
 export class ErpNextClient implements ErpClient {
@@ -351,6 +368,20 @@ export class ErpNextClient implements ErpClient {
       }
       throw error;
     }
+  }
+
+  async getDispatchStatus(idempotencyKey: string): Promise<DispatchDocumentStatus> {
+    assertValidIdempotencyKey(idempotencyKey);
+    // A diferencia de #findDeliveryNote, incluye los anulados (docstatus 2).
+    const notes = await this.#list<ErpNextDeliveryNoteState>(
+      "Delivery Note",
+      ["name", "docstatus"],
+      [[ERPNEXT_CUSTOM_FIELDS.idempotencyKey, "=", idempotencyKey]],
+      20,
+    );
+    const valid = notes.every((note) => typeof note?.name === "string" && note.name && [0, 1, 2].includes(note.docstatus));
+    if (!valid) throw invalidResponse("Delivery Note sin nombre o con docstatus desconocido");
+    return mapDeliveryNoteStatus(notes);
   }
 
   /** Misma clave y mismo contenido → duplicado; misma clave con otro contenido → conflict, como en el mock. */

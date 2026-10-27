@@ -2,10 +2,11 @@ import "server-only";
 
 import type { ErpClient } from "./client.ts";
 import { MOCK_ERP_FIXTURES, type MockErpFixtures } from "./fixtures.ts";
-import type { MockScenario } from "./mock-scenarios.ts";
+import type { MockDispatchStatus, MockScenario } from "./mock-scenarios.ts";
 import {
   ERP_CONTRACT_VERSION,
   ErpError,
+  type DispatchDocumentStatus,
   type DispatchReport,
   type DispatchReportResult,
   type ErpDispatchOrder,
@@ -13,7 +14,7 @@ import {
   type ErpMasterData,
   type ErpPullOptions,
 } from "./types.ts";
-import { assertValidDispatchReport } from "./validation.ts";
+import { assertValidDispatchReport, assertValidIdempotencyKey } from "./validation.ts";
 
 export type MockErpClientOptions = {
   /** Falla permanente de todas las llamadas. `validation` solo afecta a reportDispatch. */
@@ -22,15 +23,18 @@ export type MockErpClientOptions = {
   failures?: MockScenario[];
   fixtures?: MockErpFixtures;
   now?: () => Date;
+  /** Qué responde getDispatchStatus (ERP_MOCK_DISPATCH_STATUS). Por defecto `confirmed`. */
+  dispatchStatus?: MockDispatchStatus;
 };
 
-type Operation = "healthcheck" | "pullMasterData" | "pullDispatchOrders" | "reportDispatch";
+type Operation = "healthcheck" | "pullMasterData" | "pullDispatchOrders" | "reportDispatch" | "getDispatchStatus";
 
 type StoredReport = { fingerprint: string; result: DispatchReportResult };
 
 /**
  * ERP en memoria con fixtures deterministas. Simula respuestas válidas, timeout (sin respuesta), 401, 422, 500 y
- * duplicados por idempotencyKey. Reportar un despacho marca la orden como entregada en la memoria del mock.
+ * duplicados por idempotencyKey. Reportar un despacho marca la orden como entregada en la memoria del mock, pero
+ * NO descuenta stock: el saldo del mock es siempre el de los fixtures.
  */
 export class MockErpClient implements ErpClient {
   readonly provider = "mock" as const;
@@ -40,12 +44,14 @@ export class MockErpClient implements ErpClient {
   readonly #data: MockErpFixtures;
   readonly #now: () => Date;
   readonly #reports = new Map<string, StoredReport>();
+  readonly #dispatchStatus: MockDispatchStatus;
 
   constructor(options: MockErpClientOptions = {}) {
     this.#scenario = options.scenario ?? "ok";
     this.#failures = [...(options.failures ?? [])];
     this.#data = structuredClone(options.fixtures ?? MOCK_ERP_FIXTURES);
     this.#now = options.now ?? (() => new Date());
+    this.#dispatchStatus = options.dispatchStatus ?? "confirmed";
   }
 
   async healthcheck(): Promise<ErpHealth> {
@@ -113,6 +119,18 @@ export class MockErpClient implements ErpClient {
     order.status = "delivered";
     order.updatedAt = acceptedAt;
     return { ...result };
+  }
+
+  /**
+   * Simula que administración confirma el remito enseguida (`confirmed`), salvo con ERP_MOCK_DISPATCH_STATUS=draft.
+   * Si la clave no está en memoria (el proceso se reinició, o es otra instancia en Vercel) responde igual, con
+   * erpReference null: el mock no guarda estado confiable entre procesos y no queremos pallets trabados en local.
+   */
+  async getDispatchStatus(idempotencyKey: string): Promise<DispatchDocumentStatus> {
+    this.#simulate("getDispatchStatus");
+    assertValidIdempotencyKey(idempotencyKey);
+    const stored = this.#reports.get(idempotencyKey);
+    return { status: this.#dispatchStatus, erpReference: stored?.result.erpReference ?? null };
   }
 
   #simulate(operation: Operation): void {

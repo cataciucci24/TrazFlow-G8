@@ -41,6 +41,20 @@ export const INTEGRATION_BADGE_LABELS: Record<IntegrationBadge, string> = {
   stale: "Desactualizado",
 };
 
+/**
+ * Estado del remito en el ERP de un reporte enviado (TRZ-100). null = todavía sin consultar; not_tracked =
+ * reporte anterior a TRZ-100 (no se consulta).
+ */
+export type ErpDocumentStatus = "draft" | "confirmed" | "cancelled" | "not_found" | "not_tracked";
+
+export const ERP_DOCUMENT_STATUS_LABELS: Record<ErpDocumentStatus, string> = {
+  draft: "Borrador",
+  confirmed: "Confirmado",
+  cancelled: "Anulado",
+  not_found: "No encontrado",
+  not_tracked: "Sin seguimiento",
+};
+
 export type IntegrationFilters = {
   kind: ActivityKind | null;
   status: ActivityStatus | null;
@@ -73,6 +87,8 @@ export type ActivityRow = {
   palletCount: number | null;
   erpReference: string | null;
   provider: string | null;
+  /** Solo en reportes enviados; null = sin consultar (o una sincronización). */
+  erpDocumentStatus: ErpDocumentStatus | null;
 };
 
 export type UnreportedOrder = {
@@ -128,8 +144,18 @@ export type OutboxEventDetail = {
   errorMessage: string | null;
   erpReference: string | null;
   erpDuplicate: boolean | null;
+  erpDocumentStatus: ErpDocumentStatus | null;
+  erpDocumentCheckedAt: string | null;
+  erpDocumentConfirmedSeenAt: string | null;
   order: { id: string; externalId: string | null; status: string | null };
-  lines: { palletCode: string | null; productExternalId: string | null; lotExternalId: string | null; quantity: number | null; uom: string | null }[];
+  lines: {
+    palletCode: string | null;
+    orderLineExternalId: string | null;
+    productExternalId: string | null;
+    lotExternalId: string | null;
+    quantity: number | null;
+    uom: string | null;
+  }[];
   retries: { requestedAt: string; requestedByName: string | null; previousAttempts: number; previousErrorCode: string | null; previousError: string | null }[];
 };
 

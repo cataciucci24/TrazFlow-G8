@@ -74,8 +74,10 @@ select set_config('test.stock', $json$[
   {"productExternalId":"ACE-500","lotExternalId":null,"warehouseExternalId":"Central","quantity":3,"uom":"Caja","unit":"cajas"}
 ]$json$, true);
 select set_config('test.orders', $json$[
-  {"externalId":"SO-1","status":"pending","customer":{"externalId":"CUST-N","name":"Distribuidora Norte"},"scheduledDate":"2026-10-20"},
-  {"externalId":"SO-2","status":"partially_delivered","customer":{"externalId":"CUST-N","name":"Distribuidora Norte"},"scheduledDate":null},
+  {"externalId":"SO-1","status":"pending","customer":{"externalId":"CUST-N","name":"Distribuidora Norte"},"scheduledDate":"2026-10-20",
+   "lines":[{"externalId":"SO-1-1","productExternalId":"ACE-500","quantity":65,"uom":"Caja","unit":"cajas","warehouseExternalId":"Central"}]},
+  {"externalId":"SO-2","status":"partially_delivered","customer":{"externalId":"CUST-N","name":"Distribuidora Norte"},"scheduledDate":null,
+   "lines":[{"externalId":"SO-2-1","productExternalId":"QSO","quantity":48.25,"uom":"Kg","unit":"kilogramos","warehouseExternalId":null}]},
   {"externalId":"SO-3","status":"delivered","customer":{"externalId":"CUST-S","name":"Sur"},"scheduledDate":"2026-10-05"},
   {"externalId":"SO-4","status":"pending","customer":null,"scheduledDate":"2026-10-21"}
 ]$json$, true);
@@ -159,11 +161,11 @@ begin
   perform pg_temp.assert_true(exists (select 1 from jsonb_array_elements(run.errors) e
     where e->>'external_id' = 'ACE-500' and e->>'message' like '%repetido%'), 'externalId repetido en la respuesta auditado');
   perform pg_temp.assert_true(exists (select 1 from jsonb_array_elements(run.errors) e
-    where e->>'external_id' = 'stock:L-1@Sin vincular' and e->>'message' like '%no tiene correspondencia%'), 'depósito sin correspondencia auditado');
+    where e->>'external_id' = 'L-1@Sin vincular' and e->>'message' like '%no tiene correspondencia%'), 'depósito sin correspondencia auditado');
   perform pg_temp.assert_true(exists (select 1 from jsonb_array_elements(run.errors) e
-    where e->>'external_id' = 'stock:L-2@Norte' and e->>'message' like '%no es entera%'), 'decimal en cajas auditado');
+    where e->>'external_id' = 'L-2@Norte' and e->>'message' like '%no es entera%'), 'decimal en cajas auditado');
   perform pg_temp.assert_true(exists (select 1 from jsonb_array_elements(run.errors) e
-    where e->>'external_id' = 'stock:L-1@Norte' and e->>'message' like '%no corresponde al producto%'), 'lote de otro producto auditado');
+    where e->>'external_id' = 'L-1@Norte' and e->>'message' like '%no corresponde al producto%'), 'lote de otro producto auditado');
 end;
 $$;
 
@@ -184,14 +186,24 @@ select pg_temp.assert_true(
   and (select quantity from batches where external_id = 'L-1') = 0,
   'el lote del ERP queda en la empresa con cantidad 0'
 );
+-- TRZ-100: los saldos van a erp_stock_balances; la sincronización ya no crea pallets.
 select pg_temp.assert_true(
-  (select count(*) from pallets where source_system = 'erp' and status = 'in_warehouse' and current_location = 'DEP-01'
-     and qr_code ~ '^PAL-[0-9a-f-]{36}$') = 3,
-  'los pallets importados nacen en depósito con QR generado por TrazFlow'
+  (select count(*) from pallets where company_id = 'e2000000-0000-0000-0000-000000000001') = 0,
+  'la sincronización no crea pallets'
 );
 select pg_temp.assert_true(
-  (select quantity from pallets where external_id = 'stock:Q-1@Central') = 356.5,
+  (select count(*) from erp_stock_balances where warehouse_code = 'DEP-01' and external_warehouse_id = 'Central') = 3,
+  'los saldos importados quedan en el depósito vinculado'
+);
+select pg_temp.assert_true(
+  (select balance.quantity from erp_stock_balances balance join batches batch on batch.id = balance.batch_id
+   where batch.external_id = 'Q-1') = 356.5,
   'la cantidad decimal en kilogramos se conserva'
+);
+select pg_temp.assert_true(
+  (select count(*) from dispatch_order_lines) = 2
+  and (select quantity from dispatch_order_lines where external_id = 'SO-2-1') = 48.25,
+  'las órdenes abiertas se importan con sus líneas'
 );
 select pg_temp.assert_true(
   (select estimated_dispatch_date from dispatch_orders where external_id = 'SO-2') = (now() at time zone 'America/Argentina/Buenos_Aires')::date,
@@ -217,27 +229,34 @@ begin
     current_setting('test.stock')::jsonb, current_setting('test.orders')::jsonb);
   perform pg_temp.assert_true((run.counters->'products'->>'created')::int = 0 and (run.counters->'products'->>'unchanged')::int = 3, 'segunda vez: productos sin cambios');
   perform pg_temp.assert_true((run.counters->'lots'->>'created')::int = 0 and (run.counters->'lots'->>'unchanged')::int = 3, 'segunda vez: lotes sin cambios');
-  perform pg_temp.assert_true((run.counters->'stock'->>'created')::int = 0 and (run.counters->'stock'->>'unchanged')::int = 3, 'segunda vez: pallets sin cambios');
+  perform pg_temp.assert_true((run.counters->'stock'->>'created')::int = 0 and (run.counters->'stock'->>'unchanged')::int = 3, 'segunda vez: saldos sin cambios');
   perform pg_temp.assert_true((run.counters->'orders'->>'created')::int = 0 and (run.counters->'orders'->>'unchanged')::int = 2, 'segunda vez: órdenes sin cambios');
 end;
 $$;
 
 select pg_temp.assert_true((select count(*) from products where source_system = 'erp') = 3, 'no se duplican productos');
 select pg_temp.assert_true((select count(*) from batches where source_system = 'erp') = 3, 'no se duplican lotes');
-select pg_temp.assert_true((select count(*) from pallets where source_system = 'erp') = 3, 'no se duplican pallets');
+select pg_temp.assert_true((select count(*) from erp_stock_balances) = 3, 'no se duplican saldos');
+select pg_temp.assert_true((select count(*) from pallets) = (select count(*) from pallets where company_id <> 'e2000000-0000-0000-0000-000000000001'), 'la segunda sincronización tampoco crea pallets');
 select pg_temp.assert_true((select count(*) from dispatch_orders where source_system = 'erp') = 2, 'no se duplican órdenes');
 select pg_temp.assert_true((select count(*) from distributors where source_system = 'erp') = 1, 'no se duplican clientes');
 
 /* ---------- La re-sincronización no pisa el progreso local ---------- */
 
+-- TRZ-100: logística arma un pallet físico de 50 cajas contra L-1 (saldo 120).
+insert into pallets (company_id, batch_id, quantity, current_location)
+select 'e2000000-0000-0000-0000-000000000001', id, 50, 'Depósito' from batches where external_id = 'L-1';
+
 reset role;
--- SO-1 avanzó a validación; el pallet de L-1 tiene un evento de trazabilidad (ubicación física);
--- el de L-2 quedó reservado para una orden.
+-- SO-1 avanzó a validación; el pallet de L-1 tiene un evento de trazabilidad. Además hay un pallet heredado
+-- de la época en que un saldo era un pallet ('stock:Q-1@Central'), todavía en depósito.
 update dispatch_orders set status = 'validating' where external_id = 'SO-1';
 insert into traceability_events (company_id, pallet_id, event_type, user_id, details)
 select company_id, id, 'qr_scan', 'e1000000-0000-0000-0000-000000000001', '{}'::jsonb
-from pallets where external_id = 'stock:L-1@Central';
-update pallets set status = 'assigned' where external_id = 'stock:L-2@Central';
+from pallets where company_id = 'e2000000-0000-0000-0000-000000000001' and source_system = 'trazflow';
+insert into pallets (company_id, batch_id, quantity, current_location, external_id, source_system, synced_at, status)
+select 'e2000000-0000-0000-0000-000000000001', id, 300, 'DEP-01', 'stock:Q-1@Central', 'erp', now(), 'in_warehouse'
+from batches where external_id = 'Q-1';
 set local role authenticated;
 
 do $$
@@ -252,11 +271,14 @@ begin
     '[{"productExternalId":"ACE-500","lotExternalId":"L-1","warehouseExternalId":"Central","quantity":10,"uom":"Caja","unit":"cajas"},
       {"productExternalId":"ACE-500","lotExternalId":"L-2","warehouseExternalId":"Central","quantity":20,"uom":"Caja","unit":"cajas"},
       {"productExternalId":"QSO","lotExternalId":"Q-1","warehouseExternalId":"Central","quantity":300,"uom":"Kg","unit":"kilogramos"}]',
-    '[{"externalId":"SO-1","status":"pending","customer":{"externalId":"CUST-N","name":"Distribuidora Norte SA"},"scheduledDate":"2026-11-01"},
-      {"externalId":"SO-2","status":"pending","customer":{"externalId":"CUST-N","name":"Distribuidora Norte SA"},"scheduledDate":"2026-11-02"}]');
+    '[{"externalId":"SO-1","status":"pending","customer":{"externalId":"CUST-N","name":"Distribuidora Norte SA"},"scheduledDate":"2026-11-01",
+       "lines":[{"externalId":"SO-1-1","productExternalId":"ACE-500","quantity":99,"uom":"Caja","unit":"cajas","warehouseExternalId":"Central"}]},
+      {"externalId":"SO-2","status":"pending","customer":{"externalId":"CUST-N","name":"Distribuidora Norte SA"},"scheduledDate":"2026-11-02",
+       "lines":[{"externalId":"SO-2-1","productExternalId":"QSO","quantity":48.25,"uom":"Kg","unit":"kilogramos","warehouseExternalId":null}]}]');
 
   perform pg_temp.assert_true(run.status = 'success', 'la tercera sincronización no tiene errores: ' || run.errors::text);
-  perform pg_temp.assert_true((run.counters->'stock'->>'protected')::int = 2 and (run.counters->'stock'->>'updated')::int = 1, 'stock protegido/actualizado: ' || (run.counters->'stock')::text);
+  -- TRZ-100: los saldos se actualizan siempre; ya no hay pallets "protegidos".
+  perform pg_temp.assert_true((run.counters->'stock'->>'updated')::int = 3 and run.counters->'stock'->'protected' is null, 'saldos actualizados: ' || (run.counters->'stock')::text);
   perform pg_temp.assert_true((run.counters->'orders'->>'protected')::int = 1 and (run.counters->'orders'->>'updated')::int = 1, 'órdenes protegidas/actualizadas: ' || (run.counters->'orders')::text);
   perform pg_temp.assert_true((select qr_code from public.pallets where external_id = 'stock:Q-1@Central') = qr_before, 'la re-sincronización no cambia el QR');
 end;
@@ -265,11 +287,14 @@ $$;
 select pg_temp.assert_true((select status from dispatch_orders where external_id = 'SO-1') = 'validating', 'una orden en validación no vuelve a borrador');
 select pg_temp.assert_true((select estimated_dispatch_date from dispatch_orders where external_id = 'SO-1') = '2026-10-20', 'una orden en validación conserva su fecha');
 select pg_temp.assert_true((select estimated_dispatch_date from dispatch_orders where external_id = 'SO-2') = '2026-11-02', 'una orden en borrador se actualiza');
-select pg_temp.assert_true((select quantity from pallets where external_id = 'stock:L-1@Central') = 120, 'un pallet con eventos conserva su cantidad');
-select pg_temp.assert_true((select quantity from pallets where external_id = 'stock:L-2@Central') = 80, 'un pallet reservado conserva su cantidad');
-select pg_temp.assert_true((select status from pallets where external_id = 'stock:L-2@Central') = 'assigned', 'un pallet reservado conserva su estado');
-select pg_temp.assert_true((select quantity from pallets where external_id = 'stock:Q-1@Central') = 300, 'un pallet sin historia toma la cantidad del ERP');
-select pg_temp.assert_true((select count(*) from traceability_events where pallet_id = (select id from pallets where external_id = 'stock:L-1@Central')) = 1, 'la historia del pallet se conserva');
+select pg_temp.assert_true((select quantity from pallets where source_system = 'trazflow' and company_id = 'e2000000-0000-0000-0000-000000000001') = 50,
+  'la sincronización no toca los pallets físicos, aunque el saldo baje por debajo de lo armado');
+select pg_temp.assert_true((select balance.quantity from erp_stock_balances balance join batches batch on batch.id = balance.batch_id where batch.external_id = 'L-1') = 10,
+  'el saldo de L-1 baja a 10');
+select pg_temp.assert_true((select quantity from pallets where external_id = 'stock:Q-1@Central') = 300, 'un pallet heredado conserva su cantidad');
+select pg_temp.assert_true((select status from pallets where external_id = 'stock:Q-1@Central') = 'in_warehouse', 'un pallet heredado conserva su estado');
+select pg_temp.assert_true((select count(*) from traceability_events where pallet_id = (select id from pallets where source_system = 'trazflow' and company_id = 'e2000000-0000-0000-0000-000000000001')) = 1, 'la historia del pallet se conserva');
+select pg_temp.assert_true((select quantity from dispatch_order_lines where external_id = 'SO-1-1') = 65, 'las líneas de una orden en validación no se tocan');
 select pg_temp.assert_true((select expiration_date from batches where external_id = 'L-1') = '2027-04-30', 'el vencimiento del lote viene del ERP');
 select pg_temp.assert_true((select name from distributors where external_id = 'CUST-N') = 'Distribuidora Norte SA', 'el nombre del cliente se actualiza por externalId');
 
@@ -281,11 +306,14 @@ declare
 begin
   run := pg_temp.sync('e2000000-0000-0000-0000-000000000001', '[]', '[]',
     '[{"productExternalId":"QSO","lotExternalId":"Q-1","warehouseExternalId":"Central","quantity":0,"uom":"Kg","unit":"kilogramos"}]', '[]');
-  perform pg_temp.assert_true((run.counters->'stock'->>'absent')::int = 3, 'saldos en 0 o ausentes se cuentan: ' || (run.counters->'stock')::text);
+  perform pg_temp.assert_true((run.counters->'stock'->>'absent')::int = 2 and (run.counters->'stock'->>'updated')::int = 1,
+    'saldos ausentes y en 0: ' || (run.counters->'stock')::text);
 end;
 $$;
-select pg_temp.assert_true((select count(*) from pallets where source_system = 'erp') = 3, 'los pallets ausentes no se borran');
-select pg_temp.assert_true((select quantity from pallets where external_id = 'stock:Q-1@Central') = 300, 'un saldo en 0 no modifica el pallet');
+select pg_temp.assert_true((select count(*) from erp_stock_balances where company_id = 'e2000000-0000-0000-0000-000000000001') = 3
+  and (select count(*) from erp_stock_balances where company_id = 'e2000000-0000-0000-0000-000000000001' and quantity = 0) = 3,
+  'los saldos ausentes o en 0 quedan en 0, no se borran');
+select pg_temp.assert_true((select quantity from pallets where external_id = 'stock:Q-1@Central') = 300, 'un saldo en 0 no modifica el pallet heredado');
 select pg_temp.assert_true((select count(*) from products where source_system = 'erp') = 3, 'los productos ausentes no se borran');
 select pg_temp.assert_true((select count(*) from dispatch_orders where source_system = 'erp') = 2, 'las órdenes ausentes no se borran');
 
@@ -351,7 +379,8 @@ select pg_temp.assert_true((select count(*) from erp_warehouse_mappings) = 2, 'l
 select pg_temp.as_user('e1000000-0000-0000-0000-000000000002');
 select pg_temp.assert_true((select count(*) from erp_sync_runs) = 0, 'el operador de depósito no ve las ejecuciones');
 select pg_temp.assert_true((select count(*) from erp_warehouse_mappings) = 0, 'el operador de depósito no ve los depósitos vinculados');
-select pg_temp.assert_true((select count(*) from pallets where source_system = 'erp') = 3, 'el operador ve los pallets importados de su empresa');
+select pg_temp.assert_true((select count(*) from pallets where source_system = 'erp') = 1, 'el operador ve los pallets heredados de su empresa');
+select pg_temp.assert_true((select count(*) from erp_stock_balances) = 3, 'el operador ve los saldos de su empresa');
 do $$
 begin
   insert into public.erp_warehouse_mappings (company_id, external_warehouse_id) values ('e2000000-0000-0000-0000-000000000001', 'Otro');
@@ -364,6 +393,7 @@ select pg_temp.as_user('e1000000-0000-0000-0000-000000000003');
 select pg_temp.assert_true((select count(*) from erp_sync_runs) = 0, 'otra empresa no ve las ejecuciones de A');
 select pg_temp.assert_true((select count(*) from erp_warehouse_mappings) = 0, 'otra empresa no ve los depósitos de A');
 select pg_temp.assert_true((select count(*) from products where source_system = 'erp') = 0, 'otra empresa no ve productos de A');
+select pg_temp.assert_true((select count(*) from erp_stock_balances) = 0, 'otra empresa no ve saldos de A');
 
 -- El mismo externalId en otra empresa es otro registro.
 insert into erp_warehouse_mappings (company_id, external_warehouse_id) values ('e2000000-0000-0000-0000-000000000002', 'Central');

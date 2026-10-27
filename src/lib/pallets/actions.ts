@@ -6,7 +6,9 @@ import { revalidatePath } from "next/cache";
 
 import { hasRole, requireUserProfile } from "@/lib/auth/session";
 import { isErpEnabled } from "@/lib/erp-sync/enabled";
+import { erpStockErrorMessage } from "@/lib/pallets/erp-stock-errors";
 import { createClient } from "@/lib/supabase/server";
+import type { UserProfile } from "@/lib/types";
 
 export type CreatePalletState = {
   error: string | null;
@@ -22,9 +24,13 @@ const UPDATE_ERROR = "No se pudieron guardar los cambios del pallet. Intentá nu
 const NOT_EDITABLE_ERROR = "Solo se pueden editar pallets en depósito.";
 const DELETE_ERROR = "No se pudo eliminar el pallet. Intentá nuevamente.";
 const HAS_HISTORY_ERROR = "No se puede eliminar un pallet con historial de trazabilidad.";
-// Con ERP, productos, lotes y stock se dan de alta en el ERP y llegan por sincronización (US-ERP-03).
-// El alta manual queda para las empresas sin ERP.
-const ERP_MANAGED_ERROR = "Tu empresa trabaja con un ERP: productos, lotes y pallets se importan desde la sincronización.";
+// Con ERP, productos y lotes se dan de alta en el ERP y llegan por sincronización (US-ERP-03). Los pallets
+// físicos se arman en TrazFlow contra un lote sincronizado y su saldo (TRZ-100). El alta manual de productos y
+// lotes queda para las empresas sin ERP.
+const ERP_MANAGED_ERROR = "Tu empresa trabaja con un ERP: productos y lotes se importan desde la sincronización.";
+const ERP_LOT_REQUIRED_ERROR = "Con el ERP activo, los pallets se arman contra un lote sincronizado del ERP.";
+const ERP_INACTIVE_ERROR = "El lote o su producto está inactivo en el ERP: no se pueden armar pallets.";
+const ERP_EDIT_ERROR = "Con el ERP activo solo se puede cambiar la cantidad de pallets armados en TrazFlow contra un lote del ERP.";
 const QUANTITY_ERROR = "Ingresá una cantidad mayor que 0: entera en unidades o cajas, con hasta dos decimales en kilogramos.";
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
@@ -122,7 +128,75 @@ export async function createLot(
   return { error: null, success: `Lote ${batchNumber} registrado.` };
 }
 
-/** Crea un pallet en depósito, reutilizando producto/lote si ya existen. */
+type ErpLotRow = {
+  id: string;
+  batch_number: string;
+  source_system: "trazflow" | "erp";
+  external_active: boolean | null;
+  products: { unit_of_measure: ProductUnit; external_active: boolean | null } | { unit_of_measure: ProductUnit; external_active: boolean | null }[] | null;
+};
+
+/** Lote de la empresa con la unidad y el estado en el ERP de su producto. */
+async function findLot(supabase: SupabaseClient, companyId: string, batchId: string) {
+  const { data, error } = await supabase
+    .from("batches")
+    .select("id, batch_number, source_system, external_active, products ( unit_of_measure, external_active )")
+    .eq("id", batchId)
+    .eq("company_id", companyId)
+    .maybeSingle();
+  if (error || !data) return null;
+  const row = data as unknown as ErpLotRow;
+  const product = Array.isArray(row.products) ? row.products[0] : row.products;
+  if (!product) return null;
+  return {
+    id: row.id,
+    batchNumber: row.batch_number,
+    fromErp: row.source_system === "erp",
+    active: row.external_active !== false && product.external_active !== false,
+    unit: product.unit_of_measure,
+  };
+}
+
+function revalidatePalletPaths() {
+  revalidatePath("/dashboard/inventory");
+  revalidatePath("/dashboard/traceability");
+  revalidatePath("/dashboard/orders");
+  revalidatePath("/dashboard/pallets");
+  revalidatePath("/dashboard/pallets/stock-erp");
+  revalidatePath("/dashboard/lots");
+  revalidatePath("/dashboard/alerts");
+}
+
+/**
+ * TRZ-100: con ERP, el pallet físico se arma contra un lote sincronizado del ERP con la cantidad real. Queda
+ * en TrazFlow (sin external_id), en depósito y en el depósito de la empresa (la base lo completa). El tope por
+ * saldo lo valida la base (enforce_erp_stock_cap); acá se traduce su error.
+ */
+async function createPalletFromErpLot(profile: UserProfile, formData: FormData): Promise<CreatePalletState> {
+  const batchId = String(formData.get("batchId") ?? "").trim();
+  const quantity = Number(formData.get("quantity") ?? 0);
+  if (!batchId) return { error: "Elegí un lote del ERP.", success: null };
+
+  const supabase = await createClient();
+  const lot = await findLot(supabase, profile.companyId, batchId);
+  if (!lot) return { error: "El lote no existe o no pertenece a tu empresa.", success: null };
+  if (!lot.fromErp) return { error: ERP_LOT_REQUIRED_ERROR, success: null };
+  if (!lot.active) return { error: ERP_INACTIVE_ERROR, success: null };
+  if (!isValidQuantity(quantity, lot.unit)) return { error: QUANTITY_ERROR, success: null };
+
+  const { data: pallet, error } = await supabase.from("pallets").insert({
+    company_id: profile.companyId,
+    batch_id: lot.id,
+    quantity,
+    current_location: "Depósito",
+  }).select("qr_code").single();
+  if (error || !pallet) return { error: erpStockErrorMessage(error) ?? INITIAL_ERROR, success: null };
+
+  revalidatePalletPaths();
+  return { error: null, success: `Pallet ${pallet.qr_code} armado con el lote ${lot.batchNumber}.` };
+}
+
+/** Crea un pallet en depósito, reutilizando producto/lote si ya existen. Con ERP, contra un lote del ERP. */
 export async function createPallet(
   _previousState: CreatePalletState,
   formData: FormData,
@@ -131,7 +205,7 @@ export async function createPallet(
   if (!hasRole(profile, "logistics_manager")) {
     return { error: "Solo logística puede registrar pallets.", success: null };
   }
-  if (await isErpEnabled(profile.companyId)) return { error: ERP_MANAGED_ERROR, success: null };
+  if (await isErpEnabled(profile.companyId)) return createPalletFromErpLot(profile, formData);
 
   const productName = String(formData.get("productName") ?? "").trim();
   const productSku = String(formData.get("productSku") ?? "").trim();
@@ -165,13 +239,43 @@ export async function createPallet(
     return { error: INITIAL_ERROR, success: null };
   }
 
-  revalidatePath("/dashboard/inventory");
-  revalidatePath("/dashboard/traceability");
-  revalidatePath("/dashboard/orders");
-  revalidatePath("/dashboard/pallets");
-  revalidatePath("/dashboard/lots");
-  revalidatePath("/dashboard/alerts");
+  revalidatePalletPaths();
   return { error: null, success: `Pallet ${pallet.qr_code} registrado en depósito.` };
+}
+
+/**
+ * TRZ-100: con ERP solo cambia la cantidad, y solo en pallets en depósito, armados en TrazFlow contra un lote
+ * del ERP. Los heredados ('stock:%') siguen bloqueados (también los protege guard_erp_synced_row). El tope lo
+ * valida la base.
+ */
+async function updateErpPalletQuantity(profile: UserProfile, palletId: string, formData: FormData): Promise<UpdatePalletState> {
+  const quantity = Number(formData.get("quantity") ?? 0);
+  const supabase = await createClient();
+  const { data, error: lookupError } = await supabase
+    .from("pallets")
+    .select("id, qr_code, status, source_system, batch_id")
+    .eq("id", palletId)
+    .eq("company_id", profile.companyId)
+    .maybeSingle();
+  if (lookupError || !data) return { error: "El pallet no existe o no pertenece a tu empresa.", success: null };
+  if (data.status !== "in_warehouse") return { error: NOT_EDITABLE_ERROR, success: null };
+  if (data.source_system !== "trazflow") return { error: ERP_EDIT_ERROR, success: null };
+  const lot = await findLot(supabase, profile.companyId, data.batch_id);
+  if (!lot?.fromErp) return { error: ERP_EDIT_ERROR, success: null };
+  if (!isValidQuantity(quantity, lot.unit)) return { error: QUANTITY_ERROR, success: null };
+
+  const { data: updated, error: updateError } = await supabase
+    .from("pallets")
+    .update({ quantity })
+    .eq("id", palletId)
+    .eq("company_id", profile.companyId)
+    .eq("status", "in_warehouse")
+    .select("id");
+  if (updateError) return { error: erpStockErrorMessage(updateError) ?? UPDATE_ERROR, success: null };
+  if (!updated || updated.length === 0) return { error: NOT_EDITABLE_ERROR, success: null };
+
+  revalidatePalletPaths();
+  return { error: null, success: `Pallet ${data.qr_code} actualizado.` };
 }
 
 /** Actualiza la información logística sin modificar la identidad del pallet. */
@@ -184,7 +288,7 @@ export async function updatePallet(
   if (!hasRole(profile, "logistics_manager")) {
     return { error: "Solo logística puede editar pallets.", success: null };
   }
-  if (await isErpEnabled(profile.companyId)) return { error: ERP_MANAGED_ERROR, success: null };
+  if (await isErpEnabled(profile.companyId)) return updateErpPalletQuantity(profile, palletId, formData);
 
   const productName = String(formData.get("productName") ?? "").trim();
   const productSku = String(formData.get("productSku") ?? "").trim();
@@ -230,12 +334,7 @@ export async function updatePallet(
   // 0 filas: el pallet salió del depósito (el UPDATE filtra por status).
   if (!updated || updated.length === 0) return { error: NOT_EDITABLE_ERROR, success: null };
 
-  revalidatePath("/dashboard/inventory");
-  revalidatePath("/dashboard/traceability");
-  revalidatePath("/dashboard/orders");
-  revalidatePath("/dashboard/pallets");
-  revalidatePath("/dashboard/lots");
-  revalidatePath("/dashboard/alerts");
+  revalidatePalletPaths();
   return { error: null, success: `Pallet ${existingPallet.qr_code} actualizado.` };
 }
 
@@ -267,11 +366,6 @@ export async function deletePallet(palletId: string): Promise<DeletePalletState>
     return { error: deleteError.code === "23503" ? HAS_HISTORY_ERROR : DELETE_ERROR, success: null };
   }
 
-  revalidatePath("/dashboard/inventory");
-  revalidatePath("/dashboard/traceability");
-  revalidatePath("/dashboard/orders");
-  revalidatePath("/dashboard/pallets");
-  revalidatePath("/dashboard/lots");
-  revalidatePath("/dashboard/alerts");
+  revalidatePalletPaths();
   return { error: null, success: `Pallet ${pallet.qr_code} eliminado.` };
 }

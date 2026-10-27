@@ -4,7 +4,7 @@ import { formatSyncedAt } from "@/components/erp/erp-origin";
 import { IntegrationBadgeView } from "@/components/erp/integration/integration-badge";
 import { EmptyState, TableShell } from "@/components/ui/design-system";
 import { activityBadge } from "@/lib/erp-integration/status";
-import { ACTIVITY_KIND_LABELS, ACTIVITY_STATUS_LABELS, type ActivityRow } from "@/lib/erp-integration/types";
+import { ACTIVITY_KIND_LABELS, ACTIVITY_STATUS_LABELS, ERP_DOCUMENT_STATUS_LABELS, type ActivityRow } from "@/lib/erp-integration/types";
 
 export function ActivityTable({ rows, detailHref, emptyTitle, emptyDescription, emptyAction }: {
   rows: ActivityRow[];
@@ -45,6 +45,9 @@ export function ActivityTable({ rows, detailHref, emptyTitle, emptyDescription, 
                       {row.orderExternalId ?? "Orden sin id externo"}
                       {row.palletCount !== null ? <span className="block font-sans text-stone-500">{row.palletCount} pallet(s)</span> : null}
                       {row.erpReference ? <span className="block font-sans text-stone-500">Remito {row.erpReference}</span> : null}
+                      {row.status === "sent"
+                        ? <span className="block font-sans text-stone-500">Remito en el ERP: {row.erpDocumentStatus ? ERP_DOCUMENT_STATUS_LABELS[row.erpDocumentStatus] : "Sin consultar"}</span>
+                        : null}
                     </>}
               </td>
               <td role="cell" data-label="Error" className="mobile-wide max-w-80 text-sm text-stone-600">

@@ -211,7 +211,8 @@ $$;
 /* ---------- Lotes ---------- */
 
 -- p_records: [{ externalId, productExternalId, lotNumber, expirationDate, active }].
--- La cantidad del lote queda en 0: el stock real de un lote del ERP son sus pallets importados.
+-- La cantidad del lote queda en 0: el saldo de un lote del ERP está en erp_stock_balances (TRZ-100,
+-- 20261028100000) y los pallets físicos se arman en TrazFlow contra ese saldo.
 create function public.erp_sync_apply_lots(p_run_id uuid, p_records jsonb)
 returns jsonb language plpgsql security definer set search_path = '' as $$
 declare

@@ -61,7 +61,8 @@ export const MOCK_ERP_FIXTURES: MockErpFixtures = {
       updatedAt: T1,
     },
     {
-      // Orden para practicar la demo: pide exactamente el saldo del lote ARR-2026-08 (un solo pallet de 200 cajas).
+      // Orden para practicar la demo: pide exactamente el saldo del lote ARR-2026-08 (200 cajas), que se arma en
+      // uno o varios pallets físicos (TRZ-100).
       contractVersion: ERP_CONTRACT_VERSION,
       externalId: "SAL-ORD-2026-00014",
       status: "pending",
@@ -73,7 +74,8 @@ export const MOCK_ERP_FIXTURES: MockErpFixtures = {
       updatedAt: T1,
     },
     {
-      // Orden para la demo: pide exactamente el saldo del lote ARR-2026-10 (un solo pallet de 150 cajas).
+      // Orden para la demo: pide exactamente el saldo del lote ARR-2026-10 (150 cajas), que se arma en uno o
+      // varios pallets físicos (TRZ-100).
       contractVersion: ERP_CONTRACT_VERSION,
       externalId: "SAL-ORD-2026-00015",
       status: "pending",

@@ -5,20 +5,28 @@
 
 export type ErpSyncStatus = "running" | "success" | "partial" | "failed";
 
-export type ErpSyncEntity = "products" | "lots" | "stock" | "orders";
+/**
+ * Etapas de una sincronización. `dispatch_documents` (TRZ-100) es la consulta del estado de los remitos de los
+ * despachos ya reportados, que corre antes de traer los maestros.
+ */
+export type ErpSyncEntity = "products" | "lots" | "stock" | "orders" | "dispatch_documents";
+
+/** Entidad de un error auditado: la etapa, salvo los remitos, que se auditan uno por uno como `dispatch_document`. */
+export type ErpSyncErrorEntity = Exclude<ErpSyncEntity, "dispatch_documents"> | "dispatch_document";
 
 /**
- * Contadores por entidad tal como los guarda erp_sync_runs.counters. `protected` = existía con progreso local
- * y no se modificó; `absent` (stock) = pallets importados cuyo saldo bajó a 0 o ya no viene del ERP.
+ * Contadores por entidad tal como los guarda erp_sync_runs.counters. `protected` = orden que existía con progreso
+ * local y no se modificó; `absent` (stock) = saldos que ya no vienen del ERP (quedan en 0). Los remitos cuentan
+ * cuántos se consultaron (`received`) y en qué estado quedaron.
  */
 export type ErpSyncCounters = Partial<Record<
   "received" | "created" | "updated" | "unchanged" | "protected" | "skipped" | "failed" | "absent"
-  | "customers_created" | "customers_updated",
+  | "customers_created" | "customers_updated" | "draft" | "confirmed" | "cancelled" | "not_found",
   number
 >>;
 
 export type ErpSyncRecordError = {
-  entity: ErpSyncEntity;
+  entity: ErpSyncErrorEntity;
   external_id: string | null;
   message: string;
 };
@@ -49,11 +57,13 @@ export type ErpOrigin = {
   syncedAt: string | null;
 };
 
-export const ERP_SYNC_ENTITY_LABELS: Record<ErpSyncEntity, string> = {
+export const ERP_SYNC_ENTITY_LABELS: Record<ErpSyncEntity | ErpSyncErrorEntity, string> = {
   products: "Productos",
   lots: "Lotes",
-  stock: "Pallets (saldos)",
+  stock: "Saldos de stock",
   orders: "Órdenes",
+  dispatch_documents: "Remitos",
+  dispatch_document: "Remito",
 };
 
 export const ERP_SYNC_STATUS_LABELS: Record<ErpSyncStatus, string> = {

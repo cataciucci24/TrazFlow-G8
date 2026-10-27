@@ -129,6 +129,7 @@ function spyClient(inner: ErpClient = new MockErpClient()) {
       received.push(structuredClone(sent));
       return inner.reportDispatch(sent);
     },
+    getDispatchStatus: (key) => inner.getDispatchStatus(key),
   };
   return { client, received };
 }
