@@ -342,6 +342,7 @@ export type DissociatePalletOutcome =
   | "order_not_found"
   | "not_removable"
   | "pallet_not_in_order"
+  | "invalid_pallet_state"
   | "forbidden"
   | "error";
 
@@ -362,6 +363,8 @@ const DISSOCIATE_MESSAGES: Record<DissociatePalletOutcome, string> = {
   not_removable:
     "El pallet ya no se puede quitar (la orden ya no está en borrador, o el pallet ya fue validado).",
   pallet_not_in_order: "El pallet no está asociado a esta orden.",
+  invalid_pallet_state:
+    "El pallet no está reservado para esta orden (ya fue despachado, entregado o cambió de estado), así que no se puede quitar.",
   forbidden: "No tenés permisos para desasociar pallets de esta orden.",
   error: "No se pudo desasociar el pallet. Intentá nuevamente.",
 };
