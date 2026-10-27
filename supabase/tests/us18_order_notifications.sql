@@ -25,6 +25,10 @@ insert into companies (id, name)
 values
   ('21000000-0000-0000-0000-000000000001', 'Company US18 A'),
   ('21000000-0000-0000-0000-000000000002', 'Company US18 B');
+-- TRZ-101: las empresas nuevas no reciben un depósito automático; en el onboarding se carga DEP-01.
+insert into public.warehouses (company_id, code, name)
+  select id, 'DEP-01', 'Depósito principal' from public.companies c
+  where not exists (select 1 from public.warehouses w where w.company_id = c.id);
 
 insert into users (id, company_id, name, email, role)
 values

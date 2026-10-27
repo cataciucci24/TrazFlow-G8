@@ -29,6 +29,10 @@ insert into auth.users (id, email) values
 insert into companies (id, name) values
   ('d2000000-0000-0000-0000-000000000001', 'TRZ100 AQ Company'),
   ('d2000000-0000-0000-0000-000000000002', 'TRZ100 AQ Company B');
+-- TRZ-101: las empresas nuevas no reciben un depósito automático; en el onboarding se carga DEP-01.
+insert into public.warehouses (company_id, code, name)
+  select id, 'DEP-01', 'Depósito principal' from public.companies c
+  where not exists (select 1 from public.warehouses w where w.company_id = c.id);
 insert into users (id, company_id, name, email, role) values
   ('d1000000-0000-0000-0000-000000000001', 'd2000000-0000-0000-0000-000000000001', 'Depósito', 'trz100aq-warehouse@test.local', 'warehouse_operator'),
   ('d1000000-0000-0000-0000-000000000002', 'd2000000-0000-0000-0000-000000000001', 'Logística', 'trz100aq-manager@test.local', 'logistics_manager'),
@@ -42,8 +46,8 @@ insert into products (id, company_id, sku, name, unit_of_measure, external_uom, 
 insert into batches (id, product_id, batch_number, quantity, external_id, source_system, external_active) values
   ('d5000000-0000-0000-0000-000000000001', 'd4000000-0000-0000-0000-000000000001', 'L-QSO', 0, 'L-QSO', 'erp', true),
   ('d5000000-0000-0000-0000-000000000002', 'd4000000-0000-0000-0000-000000000002', 'L-ARZ', 0, 'L-ARZ', 'erp', true);
-insert into erp_warehouse_mappings (company_id, external_warehouse_id, created_by) values
-  ('d2000000-0000-0000-0000-000000000001', 'Central', 'd1000000-0000-0000-0000-000000000002');
+insert into erp_warehouse_mappings (company_id, external_warehouse_id, warehouse_code, created_by) values
+  ('d2000000-0000-0000-0000-000000000001', 'Central', 'DEP-01', 'd1000000-0000-0000-0000-000000000002');
 -- Queso: saldo 100 kg. Arroz: saldo 50 cajas.
 insert into erp_stock_balances (company_id, batch_id, external_warehouse_id, warehouse_code, quantity) values
   ('d2000000-0000-0000-0000-000000000001', 'd5000000-0000-0000-0000-000000000001', 'Central', 'DEP-01', 100),

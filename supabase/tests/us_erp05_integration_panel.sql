@@ -44,6 +44,10 @@ insert into auth.users (id, email) values
 insert into companies (id, name) values
   ('e5200000-0000-0000-0000-000000000001', 'ERP05 Company A'),
   ('e5200000-0000-0000-0000-000000000002', 'ERP05 Company B');
+-- TRZ-101: las empresas nuevas no reciben un depósito automático; en el onboarding se carga DEP-01.
+insert into public.warehouses (company_id, code, name)
+  select id, 'DEP-01', 'Depósito principal' from public.companies c
+  where not exists (select 1 from public.warehouses w where w.company_id = c.id);
 insert into users (id, company_id, name, email, role) values
   ('e5100000-0000-0000-0000-000000000001', 'e5200000-0000-0000-0000-000000000001', 'Logística A', 'erp05-manager-a@test.local', 'logistics_manager'),
   ('e5100000-0000-0000-0000-000000000002', 'e5200000-0000-0000-0000-000000000001', 'Operador A', 'erp05-warehouse-a@test.local', 'warehouse_operator'),
@@ -58,8 +62,8 @@ insert into products (id, company_id, sku, name, unit_of_measure, external_uom, 
 insert into batches (id, product_id, batch_number, quantity, external_id, source_system) values
   ('e5500000-0000-0000-0000-000000000001', 'e5400000-0000-0000-0000-000000000001', 'L-0915', 0, 'L-0915', 'erp');
 -- TRZ-100: todo pallet de un lote del ERP necesita saldo en el depósito (tope por saldo).
-insert into erp_warehouse_mappings (company_id, external_warehouse_id, created_by) values
-  ('e5200000-0000-0000-0000-000000000001', 'Central', 'e5100000-0000-0000-0000-000000000001');
+insert into erp_warehouse_mappings (company_id, external_warehouse_id, warehouse_code, created_by) values
+  ('e5200000-0000-0000-0000-000000000001', 'Central', 'DEP-01', 'e5100000-0000-0000-0000-000000000001');
 insert into erp_stock_balances (company_id, batch_id, external_warehouse_id, warehouse_code, quantity) values
   ('e5200000-0000-0000-0000-000000000001', 'e5500000-0000-0000-0000-000000000001', 'Central', 'DEP-01', 120);
 insert into pallets (id, company_id, batch_id, qr_code, status, quantity, external_id, source_system) values

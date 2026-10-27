@@ -12,6 +12,10 @@ declare
   second_qr text;
 begin
   insert into public.companies (name) values ('US-B1 test') returning id into company;
+  -- TRZ-101: las empresas nuevas no reciben un depósito automático; en el onboarding se carga DEP-01.
+  insert into public.warehouses (company_id, code, name)
+    select id, 'DEP-01', 'Depósito principal' from public.companies c
+    where not exists (select 1 from public.warehouses w where w.company_id = c.id);
   insert into public.products (company_id, sku, name, unit_of_measure)
     values (company, 'US-B1', 'Test', 'unidades') returning id into product;
   insert into public.batches (product_id, batch_number, quantity)

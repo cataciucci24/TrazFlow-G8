@@ -136,6 +136,8 @@ export type Pallet = {
   status: PalletStatus;
   currentLocation: string | null;
   currentLocationId?: string | null;
+  /** Depósito de TrazFlow donde está (o del que salió) el pallet (TRZ-101). */
+  warehouseCode?: string | null;
   productName: string;
   productSku: string;
   batchNumber: string;

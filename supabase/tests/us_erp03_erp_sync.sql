@@ -35,6 +35,10 @@ insert into auth.users (id, email) values
 insert into companies (id, name) values
   ('e2000000-0000-0000-0000-000000000001', 'ERP Company A'),
   ('e2000000-0000-0000-0000-000000000002', 'ERP Company B');
+-- TRZ-101: las empresas nuevas no reciben un depósito automático; en el onboarding se carga DEP-01.
+insert into public.warehouses (company_id, code, name)
+  select id, 'DEP-01', 'Depósito principal' from public.companies c
+  where not exists (select 1 from public.warehouses w where w.company_id = c.id);
 insert into users (id, company_id, name, email, role) values
   ('e1000000-0000-0000-0000-000000000001', 'e2000000-0000-0000-0000-000000000001', 'Manager A', 'erp-manager-a@test.local', 'logistics_manager'),
   ('e1000000-0000-0000-0000-000000000002', 'e2000000-0000-0000-0000-000000000001', 'Operator A', 'erp-operator-a@test.local', 'warehouse_operator'),
@@ -133,11 +137,15 @@ $$;
 
 /* ---------- Primera sincronización: registros parciales ---------- */
 
--- Correspondencia de depósitos: Central y Norte sí, "Sin vincular" no.
+-- Correspondencia de depósitos: Central y Norte sí, "Sin vincular" no. Desde TRZ-101 los vínculos los crea
+-- erp_sync_apply_warehouses (trz101_erp_warehouses.sql); acá se cargan como postgres, como los de antes de TRZ-101,
+-- para probar el stock sin la etapa de depósitos.
+reset role;
+insert into erp_warehouse_mappings (company_id, external_warehouse_id, warehouse_code, created_by) values
+  ('e2000000-0000-0000-0000-000000000001', 'Central', 'DEP-01', 'e1000000-0000-0000-0000-000000000001'),
+  ('e2000000-0000-0000-0000-000000000001', 'Norte', 'DEP-01', 'e1000000-0000-0000-0000-000000000001');
+set local role authenticated;
 select pg_temp.as_user('e1000000-0000-0000-0000-000000000001');
-insert into erp_warehouse_mappings (company_id, external_warehouse_id) values
-  ('e2000000-0000-0000-0000-000000000001', 'Central'),
-  ('e2000000-0000-0000-0000-000000000001', 'Norte');
 
 do $$
 declare
@@ -161,7 +169,7 @@ begin
   perform pg_temp.assert_true(exists (select 1 from jsonb_array_elements(run.errors) e
     where e->>'external_id' = 'ACE-500' and e->>'message' like '%repetido%'), 'externalId repetido en la respuesta auditado');
   perform pg_temp.assert_true(exists (select 1 from jsonb_array_elements(run.errors) e
-    where e->>'external_id' = 'L-1@Sin vincular' and e->>'message' like '%no tiene correspondencia%'), 'depósito sin correspondencia auditado');
+    where e->>'external_id' = 'L-1@Sin vincular' and e->>'message' like '%no está en su lista de depósitos%'), 'depósito sin correspondencia auditado');
   perform pg_temp.assert_true(exists (select 1 from jsonb_array_elements(run.errors) e
     where e->>'external_id' = 'L-2@Norte' and e->>'message' like '%no es entera%'), 'decimal en cajas auditado');
   perform pg_temp.assert_true(exists (select 1 from jsonb_array_elements(run.errors) e
@@ -383,7 +391,7 @@ select pg_temp.assert_true((select count(*) from pallets where source_system = '
 select pg_temp.assert_true((select count(*) from erp_stock_balances) = 3, 'el operador ve los saldos de su empresa');
 do $$
 begin
-  insert into public.erp_warehouse_mappings (company_id, external_warehouse_id) values ('e2000000-0000-0000-0000-000000000001', 'Otro');
+  insert into public.erp_warehouse_mappings (company_id, external_warehouse_id, warehouse_code) values ('e2000000-0000-0000-0000-000000000001', 'Otro', 'DEP-01');
   raise exception 'US-ERP-03: el operador pudo vincular un depósito';
 exception when insufficient_privilege then null;
 end;
@@ -396,7 +404,10 @@ select pg_temp.assert_true((select count(*) from products where source_system = 
 select pg_temp.assert_true((select count(*) from erp_stock_balances) = 0, 'otra empresa no ve saldos de A');
 
 -- El mismo externalId en otra empresa es otro registro.
-insert into erp_warehouse_mappings (company_id, external_warehouse_id) values ('e2000000-0000-0000-0000-000000000002', 'Central');
+reset role;
+insert into erp_warehouse_mappings (company_id, external_warehouse_id, warehouse_code, created_by)
+  values ('e2000000-0000-0000-0000-000000000002', 'Central', 'DEP-01', 'e1000000-0000-0000-0000-000000000003');
+set local role authenticated;
 do $$
 declare
   run public.erp_sync_runs;
@@ -412,7 +423,10 @@ $$;
 select pg_temp.assert_true((select name from products where external_id = 'ACE-500') = 'Aceite B', 'empresa B ve solo su producto');
 
 reset role;
-select pg_temp.assert_true((select count(*) from products where external_id = 'ACE-500') = 2, 'el mismo externalId convive en dos empresas');
+-- Solo las empresas del test: en una base local con los datos de la demo también hay un ACE-500.
+select pg_temp.assert_true((select count(*) from products where external_id = 'ACE-500'
+  and company_id in ('e2000000-0000-0000-0000-000000000001', 'e2000000-0000-0000-0000-000000000002')) = 2,
+  'el mismo externalId convive en dos empresas');
 select pg_temp.assert_true((select name from products where external_id = 'ACE-500' and company_id = 'e2000000-0000-0000-0000-000000000001') = 'Aceite 500', 'empresa B no pisa a empresa A');
 
 rollback;

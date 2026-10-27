@@ -6,7 +6,7 @@ import { hasRole, requireUserProfile } from "@/lib/auth/session";
 import { getErpClient } from "@/lib/erp";
 import { configuredErpProvider, isErpEnabled } from "@/lib/erp-sync/enabled";
 import { ErpSyncStartError, syncCompanyFromErp } from "@/lib/erp-sync/sync";
-import { describeErpSyncRun, type ErpSyncActionState, type LinkErpWarehouseState } from "@/lib/erp-sync/types";
+import { describeErpSyncRun, type ErpSyncActionState } from "@/lib/erp-sync/types";
 import { createClient } from "@/lib/supabase/server";
 
 const SYNCED_PATHS = [
@@ -18,6 +18,7 @@ const SYNCED_PATHS = [
   "/dashboard/traceability",
   "/dashboard/alerts",
   "/dashboard/integrations",
+  "/dashboard/locations",
 ];
 
 /** Sincronización manual con el ERP. Solo logística; la RPC vuelve a verificar empresa y rol. */
@@ -51,33 +52,4 @@ export async function syncErpNow(): Promise<ErpSyncActionState> {
       : "No se pudo completar la sincronización con el ERP. Intentá nuevamente.";
     return { status: "error", message, run: null };
   }
-}
-
-/** Vincula un depósito del ERP (su nombre/id tal cual) con el depósito de TrazFlow. */
-export async function linkErpWarehouse(
-  _previousState: LinkErpWarehouseState,
-  formData: FormData,
-): Promise<LinkErpWarehouseState> {
-  const profile = await requireUserProfile();
-  if (!hasRole(profile, "logistics_manager")) {
-    return { error: "Solo logística puede vincular depósitos del ERP.", success: null };
-  }
-  const externalWarehouseId = String(formData.get("externalWarehouseId") ?? "").trim();
-  if (!externalWarehouseId || externalWarehouseId.length > 300) {
-    return { error: "Ingresá el depósito tal como figura en el ERP (hasta 300 caracteres).", success: null };
-  }
-
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("erp_warehouse_mappings")
-    .insert({ company_id: profile.companyId, external_warehouse_id: externalWarehouseId });
-  if (error) {
-    return {
-      error: error.code === "23505" ? "Ese depósito del ERP ya está vinculado." : "No se pudo vincular el depósito. Intentá nuevamente.",
-      success: null,
-    };
-  }
-
-  revalidatePath("/dashboard/pallets");
-  return { error: null, success: `Depósito "${externalWarehouseId}" vinculado a DEP-01. Volvé a sincronizar para importar sus saldos.` };
 }

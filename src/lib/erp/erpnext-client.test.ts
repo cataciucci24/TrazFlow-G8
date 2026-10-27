@@ -27,6 +27,12 @@ const BATCHES = [
   { name: "L-2026-0921", item: "ACE-500", manufacturing_date: null, expiry_date: null, disabled: 1, modified: "2026-10-01 09:06:00.000000" },
 ];
 
+// Depósitos de ERPNext. Los grupos ("All Warehouses - SRV") se filtran en la consulta (is_group = 0).
+const WAREHOUSES = [
+  { name: "Depósito Central - SRV", warehouse_name: "Depósito Central", is_group: 0, disabled: 0, modified: "2026-10-01 08:00:00.000000" },
+  { name: "Depósito Norte - SRV", warehouse_name: "Depósito Norte", is_group: 0, disabled: 1, modified: "2026-10-02 08:00:00.000000" },
+];
+
 const BATCH_QTY = [
   { batch_no: "L-2026-0915", warehouse: "Depósito Central - SRV", qty: 120 },
   { batch_no: "L-2026-0921", warehouse: "Depósito Central - SRV", qty: 0 },
@@ -141,8 +147,9 @@ test("healthcheck como Guest es credencial inválida", async () => {
   await rejectsWith(client.healthcheck(), "unauthorized");
 });
 
-test("pullMasterData traduce Item, Batch y get_batch_qty al contrato", async () => {
+test("pullMasterData traduce Warehouse, Item, Batch y get_batch_qty al contrato", async () => {
   const { client, calls } = fakeErp(
+    on("GET", "/api/resource/Warehouse", { body: { data: WAREHOUSES } }),
     on("GET", "/api/resource/Item", { body: { data: ITEMS } }),
     on("GET", "/api/resource/Batch", { body: { data: BATCHES } }),
     on("GET", "/api/method/erpnext.stock.doctype.batch.batch.get_batch_qty", { body: { message: BATCH_QTY } }),
@@ -150,6 +157,14 @@ test("pullMasterData traduce Item, Batch y get_batch_qty al contrato", async () 
   const data = await client.pullMasterData();
 
   assert.equal(data.contractVersion, ERP_CONTRACT_VERSION);
+  // TRZ-101: sin grupos, incluidos los deshabilitados (quedan inactivos en TrazFlow). externalId = name.
+  const warehouseCall = calls.find((call) => call.url.pathname === "/api/resource/Warehouse")!;
+  assert.deepEqual(filtersOf(warehouseCall), [["is_group", "=", 0]]);
+  assert.deepEqual(JSON.parse(warehouseCall.url.searchParams.get("fields") ?? "[]"), ["name", "warehouse_name", "is_group", "disabled", "modified"]);
+  assert.deepEqual(data.warehouses, [
+    { externalId: "Depósito Central - SRV", name: "Depósito Central", active: true, updatedAt: "2026-10-01T11:00:00.000Z" },
+    { externalId: "Depósito Norte - SRV", name: "Depósito Norte", active: false, updatedAt: "2026-10-02T11:00:00.000Z" },
+  ]);
   assert.deepEqual(data.products[0], {
     externalId: "ACE-500", sku: "ACE-500", name: "Aceite de girasol 500 ml", uom: "Caja",
     batchTracked: true, active: true, updatedAt: "2026-10-01T12:00:00.000Z",
@@ -166,13 +181,28 @@ test("pullMasterData traduce Item, Batch y get_batch_qty al contrato", async () 
   assert.deepEqual(stockCalls.map((call) => call.url.searchParams.get("item_code")), ["ACE-500"]);
 });
 
-test("updatedSince se envía como filtro de modified en hora del servidor", async () => {
+test("updatedSince se envía como filtro de modified en hora del servidor (los depósitos vienen siempre completos)", async () => {
   const { client, calls } = fakeErp(
+    on("GET", "/api/resource/Warehouse", { body: { data: [] } }),
     on("GET", "/api/resource/Item", { body: { data: [] } }),
     on("GET", "/api/resource/Batch", { body: { data: [] } }),
   );
   await client.pullMasterData({ updatedSince: "2026-10-05T03:00:00Z" });
-  assert.deepEqual(filtersOf(calls[0]), [["is_stock_item", "=", 1], ["modified", ">=", "2026-10-05 00:00:00"]]);
+  const call = (path: string) => calls.find((candidate) => candidate.url.pathname === path)!;
+  assert.deepEqual(filtersOf(call("/api/resource/Warehouse")), [["is_group", "=", 0]]);
+  assert.deepEqual(filtersOf(call("/api/resource/Item")), [["is_stock_item", "=", 1], ["modified", ">=", "2026-10-05 00:00:00"]]);
+});
+
+test("un Warehouse sin nombre visible usa su id; uno con fecha inválida es invalid_response", async () => {
+  const unnamed = fakeErp(
+    on("GET", "/api/resource/Warehouse", { body: { data: [{ ...WAREHOUSES[0], warehouse_name: "" }] } }),
+    on("GET", "/api/resource/Item", { body: { data: [] } }),
+    on("GET", "/api/resource/Batch", { body: { data: [] } }),
+  );
+  assert.equal((await unnamed.client.pullMasterData()).warehouses[0].name, "Depósito Central - SRV");
+
+  const broken = fakeErp(on("GET", "/api/resource/Warehouse", { body: { data: [{ ...WAREHOUSES[0], modified: "ayer" }] } }));
+  await assert.rejects(broken.client.pullMasterData(), (error: unknown) => error instanceof ErpError && error.code === "invalid_response");
 });
 
 test("los listados se paginan hasta recibir una página incompleta", async () => {

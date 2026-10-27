@@ -4,6 +4,7 @@ import {
   isDispatchDocumentState,
   type DispatchDocumentStatus,
   type DispatchReport,
+  type ErpWarehouse,
 } from "./types.ts";
 
 /** Problemas de forma del reporte, antes de enviarlo a cualquier proveedor. Vacío = válido. */
@@ -52,5 +53,36 @@ export function assertValidDispatchDocumentStatus(value: unknown): asserts value
   const reference = record?.erpReference;
   if (!record || !isDispatchDocumentState(record.status) || (reference !== null && (typeof reference !== "string" || !reference.trim()))) {
     throw new ErpError("invalid_response", "El ERP respondió el estado del remito con un formato inesperado.");
+  }
+}
+
+/**
+ * Forma de `ErpMasterData.warehouses` (TRZ-101). Vacío = válido. Solo la forma: un externalId repetido o vacío
+ * se audita por registro en la sincronización (erp_sync_apply_warehouses), igual que productos y lotes.
+ */
+export function erpWarehousesProblems(warehouses: unknown): string[] {
+  if (!Array.isArray(warehouses)) return ["warehouses no es una lista"];
+  const problems: string[] = [];
+  warehouses.forEach((warehouse: Partial<Record<keyof ErpWarehouse, unknown>> | null, index) => {
+    const at = `warehouses[${index}]`;
+    if (!warehouse || typeof warehouse !== "object") {
+      problems.push(`${at} no es un objeto`);
+      return;
+    }
+    if (typeof warehouse.externalId !== "string") problems.push(`${at}.externalId no es texto`);
+    if (typeof warehouse.name !== "string") problems.push(`${at}.name no es texto`);
+    if (typeof warehouse.active !== "boolean") problems.push(`${at}.active no es booleano`);
+    if (typeof warehouse.updatedAt !== "string" || Number.isNaN(Date.parse(warehouse.updatedAt))) {
+      problems.push(`${at}.updatedAt no es una fecha ISO 8601`);
+    }
+  });
+  return problems;
+}
+
+/** Los depósitos de cualquier proveedor: si no respetan el contrato, es invalid_response. */
+export function assertValidErpWarehouses(warehouses: unknown): asserts warehouses is ErpWarehouse[] {
+  const problems = erpWarehousesProblems(warehouses);
+  if (problems.length) {
+    throw new ErpError("invalid_response", `El ERP respondió los depósitos con un formato inesperado: ${problems.slice(0, 3).join("; ")}.`);
   }
 }

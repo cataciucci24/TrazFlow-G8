@@ -59,7 +59,7 @@ function fakeDb(options: { failOn?: string; startError?: string; due?: DueEvent[
 
 const base = { companyId: "company-1", actorId: "user-1", provider: "mock" };
 
-test("consulta remitos y aplica productos, lotes, stock y órdenes en orden, con las unidades traducidas", async () => {
+test("consulta remitos y aplica depósitos, productos, lotes, stock y órdenes en orden, con las unidades traducidas", async () => {
   const { db, calls } = fakeDb();
   const run = await syncCompanyFromErp({ ...base, db, getClient: () => new MockErpClient() });
 
@@ -68,6 +68,7 @@ test("consulta remitos y aplica productos, lotes, stock y órdenes en orden, con
     "erp_sync_start",
     "erp_outbox_dispatch_documents_due",
     "erp_sync_save_dispatch_documents",
+    "erp_sync_apply_warehouses",
     "erp_sync_apply_products",
     "erp_sync_apply_lots",
     "erp_sync_apply_stock",
@@ -76,17 +77,23 @@ test("consulta remitos y aplica productos, lotes, stock y órdenes en orden, con
   ]);
   assert.deepEqual(calls[0].args, { p_company_id: "company-1", p_actor_id: "user-1", p_provider: "mock" });
 
+  // TRZ-101: los depósitos van antes que el stock, con su id, nombre y si están activos.
+  assert.deepEqual(calls[3].args.p_records, [
+    { externalId: "Depósito Central - SRV", name: "Depósito Central", active: true },
+    { externalId: "Depósito Norte - SRV", name: "Depósito Norte", active: true },
+  ]);
+
   assert.deepEqual(calls[1].args, { p_company_id: "company-1", p_limit: 20 });
-  const products = calls[3].args.p_records as { externalId: string; unit: string }[];
+  const products = calls[4].args.p_records as { externalId: string; unit: string }[];
   assert.equal(products.length, MOCK_ERP_FIXTURES.products.length);
   assert.deepEqual(products.find((product) => product.externalId === "QSO-HORMA")?.unit, "kilogramos");
 
-  const stock = calls[5].args.p_records as { unit: string; quantity: number }[];
+  const stock = calls[6].args.p_records as { unit: string; quantity: number }[];
   assert.ok(stock.every((balance) => balance.unit));
   assert.ok(stock.some((balance) => balance.quantity === 356.5));
 
   // El mock solo devuelve órdenes abiertas; se mandan con sus líneas (TRZ-100) y la unidad traducida.
-  const orders = calls[6].args.p_records as { externalId: string; lines: Record<string, unknown>[] }[];
+  const orders = calls[7].args.p_records as { externalId: string; lines: Record<string, unknown>[] }[];
   assert.equal(orders.length, 4);
   assert.deepEqual(Object.keys(orders[0]).sort(), ["customer", "externalId", "lines", "scheduledDate", "status"]);
   assert.deepEqual(orders.find((order) => order.externalId === "SAL-ORD-2026-00013")?.lines, [{
@@ -97,7 +104,7 @@ test("consulta remitos y aplica productos, lotes, stock y órdenes en orden, con
     unit: "kilogramos",
     warehouseExternalId: "Depósito Central - SRV",
   }]);
-  assert.equal(calls[7].args.p_error, null);
+  assert.equal(calls[8].args.p_error, null);
 });
 
 test("consulta los remitos ANTES de traer el stock, para liberar los pallets en la misma corrida", async () => {
@@ -157,7 +164,7 @@ test("si el ERP no responde, cierra el run como fallido con el mensaje sanitizad
   const run = await syncCompanyFromErp({ ...base, db, getClient: () => new MockErpClient({ scenario: "timeout" }) });
 
   assert.equal(run.status, "failed");
-  assert.match(run.errorMessage ?? "", /^Al leer productos, lotes y stock del ERP: El ERP no respondió a tiempo/);
+  assert.match(run.errorMessage ?? "", /^Al leer depósitos, productos, lotes y stock del ERP: El ERP no respondió a tiempo/);
   // Sin reportes para consultar, no se le pregunta nada al ERP antes de los maestros.
   assert.deepEqual(calls.map((call) => call.fn), [
     "erp_sync_start", "erp_outbox_dispatch_documents_due", "erp_sync_save_dispatch_documents", "erp_sync_finish",

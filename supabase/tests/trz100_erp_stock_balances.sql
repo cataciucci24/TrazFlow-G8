@@ -90,15 +90,19 @@ insert into auth.users (id, email) values
 insert into companies (id, name) values
   ('a1000000-0000-0000-0000-00000000000a', 'TRZ100 Company A'),
   ('a1000000-0000-0000-0000-00000000000b', 'TRZ100 Company B');
+-- TRZ-101: las empresas nuevas no reciben un depósito automático; en el onboarding se carga DEP-01.
+insert into public.warehouses (company_id, code, name)
+  select id, 'DEP-01', 'Depósito principal' from public.companies c
+  where not exists (select 1 from public.warehouses w where w.company_id = c.id);
 insert into users (id, company_id, name, email, role) values
   ('a1000000-0000-0000-0000-000000000001', 'a1000000-0000-0000-0000-00000000000a', 'Logística A', 'trz100-manager-a@test.local', 'logistics_manager'),
   ('a1000000-0000-0000-0000-000000000002', 'a1000000-0000-0000-0000-00000000000a', 'Depósito A', 'trz100-warehouse-a@test.local', 'warehouse_operator'),
   ('a1000000-0000-0000-0000-000000000003', 'a1000000-0000-0000-0000-00000000000a', 'Chofer A', 'trz100-driver-a@test.local', 'driver_operator'),
   ('a1000000-0000-0000-0000-000000000004', 'a1000000-0000-0000-0000-00000000000b', 'Logística B', 'trz100-manager-b@test.local', 'logistics_manager');
 -- Dos depósitos del ERP vinculados al mismo depósito de TrazFlow (como en la nube).
-insert into erp_warehouse_mappings (company_id, external_warehouse_id, created_by) values
-  ('a1000000-0000-0000-0000-00000000000a', 'Central', 'a1000000-0000-0000-0000-000000000001'),
-  ('a1000000-0000-0000-0000-00000000000a', 'Norte', 'a1000000-0000-0000-0000-000000000001');
+insert into erp_warehouse_mappings (company_id, external_warehouse_id, warehouse_code, created_by) values
+  ('a1000000-0000-0000-0000-00000000000a', 'Central', 'DEP-01', 'a1000000-0000-0000-0000-000000000001'),
+  ('a1000000-0000-0000-0000-00000000000a', 'Norte', 'DEP-01', 'a1000000-0000-0000-0000-000000000001');
 
 select set_config('test.products', $json$[
   {"externalId":"ACE","sku":"ACE","name":"Aceite","uom":"Caja","unit":"cajas","active":true},
@@ -152,9 +156,10 @@ select pg_temp.assert_true(
   and not has_table_privilege('authenticated', 'public.dispatch_order_lines', 'update')
   and not has_table_privilege('authenticated', 'public.dispatch_order_lines', 'delete'),
   'authenticated no escribe líneas');
-select pg_temp.assert_true(not has_column_privilege('authenticated', 'public.pallets', 'warehouse_code', 'insert')
+-- TRZ-101: con varios depósitos la app elige el depósito al armar el pallet (insert), pero no lo cambia después.
+select pg_temp.assert_true(has_column_privilege('authenticated', 'public.pallets', 'warehouse_code', 'insert')
   and not has_column_privilege('authenticated', 'public.pallets', 'warehouse_code', 'update'),
-  'la API no elige el depósito del pallet');
+  'la API elige el depósito al crear el pallet y no lo cambia');
 select pg_temp.assert_true(not has_function_privilege('anon', 'public.erp_outbox_dispatch_documents_due(uuid, integer)', 'execute')
   and not has_function_privilege('anon', 'public.erp_outbox_record_dispatch_document(uuid, text, text)', 'execute')
   and not has_function_privilege('anon', 'public.erp_stock_overview()', 'execute')
@@ -181,7 +186,7 @@ begin
   perform pg_temp.assert_true(run.counters->'stock' = '{"received":7,"created":6,"updated":0,"unchanged":0,"failed":1,"absent":0}',
     'contadores de saldos: ' || (run.counters->'stock')::text);
   perform pg_temp.assert_true(exists (select 1 from jsonb_array_elements(run.errors) e
-    where e->>'entity' = 'stock' and e->>'external_id' = 'L-2@Sin vincular' and e->>'message' like '%no tiene correspondencia%'),
+    where e->>'entity' = 'stock' and e->>'external_id' = 'L-2@Sin vincular' and e->>'message' like '%no está en su lista de depósitos%'),
     'un depósito sin vincular da error auditado');
   perform pg_temp.assert_true((run.counters->'orders'->>'created')::int = 2 and (run.counters->'orders'->>'failed')::int = 4,
     'contadores de órdenes: ' || (run.counters->'orders')::text);
@@ -369,8 +374,9 @@ select pg_temp.assert_raises($q$insert into public.pallets (company_id, batch_id
   'TF102', 'lote inactivo en el ERP');
 select pg_temp.assert_raises($q$insert into public.pallets (company_id, batch_id, quantity) values ('a1000000-0000-0000-0000-00000000000a', pg_temp.lot('X-1'), 1)$q$,
   'TF102', 'producto inactivo en el ERP');
+-- TRZ-101: la API puede indicar el depósito, pero tiene que existir en su empresa (FK a warehouses).
 select pg_temp.assert_raises($q$insert into public.pallets (company_id, batch_id, quantity, warehouse_code) values ('a1000000-0000-0000-0000-00000000000a', pg_temp.lot('L-2'), 1, 'DEP-02')$q$,
-  '42501', 'la API no elige el depósito');
+  '23503', 'un depósito que no existe se rechaza');
 
 -- Lotes manuales: sin tope.
 insert into products (company_id, sku, name, unit_of_measure) values ('a1000000-0000-0000-0000-00000000000a', 'MAN', 'Manual', 'unidades');
@@ -386,6 +392,9 @@ reset role;
 insert into warehouse_locations (id, company_id, code, aisle, rack, level, position)
 values ('a1000000-0000-0000-0000-0000000000c1', 'a1000000-0000-0000-0000-00000000000a', 'A1', '1', '1', '1', '1');
 update pallets set current_location_id = 'a1000000-0000-0000-0000-0000000000c1' where quantity = 99999;
+-- TRZ-101: DEP-02 tiene que existir (FK a warehouses). Se borra al terminar este bloque para que el resto del
+-- test siga con un solo depósito (los pallets se arman sin indicar depósito).
+insert into warehouses (company_id, code, name) values ('a1000000-0000-0000-0000-00000000000a', 'DEP-02', 'Depósito 2');
 do $$
 begin
   update public.pallets set warehouse_code = 'DEP-02' where quantity = 99999;
@@ -396,6 +405,7 @@ $$;
 -- Al salir del depósito se limpia la ubicación (TRZ-96) y la FK deja de aplicar.
 update pallets set warehouse_code = 'DEP-02', current_location_id = null where quantity = 99999;
 update pallets set warehouse_code = 'DEP-01' where quantity = 99999;
+delete from warehouses where company_id = 'a1000000-0000-0000-0000-00000000000a' and code = 'DEP-02';
 
 /* ---------- Cada fila de la regla del tope (D3) ---------- */
 
