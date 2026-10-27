@@ -124,7 +124,10 @@ select pg_temp.assert_true(
 -- de usuario para este insert de fixture y se vuelve a warehouse_operator
 -- después, que es quien necesita invocar validate_order_pallet /
 -- confirm_dispatch_order.
+-- Como en la app (TRZ-99), el pallet se reserva antes de asociarlo.
 select set_config('request.jwt.claim.sub', '11000000-0000-0000-0000-000000000002', true);
+update pallets set status = 'assigned'
+where id = '61000000-0000-0000-0000-000000000003' and status = 'in_warehouse';
 insert into order_pallets (order_id, pallet_id, expected)
 values ('71000000-0000-0000-0000-000000000001', '61000000-0000-0000-0000-000000000003', true);
 select set_config('request.jwt.claim.sub', '11000000-0000-0000-0000-000000000001', true);
