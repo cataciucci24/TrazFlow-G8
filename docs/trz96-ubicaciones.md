@@ -2,6 +2,8 @@
 
 ## Alcance y decisiones
 
+> **TRZ-101:** ya no hay un único `DEP-01` fijo: los depósitos están en la tabla `warehouses` y cada ubicación pertenece a uno (FK compuesta). Los UUID, QR e historial no cambiaron. Ver la sección "Depósitos" de [`erp-sync.md`](erp-sync.md).
+
 Un depósito por empresa: `DEP-01`, sin administración de múltiples depósitos ni asignaciones de operadores. Cada ubicación guarda empresa, identificador de depósito, código y coordenadas. Para ampliar a múltiples depósitos se podrá reemplazar el identificador fijo por una relación, conservando los UUID de ubicaciones, QR e historial.
 
 - Depósito y Logística pueden crear y consultar ubicaciones. Solo `warehouse_operator` activo registra movimientos; Logística consulta el historial. Choferes no acceden al catálogo.

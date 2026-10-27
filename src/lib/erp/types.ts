@@ -54,9 +54,27 @@ export type ErpStockBalance = {
   uom: string;
 };
 
+/**
+ * Depósito del ERP (TRZ-101). `externalId` es el mismo valor que traen `ErpStockBalance.warehouseExternalId` y
+ * `ErpDispatchOrderLine.warehouseExternalId` (en ERPNext, el `name` del Warehouse). Los grupos de depósitos no se
+ * informan: no tienen stock.
+ */
+export type ErpWarehouse = {
+  externalId: string;
+  name: string;
+  /** `false` = deshabilitado en el ERP. No se borra en TrazFlow: queda inactivo. */
+  active: boolean;
+  updatedAt: string;
+};
+
 export type ErpMasterData = {
   contractVersion: ErpContractVersion;
   fetchedAt: string;
+  /**
+   * Lista COMPLETA de depósitos, también con `updatedSince` (como el stock): un depósito que no viene se marca
+   * inactivo en TrazFlow. Campo agregado al contrato v1 por TRZ-101.
+   */
+  warehouses: ErpWarehouse[];
   products: ErpProduct[];
   lots: ErpLot[];
   stock: ErpStockBalance[];

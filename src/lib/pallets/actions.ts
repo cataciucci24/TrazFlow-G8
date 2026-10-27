@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { hasRole, requireUserProfile } from "@/lib/auth/session";
 import { isErpEnabled } from "@/lib/erp-sync/enabled";
 import { erpStockErrorMessage } from "@/lib/pallets/erp-stock-errors";
+import { warehouseErrorMessage } from "@/lib/warehouses/errors";
 import { createClient } from "@/lib/supabase/server";
 import type { UserProfile } from "@/lib/types";
 
@@ -170,11 +171,12 @@ function revalidatePalletPaths() {
 
 /**
  * TRZ-100: con ERP, el pallet físico se arma contra un lote sincronizado del ERP con la cantidad real. Queda
- * en TrazFlow (sin external_id), en depósito y en el depósito de la empresa (la base lo completa). El tope por
- * saldo lo valida la base (enforce_erp_stock_cap); acá se traduce su error.
+ * en TrazFlow (sin external_id), en depósito y en el depósito del saldo elegido (TRZ-101). El tope por saldo y el
+ * depósito los valida la base (enforce_erp_stock_cap, default_warehouse_code); acá se traducen sus errores.
  */
 async function createPalletFromErpLot(profile: UserProfile, formData: FormData): Promise<CreatePalletState> {
   const batchId = String(formData.get("batchId") ?? "").trim();
+  const warehouseCode = String(formData.get("warehouseCode") ?? "").trim();
   const quantity = Number(formData.get("quantity") ?? 0);
   if (!batchId) return { error: "Elegí un lote del ERP.", success: null };
 
@@ -185,13 +187,15 @@ async function createPalletFromErpLot(profile: UserProfile, formData: FormData):
   if (!lot.active) return { error: ERP_INACTIVE_ERROR, success: null };
   if (!isValidQuantity(quantity, lot.unit)) return { error: QUANTITY_ERROR, success: null };
 
+  // El depósito es el del saldo elegido (TRZ-101). Sin él, la base usa el único depósito activo de la empresa.
   const { data: pallet, error } = await supabase.from("pallets").insert({
     company_id: profile.companyId,
     batch_id: lot.id,
     quantity,
     current_location: "Depósito",
+    ...(warehouseCode ? { warehouse_code: warehouseCode } : {}),
   }).select("qr_code").single();
-  if (error || !pallet) return { error: erpStockErrorMessage(error) ?? INITIAL_ERROR, success: null };
+  if (error || !pallet) return { error: erpStockErrorMessage(error) ?? warehouseErrorMessage(error) ?? INITIAL_ERROR, success: null };
 
   revalidatePalletPaths();
   return { error: null, success: `Pallet ${pallet.qr_code} armado con el lote ${lot.batchNumber}.` };
@@ -230,14 +234,17 @@ export async function createPallet(
     .single();
   if (batchError || !batch) return { error: "El lote seleccionado no existe para ese producto. Crealo primero desde la sección Lotes.", success: null };
 
+  // Con varios depósitos el formulario manda el elegido (TRZ-101); con uno solo, lo completa la base.
+  const warehouseCode = String(formData.get("warehouseCode") ?? "").trim();
   const { data: pallet, error: palletError } = await supabase.from("pallets").insert({
     company_id: profile.companyId,
     batch_id: batch.id,
     quantity,
     current_location: "Depósito",
+    ...(warehouseCode ? { warehouse_code: warehouseCode } : {}),
   }).select("qr_code").single();
   if (palletError || !pallet) {
-    return { error: INITIAL_ERROR, success: null };
+    return { error: warehouseErrorMessage(palletError) ?? INITIAL_ERROR, success: null };
   }
 
   revalidatePalletPaths();

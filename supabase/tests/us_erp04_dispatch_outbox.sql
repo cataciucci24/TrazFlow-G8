@@ -32,6 +32,10 @@ insert into auth.users (id, email) values
 insert into companies (id, name) values
   ('f2000000-0000-0000-0000-000000000001', 'ERP04 Company A'),
   ('f2000000-0000-0000-0000-000000000002', 'ERP04 Company B');
+-- TRZ-101: las empresas nuevas no reciben un depósito automático; en el onboarding se carga DEP-01.
+insert into public.warehouses (company_id, code, name)
+  select id, 'DEP-01', 'Depósito principal' from public.companies c
+  where not exists (select 1 from public.warehouses w where w.company_id = c.id);
 insert into users (id, company_id, name, email, role) values
   ('f1000000-0000-0000-0000-000000000001', 'f2000000-0000-0000-0000-000000000001', 'Operador Depósito A', 'erp04-warehouse-a@test.local', 'warehouse_operator'),
   ('f1000000-0000-0000-0000-000000000002', 'f2000000-0000-0000-0000-000000000001', 'Logística A', 'erp04-manager-a@test.local', 'logistics_manager'),
@@ -58,9 +62,9 @@ insert into batches (id, product_id, batch_number, quantity) values
   ('f5000000-0000-0000-0000-000000000009', 'f4000000-0000-0000-0000-000000000009', 'MAN-1', 10);
 
 -- TRZ-100: los pallets de lotes del ERP se arman contra el saldo del ERP (tope por saldo).
-insert into erp_warehouse_mappings (company_id, external_warehouse_id, created_by) values
-  ('f2000000-0000-0000-0000-000000000001', 'Central', 'f1000000-0000-0000-0000-000000000002'),
-  ('f2000000-0000-0000-0000-000000000002', 'Central', 'f1000000-0000-0000-0000-000000000005');
+insert into erp_warehouse_mappings (company_id, external_warehouse_id, warehouse_code, created_by) values
+  ('f2000000-0000-0000-0000-000000000001', 'Central', 'DEP-01', 'f1000000-0000-0000-0000-000000000002'),
+  ('f2000000-0000-0000-0000-000000000002', 'Central', 'DEP-01', 'f1000000-0000-0000-0000-000000000005');
 insert into erp_stock_balances (company_id, batch_id, external_warehouse_id, warehouse_code, quantity) values
   ('f2000000-0000-0000-0000-000000000001', 'f5000000-0000-0000-0000-000000000001', 'Central', 'DEP-01', 120),
   ('f2000000-0000-0000-0000-000000000001', 'f5000000-0000-0000-0000-000000000002', 'Central', 'DEP-01', 356.5),

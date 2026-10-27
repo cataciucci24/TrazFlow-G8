@@ -11,6 +11,11 @@
 --
 -- No carga datos del ERP: productos, lotes, pallets y órdenes los genera la sincronización con ERP_PROVIDER=mock.
 --
+-- Depósitos (TRZ-101): las empresas nuevas no reciben uno automático, así que el seed hace el onboarding y carga
+-- DEP-01, igual que la nube. También deja DEP-01 vinculado a "Depósito Central - SRV", como está en la nube: con
+-- ERP_PROVIDER=mock, la primera sincronización deja a Central como DEP-01 y trae Norte como DEPOSITO-NORTE. Sin ERP,
+-- el vínculo no se usa y la empresa trabaja con DEP-01 como siempre.
+--
 -- Cada usuario necesita tres filas: auth.users (credenciales), auth.identities (proveedor email, sin la cual
 -- GoTrue no deja iniciar sesión) y public.users (perfil: empresa y rol, que leen auth_company_id() y auth_role()).
 
@@ -58,3 +63,9 @@ insert into public.users (id, company_id, name, email, role)
 select s.id, '5eed0000-0000-0000-0000-000000000001', s.name, s.email, s.role
 from seed_users s
 join new_auth_users a on a.id = s.id;
+
+-- Onboarding de depósitos (TRZ-101).
+insert into public.warehouses (company_id, code, name) values
+  ('5eed0000-0000-0000-0000-000000000001', 'DEP-01', 'Depósito principal');
+insert into public.erp_warehouse_mappings (company_id, external_warehouse_id, warehouse_code, created_by) values
+  ('5eed0000-0000-0000-0000-000000000001', 'Depósito Central - SRV', 'DEP-01', '5eed0000-0000-0000-0000-000000000101');

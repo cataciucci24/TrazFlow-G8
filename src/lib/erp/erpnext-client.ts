@@ -22,6 +22,7 @@ import {
   type ErpProduct,
   type ErpPullOptions,
   type ErpStockBalance,
+  type ErpWarehouse,
 } from "./types.ts";
 import {
   assertValidDeliveryReceipt,
@@ -29,6 +30,7 @@ import {
   assertValidDispatchReport,
   assertValidIdempotencyKey,
 } from "./validation.ts";
+import { assertValidDispatchReport, assertValidErpWarehouses, assertValidIdempotencyKey } from "./validation.ts";
 
 /**
  * Adaptador REST de ERPNext / Frappe (v15). Ver la sección "ERPNext" de docs/erp-contract.md para el mapeo de
@@ -85,6 +87,15 @@ export type ErpNextBatch = {
 };
 
 export type ErpNextBatchQty = { batch_no: string; warehouse: string; qty: number };
+
+/** Depósito. `name` es el id ("Stores - SRV", con la abreviatura de la empresa); los grupos no tienen stock. */
+export type ErpNextWarehouse = {
+  name: string;
+  warehouse_name: string;
+  is_group: 0 | 1;
+  disabled: 0 | 1;
+  modified: string;
+};
 
 export type ErpNextSalesOrderItem = {
   name: string;
@@ -211,6 +222,15 @@ export function mapBatch(batch: ErpNextBatch): ErpLot {
     expirationDate: batch.expiry_date || null,
     active: batch.disabled === 0,
     updatedAt: frappeDatetimeToIso(batch.modified),
+  };
+}
+
+export function mapWarehouse(warehouse: ErpNextWarehouse): ErpWarehouse {
+  return {
+    externalId: warehouse.name,
+    name: warehouse.warehouse_name || warehouse.name,
+    active: warehouse.disabled === 0,
+    updatedAt: frappeDatetimeToIso(warehouse.modified),
   };
 }
 
@@ -364,6 +384,15 @@ export class ErpNextClient implements ErpClient {
     const since = modifiedSinceFilter(options);
     const itemFields = ["name", "item_code", "item_name", "stock_uom", "has_batch_no", "disabled", "modified"];
 
+    // Depósitos: siempre la lista completa (sin updatedSince), sin grupos e incluidos los deshabilitados, para
+    // que TrazFlow marque inactivos los que el ERP deshabilitó o dejó de informar.
+    const warehouses = (await this.#list<ErpNextWarehouse>(
+      "Warehouse",
+      ["name", "warehouse_name", "is_group", "disabled", "modified"],
+      [["is_group", "=", 0]],
+    )).map(mapWarehouse);
+    assertValidErpWarehouses(warehouses);
+
     const items = await this.#list<ErpNextItem>("Item", itemFields, [["is_stock_item", "=", 1], ...since]);
     const batches = await this.#list<ErpNextBatch>(
       "Batch",
@@ -391,6 +420,7 @@ export class ErpNextClient implements ErpClient {
     return {
       contractVersion: ERP_CONTRACT_VERSION,
       fetchedAt: this.#now().toISOString(),
+      warehouses,
       products: items.map(mapItem),
       lots: batches.map(mapBatch),
       stock,
