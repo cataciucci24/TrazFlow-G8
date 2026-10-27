@@ -6,6 +6,7 @@ import { hasRole, requireUserProfile } from "@/lib/auth/session";
 import { getDispatchOrderDetail, getOrderLinesComparison } from "@/lib/orders/queries";
 import { isErpEnabled } from "@/lib/erp-sync/enabled";
 import { OrderLinesSummary } from "@/components/orders/order-lines-summary";
+import { mismatchSummary } from "@/lib/orders/lines";
 import { getAvailablePallets, getPalletsForOrder } from "@/lib/pallets/queries";
 import { ORDER_STATUS_LABELS } from "@/lib/orders/labels";
 import { AssociatePalletsForm } from "@/components/orders/associate-pallets-form";
@@ -88,6 +89,8 @@ export default async function DispatchOrderDetailPage({
   const missingPalletsCount = palletValidations.filter(
     (pallet) => !pallet.validatedAt,
   ).length;
+  // TRZ-100: si ya se sabe que no coincide, el botón se deshabilita (la base lo rechaza igual).
+  const quantityMismatch = linesComparison?.hasLines ? mismatchSummary(linesComparison.rows) : null;
   const canConfirm =
     isWarehouseOperator &&
     order.status === "draft" &&
@@ -104,7 +107,7 @@ export default async function DispatchOrderDetailPage({
           initialScanHistory={dispatchScanHistory}
         />
         {linesComparison ? <OrderLinesSummary {...linesComparison} /> : null}
-        {canConfirm && <ConfirmDispatchButton orderId={order.id} missingPalletsCount={missingPalletsCount} />}
+        {canConfirm && <ConfirmDispatchButton orderId={order.id} missingPalletsCount={missingPalletsCount} quantityMismatch={quantityMismatch} />}
         <OrderNotificationsPanel notifications={orderNotifications} />
       </div>
     );
@@ -171,6 +174,7 @@ export default async function DispatchOrderDetailPage({
           <ConfirmDispatchButton
             orderId={order.id}
             missingPalletsCount={missingPalletsCount}
+            quantityMismatch={quantityMismatch}
           />
         </div>
       )}

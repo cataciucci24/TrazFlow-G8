@@ -1,7 +1,6 @@
-import Link from "next/link";
-
 import type { Lot, Pallet } from "@/lib/types";
 import { TableShell } from "@/components/ui/design-system";
+import { RowActionsMenu } from "@/components/ui/row-actions-menu";
 
 const DATE_FORMATTER = new Intl.DateTimeFormat("es-AR", { dateStyle: "short" });
 const formatQuantity = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 20 });
@@ -51,12 +50,10 @@ export function LotsTable({ lots, pallets }: LotsTableProps) {
                   {total > 0 ? `${formatQuantity.format(total)} ${lot.unitOfMeasure}` : "Sin definir"}
                 </td>
                 <td className="text-right">
-                  <Link
-                    href={`/dashboard/traceability?view=lotes&lote=${encodeURIComponent(lot.batchNumber)}`}
-                    className="button-secondary button-sm"
-                  >
-                    Ver trazabilidad
-                  </Link>
+                  <RowActionsMenu
+                    label={`Acciones del lote ${lot.batchNumber}`}
+                    actions={[{ label: "Ver trazabilidad", href: `/dashboard/traceability?view=lotes&lote=${encodeURIComponent(lot.batchNumber)}` }]}
+                  />
                 </td>
               </tr>
             );

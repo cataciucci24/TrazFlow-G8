@@ -6,6 +6,7 @@ import { useCallback, useRef, useState, useTransition } from "react";
 
 import { QrScanner } from "@/components/pallet-validation/qr-scanner";
 import { validatePallet } from "@/lib/pallet-validation/actions";
+import { latestScans } from "@/lib/pallet-validation/scan-history";
 import type {
   OrderDispatchDiscrepancy,
   OrderPalletValidation,
@@ -47,6 +48,7 @@ export function PalletValidationPanel({
 
   const validatedCount = pallets.filter((pallet) => pallet.validatedAt).length;
   const missingPallets = pallets.filter((pallet) => !pallet.validatedAt);
+  const history = latestScans(scanHistory, initialScanHistory, new Set(missingPallets.map((pallet) => pallet.qrCode)));
 
   const handleScan = useCallback(
     (qrCode: string) => {
@@ -122,7 +124,6 @@ export function PalletValidationPanel({
           <div className="mt-4 flex items-center justify-between"><p className="font-mono font-bold">{orderId.slice(0, 8).toUpperCase()}</p><Badge tone={missingPallets.length === 0 ? "success" : "warning"}>{missingPallets.length === 0 ? "COMPLETA" : `${missingPallets.length} PENDIENTES`}</Badge></div>
           <div className="mt-4 h-2 overflow-hidden rounded-full bg-stone-100"><div className="h-full rounded-full bg-emerald-600" style={{ width: `${pallets.length ? (validatedCount / pallets.length) * 100 : 0}%` }} /></div>
           <p className="mt-2 text-sm text-stone-500">{validatedCount} de {pallets.length} pallets confirmados</p>
-          <ul className="mt-3 space-y-2">{pallets.map((pallet) => <li key={pallet.id} className="flex flex-wrap items-center gap-2 text-sm"><span className={pallet.validatedAt ? "text-emerald-600" : "text-stone-300"}>{pallet.validatedAt ? "●" : "○"}</span><span className="min-w-0 break-all font-mono font-semibold">{pallet.qrCode}</span><span className="min-w-0 text-stone-500">{pallet.productName}</span></li>)}</ul>
         </div>
       </div>
 
@@ -153,21 +154,6 @@ export function PalletValidationPanel({
           <p className="mt-1 text-sm text-green-700">
             Todos los pallets asociados a la orden fueron validados correctamente.
           </p>
-        </InlineAlert>
-      )}
-
-      {missingPallets.length > 0 && (
-        <InlineAlert variant="info" announce={false}>
-          <p className="font-medium text-sky-900">
-            Pendientes de escanear
-          </p>
-          <ul className="mt-2 list-disc pl-5 text-sm text-sky-800">
-            {missingPallets.map((pallet) => (
-              <li key={pallet.id}>
-                {pallet.qrCode} — {pallet.productName} ({pallet.productSku})
-              </li>
-            ))}
-          </ul>
         </InlineAlert>
       )}
 
@@ -209,8 +195,9 @@ export function PalletValidationPanel({
       )}
 
       <section className="surface bg-[#f9fbfb] p-4">
-        <h3 className="text-xs font-bold tracking-[0.1em] text-stone-500">HISTORIAL DE ESCANEOS ({initialScanHistory.length + scanHistory.length})</h3>
-        {initialScanHistory.length === 0 && scanHistory.length === 0 ? <EmptyState title="Sin escaneos registrados" description="El historial se completará al escanear o validar pallets de esta orden." /> : <ul className="mt-3 space-y-2 text-sm">{scanHistory.map((scan, index) => <li key={`session-${scan.code}-${index}`} className="flex items-center gap-2"><span className={scan.success ? "text-emerald-600" : "text-red-600"}>●</span><span className="min-w-0 break-all font-mono font-semibold">{scan.code}</span><span className="text-stone-500">{scan.message}</span></li>)}{initialScanHistory.map((scan) => <li key={scan.id} className="flex items-center gap-2"><span className="text-emerald-600">●</span><span className="min-w-0 break-all font-mono font-semibold">{scan.qrCode}</span><span className="text-stone-500">Confirmado el {new Date(scan.createdAt).toLocaleString("es-AR")}</span></li>)}</ul>}
+        {/* Un renglón por código: el escaneo más reciente (scan-history.ts). */}
+        <h3 className="text-xs font-bold tracking-[0.1em] text-stone-500">HISTORIAL DE ESCANEOS ({history.length})</h3>
+        {history.length === 0 ? <EmptyState title="Sin escaneos registrados" description="El historial se completará al escanear o validar pallets de esta orden." /> : <ul className="mt-3 space-y-2 text-sm">{history.map((scan) => <li key={scan.key} className="flex items-center gap-2"><span className={scan.tone === "success" ? "text-emerald-600" : scan.tone === "warning" ? "text-amber-600" : "text-red-600"}>●</span><span className="min-w-0 break-all font-mono font-semibold">{scan.code}</span><span className="text-stone-500">{scan.message}</span></li>)}</ul>}
       </section>
 
       {isScannerOpen && (

@@ -11,17 +11,23 @@ import type { ConfirmDispatchResult } from "@/lib/orders/actions";
 type ConfirmDispatchButtonProps = {
   orderId: string;
   missingPalletsCount: number;
+  /**
+   * TRZ-100: motivo por el que lo armado no coincide con lo pedido (mismatchSummary), o null. Solo adelanta el
+   * aviso: la validación real la hace confirm_dispatch_order.
+   */
+  quantityMismatch?: string | null;
 };
 
 export function ConfirmDispatchButton({
   orderId,
   missingPalletsCount,
+  quantityMismatch = null,
 }: ConfirmDispatchButtonProps) {
   const [open, setOpen] = useState(false);
   const [result, setResult] = useState<ConfirmDispatchResult | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  const isBlocked = missingPalletsCount > 0;
+  const isBlocked = missingPalletsCount > 0 || Boolean(quantityMismatch);
   const isSuccess = result?.outcome === "confirmed";
 
   const handleConfirm = () => {
@@ -46,9 +52,11 @@ export function ConfirmDispatchButton({
             Confirmar despacho
           </h2>
           <p className="mt-1 text-sm text-stone-500">
-            {isBlocked
+            {missingPalletsCount > 0
               ? `Faltan validar ${missingPalletsCount} pallet(s) para poder confirmar.`
-              : "La carga fue validada. Confirmá para dar por salida la mercadería."}
+              : quantityMismatch
+                ? `${quantityMismatch} No se puede confirmar hasta que coincida.`
+                : "La carga fue validada. Confirmá para dar por salida la mercadería."}
           </p>
         </div>
 

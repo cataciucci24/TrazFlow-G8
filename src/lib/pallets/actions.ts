@@ -21,7 +21,7 @@ export type CreateLotState = CreatePalletState;
 
 const INITIAL_ERROR = "No se pudo crear el pallet. Revisá los datos e intentá nuevamente.";
 const UPDATE_ERROR = "No se pudieron guardar los cambios del pallet. Intentá nuevamente.";
-const NOT_EDITABLE_ERROR = "Solo se pueden editar pallets en depósito.";
+const NOT_EDITABLE_ERROR = "Solo se pueden editar pallets en depósito o asociados a una orden en borrador.";
 const DELETE_ERROR = "No se pudo eliminar el pallet. Intentá nuevamente.";
 const HAS_HISTORY_ERROR = "No se puede eliminar un pallet con historial de trazabilidad.";
 // Con ERP, productos y lotes se dan de alta en el ERP y llegan por sincronización (US-ERP-03). Los pallets
@@ -159,6 +159,7 @@ async function findLot(supabase: SupabaseClient, companyId: string, batchId: str
 
 function revalidatePalletPaths() {
   revalidatePath("/dashboard/inventory");
+  revalidatePath("/dashboard/inventory/ubicacion");
   revalidatePath("/dashboard/traceability");
   revalidatePath("/dashboard/orders");
   revalidatePath("/dashboard/pallets");
@@ -278,6 +279,46 @@ async function updateErpPalletQuantity(profile: UserProfile, palletId: string, f
   return { error: null, success: `Pallet ${data.qr_code} actualizado.` };
 }
 
+type AssignedQuantityRow = {
+  outcome: "updated" | "unchanged" | "forbidden" | "pallet_not_found" | "not_assigned" | "not_editable" | "invalid_quantity";
+  pallet_id: string | null;
+  qr_code: string | null;
+  order_id: string | null;
+  validation_cleared: boolean;
+};
+
+const ASSIGNED_QUANTITY_ERRORS: Record<Exclude<AssignedQuantityRow["outcome"], "updated" | "unchanged">, string> = {
+  forbidden: "Solo logística puede editar pallets.",
+  pallet_not_found: "El pallet no existe o no pertenece a tu empresa.",
+  not_assigned: "El pallet ya no está asociado a una orden en borrador (puede que se haya despachado). Actualizá la página.",
+  not_editable: "Los pallets heredados de saldos del ERP no se editan.",
+  invalid_quantity: QUANTITY_ERROR,
+};
+
+/**
+ * TRZ-100: cantidad de un pallet asociado a una orden en borrador (update_assigned_pallet_quantity). Solo cambia
+ * la cantidad; si depósito ya lo había validado, la base borra la validación y hay que volver a escanearlo.
+ */
+async function updateAssignedPalletQuantity(palletId: string, formData: FormData): Promise<UpdatePalletState> {
+  const quantity = Number(formData.get("quantity") ?? 0);
+  if (!Number.isFinite(quantity) || quantity <= 0) return { error: QUANTITY_ERROR, success: null };
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("update_assigned_pallet_quantity", { p_pallet_id: palletId, p_quantity: quantity });
+  if (error) return { error: erpStockErrorMessage(error) ?? UPDATE_ERROR, success: null };
+  const row = (data?.[0] ?? null) as AssignedQuantityRow | null;
+  if (!row) return { error: UPDATE_ERROR, success: null };
+  if (row.outcome === "unchanged") return { error: null, success: `La cantidad del pallet ${row.qr_code} no cambió.` };
+  if (row.outcome !== "updated") return { error: ASSIGNED_QUANTITY_ERRORS[row.outcome] ?? UPDATE_ERROR, success: null };
+
+  revalidatePalletPaths();
+  if (row.order_id) revalidatePath(`/dashboard/orders/${row.order_id}`);
+  return {
+    error: null,
+    success: `Pallet ${row.qr_code} actualizado. Reimprimí su etiqueta: tiene la cantidad anterior.`
+      + (row.validation_cleared ? " Depósito ya lo había validado: lo tiene que volver a escanear." : ""),
+  };
+}
+
 /** Actualiza la información logística sin modificar la identidad del pallet. */
 export async function updatePallet(
   palletId: string,
@@ -288,6 +329,10 @@ export async function updatePallet(
   if (!hasRole(profile, "logistics_manager")) {
     return { error: "Solo logística puede editar pallets.", success: null };
   }
+  // Asociado a una orden en borrador: solo la cantidad, con o sin ERP.
+  const { data: current } = await (await createClient())
+    .from("pallets").select("status").eq("id", palletId).eq("company_id", profile.companyId).maybeSingle();
+  if (current?.status === "assigned") return updateAssignedPalletQuantity(palletId, formData);
   if (await isErpEnabled(profile.companyId)) return updateErpPalletQuantity(profile, palletId, formData);
 
   const productName = String(formData.get("productName") ?? "").trim();

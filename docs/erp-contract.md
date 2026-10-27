@@ -226,8 +226,9 @@ panel de integración.
 - `getDispatchStatus`: si la clave está en memoria responde `confirmed` con la referencia del reporte, simulando que
   administración confirma enseguida. Si no está (el proceso se reinició, o es otra instancia en Vercel) responde
   `confirmed` igual, con `erpReference: null`: el mock no guarda estado confiable entre procesos y no queremos
-  pallets trabados en local. Con `ERP_MOCK_DISPATCH_STATUS=draft` responde `draft`, para ver el aviso "Esperando
-  remito" en una prueba local.
+  pallets trabados en local. Con `ERP_MOCK_DISPATCH_STATUS=draft` responde `draft`, para probar en local que los
+  pallets despachados siguen contando contra el saldo (no vuelven al disponible de "Armar pallet") hasta que el
+  remito se confirma.
 - Fallas permanentes con `ERP_MOCK_SCENARIO` (`validation` solo afecta a `reportDispatch`).
 - En tests: `new MockErpClient({ failures: ["timeout", "server_error"] })` falla una vez por cada elemento y después
   responde bien, para probar reintentos; `fixtures` y `now` se pueden inyectar.

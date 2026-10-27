@@ -194,7 +194,7 @@ se envía el remito y alguien lo confirma, el saldo sigue alto). Si contaran sie
 el saldo baja y la mercadería se resta dos veces, bloqueando stock que existe.
 
 **Ejemplo (lote de 120):** se arman 40 + 25 → disponible 55. Se despachan; el remito queda en borrador → siguen
-contando, disponible 55, aviso "Esperando remito (MAT-DN-…)". Administración confirma; la próxima sincronización ve
+contando, disponible 55. Administración confirma; la próxima sincronización ve
 la confirmación y trae el saldo en 55 → los 65 dejan de contar, disponible 55 (saldo nuevo, sin restar dos veces).
 Con el mock, que no descuenta stock, el saldo vuelve a ser 120 y el disponible también: es esperable.
 
@@ -220,10 +220,12 @@ para probarlo a mano con dos sesiones `psql` están en el encabezado de `supabas
 vuelvan a contar. La suma puede quedar por encima del saldo. No se rompe nada: el disponible queda negativo y el
 selector de "Armar pallet" no ofrece ese lote.
 
-**Dónde se ve:** el selector de lote de "Armar pallet" muestra producto, lote y disponible, y un aviso que no
-bloquea: la etiqueta del remito ("Esperando remito (MAT-DN-…)", "Remito confirmado, falta sincronizar", "Remito
-anulado / no encontrado en el ERP") y "Hay X despachadas con remito todavía sin confirmar en el ERP". Los números
-salen de `erp_stock_overview()` (logística y depósito), con la misma regla que el trigger.
+**Dónde se ve:** el selector de lote de "Armar pallet" muestra producto, lote y disponible y, al elegir un lote, el
+saldo en el ERP, lo armado, lo despachado sin descontar (si hay) y el depósito. No muestra el estado del remito: el
+disponible ya descuenta lo despachado cuyo remito no se confirmó, así que ese estado no cambia lo que se puede armar.
+El estado de cada remito se ve en Integración ERP. Los números salen de `erp_stock_overview()` (logística y
+depósito), con la misma regla que el trigger; la función sigue devolviendo las columnas del remito
+(`document_label`, `awaiting_*`), que la app no usa.
 
 ## Estado del remito
 
@@ -248,11 +250,46 @@ eventos que faltan se retoman la próxima vez.
 
 ## Pedido vs. armado
 
-En el detalle de una orden del ERP (logística) y en la pantalla de confirmación de despacho (depósito) se ve, por
-producto, lo pedido (suma de líneas), lo armado (suma de pallets asociados con `expected = true`) y la diferencia,
-con un aviso "sobran X" / "faltan X". **Es solo un aviso:** no bloquea la validación ni la confirmación. Una orden
-del ERP sin líneas muestra "Esta orden se importó sin líneas del ERP". Las órdenes manuales y las empresas sin ERP
-no muestran la tabla.
+En el detalle de una orden del ERP (logística) y en la pantalla de confirmación de despacho (depósito) se ve, en la
+sección "Pedido" y por producto, lo pedido (suma de líneas), lo armado (suma de pallets asociados con `expected = true`) y la diferencia
+("sobran X" / "faltan X"). Una orden del ERP sin líneas muestra "Esta orden se importó sin líneas del ERP". Las
+órdenes manuales y las empresas sin ERP no muestran la tabla.
+
+**No se confirma un despacho que no coincide con lo pedido.** El contrato con el ERP admite un solo reporte de
+despacho por orden (clave `dispatch:{orden}`): si se confirmara con faltantes, lo que quedó sin despachar ya no se
+podría despachar desde TrazFlow; si se confirmara con sobrantes, se le informaría al ERP más de lo que pidió.
+
+- Regla (en la base, `confirm_dispatch_order`, migración `20261028100400_trz100_dispatch_quantity_match.sql`): si
+  la orden tiene `external_id` y líneas, para cada producto la suma de los pallets esperados tiene que ser igual a la
+  suma de sus líneas. Un producto armado que la orden no pide también es diferencia. La comparación es **exacta**,
+  redondeada a 2 decimales, también en kilogramos (no hay tolerancia por peso variable). Un pallet sin cantidad
+  cuenta 0.
+- Si no coincide, la función devuelve `outcome = 'quantity_mismatch'` sin cambiar nada (la orden sigue en borrador,
+  los pallets asignados, sin evento de despacho ni reporte en el outbox). El chequeo corre después de los que ya
+  existían: primero se exige validar todos los pallets (`missing_pallets`).
+- La validación por QR sigue permitida: solo se bloquea la confirmación. Depósito ve el detalle por producto
+  ("No coincide con lo pedido: faltan 40 cajas de Arroz largo fino 1 kg") en la tabla, en el botón "Confirmar
+  despacho" (que queda deshabilitado) y, si igual intenta confirmar, en el mensaje del rechazo.
+- Sin cambios: las órdenes manuales (`external_id` nulo) y las del ERP importadas antes de TRZ-100 (sin líneas) se
+  confirman como antes.
+
+**Corregir un pallet ya asociado.** Para completar una orden se puede armar otro pallet o cambiar la cantidad de
+uno que ya está en la orden (por ejemplo de 46 a 48,25 kg). Logística puede editar **solo la cantidad** de un pallet
+asociado a una orden en borrador (estado `assigned`), con o sin ERP, desde el menú "⋯" del pallet en Pallets o en
+Stock. Lo hace la función `update_assigned_pallet_quantity` (migración
+`20261028100500_trz100_assigned_pallet_quantity.sql`):
+
+- Producto y lote no cambian; los pallets heredados de saldos del ERP siguen sin editarse.
+- El tope por saldo del ERP se aplica igual que al armar.
+- Si depósito ya lo había validado, la validación se borra en la misma transacción y hay que volver a escanearlo:
+  así nadie confirma una cantidad que no se revisó. Guardar sin cambiar la cantidad no borra nada.
+- El nuevo escaneo queda como otro evento `qr_scan` con `details.validation_round` (1, 2, …): el historial no se
+  borra y el índice `idx_events_single_qr_validation` admite un escaneo por ronda (migración
+  `20261028100600_trz100_revalidate_after_quantity_edit.sql`). En la pantalla de depósito, el historial muestra solo
+  el escaneo más reciente de cada código; si el pallet volvió a pendiente, dice que hay que volver a escanearlo.
+- La etiqueta impresa queda con la cantidad anterior (el QR no cambia): la app avisa que hay que reimprimirla.
+- Bloquea la orden igual que `confirm_dispatch_order`, así que una edición y una confirmación simultáneas no se
+  pisan.
 
 ## Pruebas
 
@@ -265,6 +302,12 @@ no muestran la tabla.
   órdenes rechazadas), tope (dos depósitos sumados, sin saldo, inactivos, lotes manuales, insert y edición directos
   por la API, depósito no elegible), cada fila de la tabla del tope, la vista, las RPC del remito por rol y empresa,
   auditoría en la sincronización, RLS y payload del outbox. Incluye los pasos de la prueba de concurrencia manual.
+- `supabase/tests/trz100_dispatch_quantity_match.sql`: confirmación con pedido vs. armado (falta, sobra, producto
+  no pedido, kg exacto, varias líneas del mismo producto, pallets no esperados, el rechazo no cambia nada,
+  `missing_pallets` primero, corregir y confirmar con outbox, orden sin líneas y orden manual).
+- `supabase/tests/trz100_assigned_pallet_quantity.sql`: cantidad de un pallet asociado (permisos, estados, heredados,
+  unidad, sin cambios, tope por saldo, borrar la validación), nuevo escaneo con ronda 2 y confirmación con la
+  cantidad corregida.
 - `supabase/tests/trz100_cloud_state_fixture.sql` + `trz100_cloud_state_checks.sql`: la migración sobre una réplica
   del estado de la nube (el método está en el encabezado del fixture).
 - Correr cada uno con `psql -v ON_ERROR_STOP=1 -f …` sobre una base local migrada.

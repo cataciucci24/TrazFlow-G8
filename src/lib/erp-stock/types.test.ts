@@ -1,20 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { awaitingDocumentWarning, canBuildFrom, documentLabelText, formatStockQuantity, toErpStockRow } from "./types.ts";
-
-test("etiqueta del remito", () => {
-  assert.equal(documentLabelText({ documentLabel: null, awaitingReferences: [] }), null);
-  assert.equal(documentLabelText({ documentLabel: "awaiting_document", awaitingReferences: ["MAT-DN-2026-00001"] }), "Esperando remito (MAT-DN-2026-00001)");
-  assert.equal(documentLabelText({ documentLabel: "awaiting_document", awaitingReferences: [] }), "Esperando remito");
-  assert.equal(documentLabelText({ documentLabel: "confirmed_unsynced", awaitingReferences: [] }), "Remito confirmado, falta sincronizar");
-  assert.equal(documentLabelText({ documentLabel: "document_problem", awaitingReferences: [] }), "Remito anulado / no encontrado en el ERP");
-});
-
-test("aviso del formulario: no bloquea y dice cuánto está sin confirmar", () => {
-  assert.equal(awaitingDocumentWarning({ awaitingQuantity: 0, unitOfMeasure: "cajas" }), null);
-  assert.equal(awaitingDocumentWarning({ awaitingQuantity: 65, unitOfMeasure: "cajas" }), "Hay 65 cajas despachadas con remito todavía sin confirmar en el ERP.");
-});
+import { canBuildFrom, formatStockQuantity, toErpStockRow } from "./types.ts";
 
 test("solo se arma de lotes activos con disponible", () => {
   assert.equal(canBuildFrom({ lotActive: true, productActive: true, available: 55 }), true);
@@ -37,6 +24,6 @@ test("mapea la fila de erp_stock_overview (numeric llega como string o número)"
   });
   assert.equal(row.erpQuantity, 120);
   assert.equal(row.available, 55);
-  assert.equal(row.documentLabel, null);
-  assert.deepEqual(row.awaitingReferences, []);
+  assert.equal(row.dispatchedPending, 0);
+  assert.equal("documentLabel" in row, false, "el estado del remito no llega a la app");
 });

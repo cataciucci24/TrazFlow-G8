@@ -9,28 +9,39 @@ import { ProductField, type ProductSelection } from "@/components/pallets/produc
 
 import { useRef, useState, useTransition } from "react";
 
+import { PalletQrDialog } from "@/components/pallets/pallet-qr-button";
 import { ConfirmationDialog, Modal } from "@/components/ui/modal";
+import { RowActionsMenu, type RowAction } from "@/components/ui/row-actions-menu";
 import { deletePallet, updatePallet, type UpdatePalletState } from "@/lib/pallets/actions";
 import { quantityStep } from "@/lib/pallets/units";
 import type { ExistingProduct, PalletWithHistory, ProductBatch } from "@/lib/types";
 
 const INITIAL_STATE: UpdatePalletState = { error: null, success: null };
 
-export function PalletActions({
+/**
+ * Menú "⋯" de la fila de un pallet con todas sus acciones: ver trazabilidad, ver QR, imprimir la etiqueta, editar
+ * (solo si se puede; si no, no aparece) y eliminar (deshabilitado con el motivo cuando no se puede). Los diálogos
+ * de QR, edición y eliminación se abren desde el menú.
+ */
+export function PalletRowActions({
   pallet,
   existingBatches,
   existingProducts,
-  allowEdit = true,
-  quantityOnly = false,
+  erpManaged = false,
 }: {
   pallet: PalletWithHistory;
   existingBatches: ProductBatch[];
   existingProducts: ExistingProduct[];
-  /** false si el pallet no se puede editar desde TrazFlow (p. ej. heredado de un saldo del ERP). */
-  allowEdit?: boolean;
-  /** Con ERP (TRZ-100) solo se edita la cantidad: producto y lote vienen del ERP. */
-  quantityOnly?: boolean;
+  /**
+   * Con ERP (TRZ-100): solo se edita la cantidad, y solo de los pallets armados en TrazFlow contra un lote del ERP.
+   * Los heredados de saldos del ERP y los de lotes manuales no se editan.
+   */
+  erpManaged?: boolean;
 }) {
+  // Asociado a una orden en borrador (TRZ-100): solo la cantidad, también sin ERP.
+  const isAssigned = pallet.status === "assigned";
+  const quantityOnly = erpManaged || isAssigned;
+  const allowEdit = pallet.origin?.sourceSystem !== "erp" && (!erpManaged || pallet.lotSourceSystem === "erp");
   const notify = useFeedback();
   const [state, setState] = useState(INITIAL_STATE);
   const [isPending, startTransition] = useTransition();
@@ -41,6 +52,7 @@ export function PalletActions({
   const [deleteState, setDeleteState] = useState<{ error: string | null; success: string | null } | null>(null);
   const [isDeleting, startDeleting] = useTransition();
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [qrOpen, setQrOpen] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
   // Un pallet con eventos de trazabilidad no se elimina: la base lo impide para
   // conservar el historial.
@@ -48,12 +60,30 @@ export function PalletActions({
   const isImported = pallet.origin?.sourceSystem === "erp";
   const mayDelete = pallet.status === "in_warehouse" && !pallet.hasHistory && !isImported;
   const notDeletableReason = isImported
-    ? "Heredado de un saldo del ERP: no se elimina desde TrazFlow"
+    ? "heredado de un saldo del ERP"
     : pallet.hasHistory
-      ? "Tiene historial de trazabilidad: no se puede eliminar"
-      : "Solo se pueden eliminar pallets en depósito";
+      ? "tiene historial de trazabilidad"
+      : "solo se eliminan pallets en depósito";
   // Fuera del depósito el pallet ya forma parte de un despacho: sus datos no se editan.
-  const mayEdit = allowEdit && pallet.status === "in_warehouse";
+  // Fuera del depósito, solo mientras está en una orden sin despachar (assigned).
+  const mayEdit = allowEdit && (pallet.status === "in_warehouse" || isAssigned);
+
+  const actions: RowAction[] = [
+    { label: "Ver trazabilidad", href: `/dashboard/traceability?qr=${encodeURIComponent(pallet.qrCode)}` },
+    { label: "Ver QR", onSelect: () => setQrOpen(true) },
+    { label: "Imprimir etiqueta", href: `/dashboard/pallets/print?ids=${pallet.id}` },
+    ...(mayEdit ? [{ label: "Editar", onSelect: openEdit }] : []),
+    mayDelete
+      ? { label: "Eliminar", danger: true, onSelect: () => { setDeleteState(null); setDeleteOpen(true); } }
+      : { label: "Eliminar", disabledReason: notDeletableReason },
+  ];
+
+  function openEdit() {
+    setState(INITIAL_STATE);
+    setProduct(palletProduct);
+    setIsDirty(false);
+    setIsOpen(true);
+  }
 
   function handleDelete() {
     if (isDeleting || !mayDelete) return;
@@ -93,9 +123,12 @@ export function PalletActions({
 
   return (
     <div className="inline-flex flex-col items-end gap-2">
-      {mayEdit && <button type="button" onClick={() => { setState(INITIAL_STATE); setProduct(palletProduct); setIsDirty(false); setIsOpen(true); }} className="button-secondary button-sm">Editar</button>}
+      <RowActionsMenu label={`Acciones del pallet ${pallet.qrCode}`} actions={actions} />
+      <PalletQrDialog pallet={pallet} open={qrOpen} onClose={() => setQrOpen(false)} />
       <Modal open={mayEdit && isOpen} onClose={closeForm} title={quantityOnly ? "Editar cantidad del pallet" : "Editar pallet"}
-        description={quantityOnly
+        description={isAssigned
+          ? "Está asociado a una orden sin despachar: solo se cambia la cantidad (sin superar el saldo del lote en el ERP). Si depósito ya lo validó, lo tendrá que volver a escanear. Después reimprimí la etiqueta."
+          : quantityOnly
           ? "Con el ERP activo solo se cambia la cantidad, sin superar el saldo disponible del lote."
           : "Actualizá su producto, lote o ubicación. Cerrá o cancelá para descartar los datos sin guardar."}
         busy={isPending} dismissOnBackdrop={false} dismissOnEscape={!isDirty}>
@@ -119,7 +152,6 @@ export function PalletActions({
           </fieldset>
         </form>
       </Modal>
-      {mayDelete ? <button type="button" disabled={isDeleting} aria-busy={isDeleting} onClick={() => { setDeleteState(null); setDeleteOpen(true); }} className="button-danger button-sm">Eliminar</button> : <span title={notDeletableReason} className="text-xs text-stone-400">No eliminable</span>}
       <ConfirmationDialog open={deleteOpen} onClose={() => setDeleteOpen(false)} onConfirm={handleDelete}
         title="Eliminar pallet" description={<>Vas a eliminar el pallet <strong className="break-all font-mono">{pallet.qrCode}</strong>. Esta acción no se puede deshacer.</>}
         confirmLabel="Eliminar pallet" danger busy={isDeleting} blocked={!mayDelete} error={deleteState?.error} />

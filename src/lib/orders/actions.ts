@@ -9,6 +9,8 @@ import { hasRole, requireUserProfile } from "@/lib/auth/session";
 import { processCompanyErpOutbox } from "@/lib/erp-outbox/run";
 import { isErpEnabled } from "@/lib/erp-sync/enabled";
 import { canCreateManualOrders, ERP_MANAGED_ORDERS_ERROR } from "@/lib/orders/erp-policy";
+import { mismatchSummary } from "@/lib/orders/lines";
+import { getOrderLinesComparison } from "@/lib/orders/queries";
 
 export type CreateDispatchOrderState = {
   errors: {
@@ -264,6 +266,7 @@ export type ConfirmDispatchOutcome =
   | "invalid_status"
   | "no_pallets"
   | "missing_pallets"
+  | "quantity_mismatch"
   | "forbidden"
   | "error";
 
@@ -286,6 +289,7 @@ const CONFIRM_MESSAGES: Record<ConfirmDispatchOutcome, string> = {
   invalid_status: "La orden ya fue confirmada (o no admite confirmarse en su estado actual).",
   no_pallets: "La orden no tiene pallets asociados.",
   missing_pallets: "Todavía hay pallets esperados sin validar.",
+  quantity_mismatch: "Lo armado no coincide con lo pedido. No se puede confirmar el despacho hasta que coincida.",
   forbidden: "No tenés permisos para confirmar despachos.",
   error: "No se pudo confirmar el despacho. Intentá nuevamente.",
 };
@@ -336,10 +340,29 @@ export async function confirmDispatchOrder(
     );
   }
 
+  if (row.outcome === "quantity_mismatch") {
+    return { outcome: row.outcome, message: await quantityMismatchMessage(orderId) };
+  }
+
   return {
     outcome: row.outcome,
     message: CONFIRM_MESSAGES[row.outcome] ?? CONFIRM_MESSAGES.error,
   };
+}
+
+/**
+ * TRZ-100: la base rechazó la confirmación porque el armado no coincide con lo pedido. El detalle por producto
+ * se arma con la misma comparación que muestra la tabla "Pedido vs. armado". Si no se puede leer, queda el
+ * mensaje genérico: el rechazo ya ocurrió igual.
+ */
+async function quantityMismatchMessage(orderId: string): Promise<string> {
+  try {
+    const summary = mismatchSummary((await getOrderLinesComparison(orderId)).rows);
+    if (summary) return `${summary} No se puede confirmar el despacho hasta que coincida.`;
+  } catch {
+    // Mensaje genérico.
+  }
+  return CONFIRM_MESSAGES.quantity_mismatch;
 }
 
 export type DissociatePalletOutcome =

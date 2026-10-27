@@ -5,14 +5,6 @@
  */
 import type { ProductUnit } from "../pallets/units.ts";
 
-/**
- * Por qué hay despachados que todavía cuentan contra el saldo:
- *   - awaiting_document: el reporte no se envió o el remito está sin consultar o en borrador;
- *   - confirmed_unsynced: el remito se confirmó, pero el saldo es anterior a la confirmación;
- *   - document_problem: el remito está anulado o no se encontró en el ERP (hay que revisar).
- */
-export type ErpStockDocumentLabel = "awaiting_document" | "confirmed_unsynced" | "document_problem";
-
 export type ErpStockRow = {
   batchId: string;
   batchNumber: string;
@@ -34,11 +26,6 @@ export type ErpStockRow = {
   available: number;
   /** La sincronización más vieja entre los saldos sumados. */
   oldestSyncedAt: string;
-  documentLabel: ErpStockDocumentLabel | null;
-  /** Despachado con el remito todavía sin confirmar en el ERP. */
-  awaitingQuantity: number;
-  /** Remitos en borrador o sin consultar (p. ej. MAT-DN-2026-00001). */
-  awaitingReferences: string[];
 };
 
 const QUANTITY_FORMAT = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 2 });
@@ -52,34 +39,16 @@ export function formatStockQuantity(quantity: number, unit: ProductUnit): string
   return `${QUANTITY_FORMAT.format(quantity)} ${label}`;
 }
 
-/** Texto de la etiqueta del remito, o null cuando todo está al día. */
-export function documentLabelText(row: Pick<ErpStockRow, "documentLabel" | "awaitingReferences">): string | null {
-  switch (row.documentLabel) {
-    case "awaiting_document":
-      return row.awaitingReferences.length
-        ? `Esperando remito (${row.awaitingReferences.join(", ")})`
-        : "Esperando remito";
-    case "confirmed_unsynced":
-      return "Remito confirmado, falta sincronizar";
-    case "document_problem":
-      return "Remito anulado / no encontrado en el ERP";
-    case null:
-      return null;
-  }
-}
-
-/** Aviso (no bloquea) al elegir el lote en el alta. */
-export function awaitingDocumentWarning(row: Pick<ErpStockRow, "awaitingQuantity" | "unitOfMeasure">): string | null {
-  if (row.awaitingQuantity <= 0) return null;
-  return `Hay ${formatStockQuantity(row.awaitingQuantity, row.unitOfMeasure)} despachadas con remito todavía sin confirmar en el ERP.`;
-}
-
 /** Se pueden armar pallets del lote: activo, de producto activo y con saldo disponible. */
 export function canBuildFrom(row: Pick<ErpStockRow, "lotActive" | "productActive" | "available">): boolean {
   return row.lotActive && row.productActive && row.available > 0;
 }
 
-/** Fila cruda de erp_stock_overview → ErpStockRow. */
+/**
+ * Fila cruda de erp_stock_overview → ErpStockRow. La función también devuelve el estado del remito
+ * (document_label, awaiting_*), pero la app no lo usa: el disponible ya descuenta lo despachado sin remito
+ * confirmado, y el estado del remito se ve en Integración ERP.
+ */
 export function toErpStockRow(raw: Record<string, unknown>): ErpStockRow {
   return {
     batchId: String(raw.batch_id),
@@ -97,8 +66,5 @@ export function toErpStockRow(raw: Record<string, unknown>): ErpStockRow {
     dispatchedPending: Number(raw.dispatched_pending),
     available: Number(raw.available),
     oldestSyncedAt: String(raw.oldest_synced_at),
-    documentLabel: (raw.document_label as ErpStockDocumentLabel | null) ?? null,
-    awaitingQuantity: Number(raw.awaiting_quantity ?? 0),
-    awaitingReferences: Array.isArray(raw.awaiting_references) ? raw.awaiting_references.map(String) : [],
   };
 }

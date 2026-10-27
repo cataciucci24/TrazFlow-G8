@@ -2,15 +2,15 @@
 
 import { useState } from "react";
 import { PALLET_STATUS_LABELS } from "@/lib/pallets/labels";
-import type { Pallet } from "@/lib/types";
+import type { PalletWithHistory } from "@/lib/types";
 import { FilterPanel, EmptyState, SectionHeader } from "@/components/ui/design-system";
-import { groupByLocation, locationLabel, locationOf, LocationStockCard, LocationStockTable } from "@/components/inventory/location-stock";
+import { groupByLocation, locationLabel, locationOf, LocationStockCard, LocationStockTable, type PalletActionsContext } from "@/components/inventory/location-stock";
 
 function normalize(value: string) {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es-AR");
 }
 
-export function InventoryPanel({ pallets, initialSearch = "" }: { pallets: Pallet[]; initialSearch?: string }) {
+export function InventoryPanel({ pallets, actions, initialSearch = "" }: { pallets: PalletWithHistory[]; actions: PalletActionsContext; initialSearch?: string }) {
   const [search, setSearch] = useState(initialSearch);
   const [location, setLocation] = useState("");
   const [status, setStatus] = useState("");
@@ -82,7 +82,7 @@ export function InventoryPanel({ pallets, initialSearch = "" }: { pallets: Palle
         ) : hasFilters ? groups.map(([value, group]) => (
           <section key={JSON.stringify(value)} aria-label={`Pallets: ${locationLabel(value)}`} className="section-stack [&_.section-title]:break-words">
             <SectionHeader title={locationLabel(value)} description={`${group.length} ${group.length === 1 ? "pallet" : "pallets"} en esta ubicación.`} />
-            <LocationStockTable location={value} pallets={group} filtered />
+            <LocationStockTable location={value} pallets={group} actions={actions} filtered />
           </section>
         )) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

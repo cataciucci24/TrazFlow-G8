@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { compareOrderLines, differenceWarning } from "./lines.ts";
+import { compareOrderLines, differenceWarning, mismatchSummary } from "./lines.ts";
 
 const ACE = { productId: "p-ace", productName: "Aceite", productSku: "ACE-500", unitOfMeasure: "cajas" as const };
 const ARR = { productId: "p-arr", productName: "Arroz", productSku: "ARR-1KG", unitOfMeasure: "cajas" as const };
@@ -33,4 +33,13 @@ test("aviso de diferencia", () => {
   assert.equal(differenceWarning({ difference: 0, unitOfMeasure: "cajas" }), null);
   assert.equal(differenceWarning({ difference: -40, unitOfMeasure: "cajas" }), "faltan 40 cajas");
   assert.equal(differenceWarning({ difference: 5.5, unitOfMeasure: "kilogramos" }), "sobran 5,5 kilogramos");
+});
+
+test("mismatchSummary: qué falta o sobra por producto, o null si coincide", () => {
+  assert.equal(mismatchSummary(compareOrderLines([{ ...ACE, quantity: 10 }], [{ ...ACE, quantity: 10 }])), null);
+  assert.equal(mismatchSummary([]), null);
+  assert.equal(
+    mismatchSummary(compareOrderLines([{ ...ARR, quantity: 100 }, { ...ACE, quantity: 10 }], [{ ...ARR, quantity: 60 }, { ...ACE, quantity: 10 }, { ...QSO, quantity: 2.5 }])),
+    "No coincide con lo pedido: faltan 40 cajas de Arroz; sobran 2,5 kilogramos de Queso.",
+  );
 });

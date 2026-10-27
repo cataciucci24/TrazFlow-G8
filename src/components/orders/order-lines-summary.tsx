@@ -2,8 +2,8 @@ import { Badge, InlineAlert, SectionHeader, TableShell } from "@/components/ui/d
 import { differenceWarning, type OrderProductComparison } from "@/lib/orders/lines";
 
 /**
- * Pedido vs. armado por producto de una orden del ERP (TRZ-100). Es solo un aviso: no bloquea la validación ni
- * la confirmación del despacho.
+ * Pedido vs. armado por producto de una orden del ERP (TRZ-100). La validación por QR sigue permitida, pero el
+ * despacho no se confirma hasta que coincida (confirm_dispatch_order devuelve quantity_mismatch).
  */
 export function OrderLinesSummary({ hasLines, rows }: { hasLines: boolean; rows: OrderProductComparison[] }) {
   const format = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 2 });
@@ -11,14 +11,14 @@ export function OrderLinesSummary({ hasLines, rows }: { hasLines: boolean; rows:
 
   return (
     <section className="section-stack" aria-label="Pedido y armado">
-      <SectionHeader title="Pedido vs. armado" description="Lo que pide la orden en el ERP comparado con los pallets asociados." />
+      <SectionHeader title="Pedido" description="Lo que pide la orden en el ERP comparado con los pallets asociados." />
       {!hasLines ? (
         <InlineAlert variant="info" announce={false}>Esta orden se importó sin líneas del ERP.</InlineAlert>
       ) : (
         <>
           {mismatched.length > 0 ? (
             <InlineAlert variant="warning" announce={false}>
-              El armado no coincide con lo pedido: {mismatched.map((row) => `${row.productName}, ${differenceWarning(row)}`).join("; ")}. Es solo un aviso: se puede validar y confirmar igual.
+              El armado no coincide con lo pedido: {mismatched.map((row) => `${row.productName}, ${differenceWarning(row)}`).join("; ")}. No se puede confirmar el despacho hasta que coincida con lo pedido.
             </InlineAlert>
           ) : null}
           <TableShell label="Pedido y armado por producto" mobileLayout="rows">
