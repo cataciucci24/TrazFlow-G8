@@ -1,4 +1,5 @@
 import type {
+  BatchPickingPolicy,
   DeliveryReceipt,
   DeliveryReport,
   DeliveryReportResult,
@@ -53,4 +54,10 @@ export interface ErpClient {
    * `receipt.idempotencyKey`. Mismo `not_ready` si el documento todavía no existe.
    */
   attachDeliveryReceipt(receipt: DeliveryReceipt, content: Uint8Array): Promise<DeliveryReportResult>;
+
+  /**
+   * Regla con la que el ERP elige qué lote sale primero (TRZ-65). TrazFlow la usa solo para sugerir el orden de los
+   * pallets al armar una orden. Si el ERP no tiene una regla configurada, devuelve `fifo`.
+   */
+  getBatchPickingPolicy(): Promise<BatchPickingPolicy>;
 }

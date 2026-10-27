@@ -6,6 +6,7 @@ import type { MockDispatchStatus, MockScenario } from "./mock-scenarios.ts";
 import {
   ERP_CONTRACT_VERSION,
   ErpError,
+  type BatchPickingPolicy,
   type DeliveryReceipt,
   type DeliveryReport,
   type DeliveryReportResult,
@@ -34,6 +35,8 @@ export type MockErpClientOptions = {
   now?: () => Date;
   /** Qué responde getDispatchStatus (ERP_MOCK_DISPATCH_STATUS). Por defecto `confirmed`. */
   dispatchStatus?: MockDispatchStatus;
+  /** Qué responde getBatchPickingPolicy (TRZ-65). Por defecto `expiry`. */
+  batchPickingPolicy?: BatchPickingPolicy;
 };
 
 type Operation =
@@ -43,7 +46,8 @@ type Operation =
   | "reportDispatch"
   | "getDispatchStatus"
   | "reportDelivery"
-  | "attachDeliveryReceipt";
+  | "attachDeliveryReceipt"
+  | "getBatchPickingPolicy";
 
 const WRITE_OPERATIONS: ReadonlySet<Operation> = new Set(["reportDispatch", "reportDelivery", "attachDeliveryReceipt"]);
 
@@ -65,6 +69,7 @@ export class MockErpClient implements ErpClient {
   /** Entregas y remitos informados (TRZ-103), por clave. */
   readonly #deliveries = new Map<string, StoredReport>();
   readonly #dispatchStatus: MockDispatchStatus;
+  readonly #batchPickingPolicy: BatchPickingPolicy;
 
   constructor(options: MockErpClientOptions = {}) {
     this.#scenario = options.scenario ?? "ok";
@@ -72,6 +77,7 @@ export class MockErpClient implements ErpClient {
     this.#data = structuredClone(options.fixtures ?? MOCK_ERP_FIXTURES);
     this.#now = options.now ?? (() => new Date());
     this.#dispatchStatus = options.dispatchStatus ?? "confirmed";
+    this.#batchPickingPolicy = options.batchPickingPolicy ?? "expiry";
   }
 
   async healthcheck(): Promise<ErpHealth> {
@@ -171,6 +177,11 @@ export class MockErpClient implements ErpClient {
     assertValidDeliveryReceipt(receipt, content);
     const fingerprint = `${stableStringify(receipt)}:${content.byteLength}`;
     return this.#storeDelivery(receipt.idempotencyKey, receipt.dispatchIdempotencyKey, fingerprint);
+  }
+
+  async getBatchPickingPolicy(): Promise<BatchPickingPolicy> {
+    this.#simulate("getBatchPickingPolicy");
+    return this.#batchPickingPolicy;
   }
 
   #storeDelivery(key: string, dispatchKey: string, fingerprint: string): DeliveryReportResult {

@@ -151,6 +151,10 @@ export type Pallet = {
   origin?: ErpOrigin;
   /** Origen del lote: los pallets de lotes del ERP se arman contra su saldo (TRZ-100). */
   lotSourceSystem?: "trazflow" | "erp";
+  /** Vencimiento del lote (YYYY-MM-DD), para sugerir el orden de salida (TRZ-65). */
+  batchExpirationDate?: string | null;
+  /** Alta del pallet en TrazFlow, para FIFO/LIFO (TRZ-65). */
+  palletCreatedAt?: string;
 };
 
 /** Pallet con la marca de si ya tiene eventos de trazabilidad (la base impide eliminarlo). */

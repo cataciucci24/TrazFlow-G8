@@ -126,6 +126,7 @@ export async function syncCompanyFromErp(params: SyncCompanyParams): Promise<Erp
         warehouseExternalId: line.warehouseExternalId,
       })),
     })), "las órdenes");
+    await syncBatchPickingPolicy(db, companyId, erp);
   } catch (error) {
     fatal = fatalMessage(error);
   }
@@ -135,6 +136,19 @@ export async function syncCompanyFromErp(params: SyncCompanyParams): Promise<Erp
     throw new Error("No se pudo cerrar la auditoría de la sincronización con el ERP.");
   }
   return toErpSyncRunSummary(finished.data as Parameters<typeof toErpSyncRunSummary>[0]);
+}
+
+/**
+ * Política de salida de lotes del ERP (TRZ-65). Es solo para sugerir un orden al armar órdenes: si el ERP no la
+ * informa o no se puede guardar, la sincronización sigue igual y la app usa FIFO.
+ */
+async function syncBatchPickingPolicy(db: ErpSyncDb, companyId: string, erp: ErpClient): Promise<void> {
+  try {
+    const policy = await erp.getBatchPickingPolicy();
+    await db.rpc("erp_set_batch_picking_policy", { p_company_id: companyId, p_policy: policy });
+  } catch {
+    // Se ignora a propósito: no es parte de los datos maestros.
+  }
 }
 
 /** Estado de los remitos (TRZ-100). Lo que falle queda en la auditoría como `dispatch_document`; nunca corta la corrida. */

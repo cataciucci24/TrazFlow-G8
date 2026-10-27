@@ -7,6 +7,8 @@ import { PalletTrackingPanel } from "@/components/traceability/pallet-tracking-p
 import { hasRole, requireUserProfile } from "@/lib/auth/session";
 import { isErpEnabled } from "@/lib/erp-sync/enabled";
 import { getErpStockOverview } from "@/lib/erp-stock/queries";
+import { ErpStockTable } from "@/components/erp/erp-stock-table";
+import { getExpirationThresholds } from "@/lib/expiration/queries";
 import { getLatestErpSyncRun } from "@/lib/erp-sync/queries";
 import { getCompanyLots, getCompanyPallets, getCompanyProducts } from "@/lib/pallets/queries";
 import type { ProductBatch } from "@/lib/types";
@@ -19,13 +21,14 @@ export default async function PalletsPage() {
   const profile = await requireUserProfile();
   if (!hasRole(profile, "logistics_manager")) redirect("/dashboard");
   const erpEnabled = await isErpEnabled(profile.companyId);
-  const [pallets, lots, products, lastRun, warehouses, erpLots] = await Promise.all([
+  const [pallets, lots, products, lastRun, warehouses, erpLots, thresholds] = await Promise.all([
     getCompanyPallets(profile.companyId),
     getCompanyLots(),
     getCompanyProducts(profile.companyId),
     erpEnabled ? getLatestErpSyncRun(profile.companyId) : null,
     getWarehouses(profile.companyId),
     erpEnabled ? getErpStockOverview() : undefined,
+    erpEnabled ? getExpirationThresholds() : null,
   ]);
   const existingBatches: ProductBatch[] = lots.map((lot) => ({ productSku: lot.productSku, batchNumber: lot.batchNumber }));
 
@@ -40,6 +43,7 @@ export default async function PalletsPage() {
         El ERP informa cuánto hay de cada lote; los pallets los armás acá con su cantidad real, sin superar ese saldo. Los marcados &quot;Heredado de saldo ERP&quot; son de antes y no se editan.
       </InlineAlert>
     </> : null}
+    {erpEnabled && erpLots ? <ErpStockTable rows={erpLots} expiringDays={thresholds?.criticalDays ?? 30} /> : null}
     <PalletTrackingPanel pallets={pallets} existingBatches={existingBatches} existingProducts={products} erpManaged={erpEnabled} />
   </div>;
 }

@@ -8,6 +8,8 @@ import { isErpEnabled } from "@/lib/erp-sync/enabled";
 import { OrderLinesSummary } from "@/components/orders/order-lines-summary";
 import { mismatchSummary } from "@/lib/orders/lines";
 import { getAvailablePallets, getPalletsForOrder } from "@/lib/pallets/queries";
+import { getBatchPickingPolicy } from "@/lib/erp-stock/queries";
+import { sortPalletsForPicking } from "@/lib/pallets/picking";
 import { ORDER_STATUS_LABELS } from "@/lib/orders/labels";
 import { AssociatePalletsForm } from "@/components/orders/associate-pallets-form";
 import { ConfirmDispatchButton } from "@/components/orders/confirm-dispatch-button";
@@ -61,6 +63,10 @@ export default async function DispatchOrderDetailPage({
   const canSeeNotifications = isLogisticsManager || isWarehouseOperator;
   // TRZ-100: pedido vs. armado, solo para órdenes del ERP y con la integración activa.
   const showLines = order.origin?.sourceSystem === "erp" && (await isErpEnabled(profile.companyId));
+
+  // TRZ-65: con ERP, los pallets disponibles se ordenan según la regla de salida del ERP (solo sugerencia).
+  const erpEnabled = await isErpEnabled(profile.companyId);
+  const pickingPolicy = canAssociate && erpEnabled ? await getBatchPickingPolicy(profile.companyId) : null;
 
   const [
     associatedPallets,
@@ -238,7 +244,11 @@ export default async function DispatchOrderDetailPage({
           {availablePallets.length === 0 ? (
             <div className="surface"><EmptyState title="Sin pallets disponibles" description="No hay pallets en depósito disponibles para incorporar a esta orden." /></div>
           ) : (
-            <div className="surface p-6"><AssociatePalletsForm orderId={order.id} pallets={availablePallets} /></div>
+            <div className="surface p-6">
+              <AssociatePalletsForm orderId={order.id}
+                pallets={pickingPolicy ? sortPalletsForPicking(availablePallets, pickingPolicy) : availablePallets}
+                pickingPolicy={pickingPolicy} />
+            </div>
           )}
         </section>
       ) : isLogisticsManager ? (
