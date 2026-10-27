@@ -1,11 +1,11 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 
 import { formatSyncedAt } from "@/components/erp/erp-origin";
 import { Badge, InlineAlert, type BadgeTone } from "@/components/ui/design-system";
 import { useFeedback } from "@/components/ui/feedback";
-import { linkErpWarehouse, syncErpNow } from "@/lib/erp-sync/actions";
+import { syncErpNow } from "@/lib/erp-sync/actions";
 import {
   describeErpSyncRun,
   ERP_SYNC_ENTITY_LABELS,
@@ -14,13 +14,13 @@ import {
   type ErpSyncEntity,
   type ErpSyncRunSummary,
   type ErpSyncStatus,
-  type LinkErpWarehouseState,
 } from "@/lib/erp-sync/types";
+import { warehouseLabel, type Warehouse } from "@/lib/warehouses/types";
 
 const INITIAL_STATE: ErpSyncActionState = { status: "idle", message: null, run: null };
 const STATUS_TONES: Record<ErpSyncStatus, BadgeTone> = { running: "info", success: "success", partial: "warning", failed: "danger" };
 const ALERT_VARIANTS = { success: "success", partial: "warning", failed: "danger", error: "danger" } as const;
-const ENTITIES: ErpSyncEntity[] = ["products", "lots", "stock", "orders"];
+const ENTITIES: ErpSyncEntity[] = ["warehouses", "products", "lots", "stock", "orders"];
 const VISIBLE_ERRORS = 8;
 
 /**
@@ -29,11 +29,11 @@ const VISIBLE_ERRORS = 8;
  */
 export function ErpSyncPanel({
   lastRun,
-  warehouseMappings,
+  warehouses,
 }: {
   lastRun: ErpSyncRunSummary | null;
-  /** Si se pasa, muestra los depósitos del ERP vinculados y el formulario para vincular otro. */
-  warehouseMappings?: string[];
+  /** Si se pasa, muestra los depósitos de la empresa (TRZ-101: los del ERP los trae la sincronización). */
+  warehouses?: Warehouse[];
 }) {
   const notify = useFeedback();
   const [state, setState] = useState(INITIAL_STATE);
@@ -59,7 +59,7 @@ export function ErpSyncPanel({
         <div className="min-w-0">
           <h2 id="erp-sync-title" className="text-base font-semibold text-slate-950">Integración ERP</h2>
           <p className="text-sm text-stone-500">
-            Productos, lotes, saldos de stock y órdenes se importan del ERP. Lo que ya avanzó en TrazFlow no se pisa.
+            Depósitos, productos, lotes, saldos de stock y órdenes se importan del ERP. Lo que ya avanzó en TrazFlow no se pisa.
           </p>
         </div>
         <button type="button" onClick={handleSync} disabled={isPending} aria-busy={isPending} className="button-primary">
@@ -73,7 +73,7 @@ export function ErpSyncPanel({
 
       {run ? <LastRun run={run} /> : <p className="text-sm text-stone-500">Todavía no se sincronizó con el ERP.</p>}
 
-      {warehouseMappings ? <WarehouseMappings mappings={warehouseMappings} /> : null}
+      {warehouses ? <WarehouseList warehouses={warehouses} /> : null}
     </section>
   );
 }
@@ -87,7 +87,7 @@ function LastRun({ run }: { run: ErpSyncRunSummary }) {
         <span className="text-xs text-stone-500">Proveedor: {run.provider}</span>
       </p>
       {run.status !== "success" ? <p className="text-stone-600">{describeErpSyncRun(run)}</p> : null}
-      <dl className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+      <dl className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
         {ENTITIES.map((entity) => {
           const counters = run.counters[entity];
           return (
@@ -99,6 +99,9 @@ function LastRun({ run }: { run: ErpSyncRunSummary }) {
                       `${counters.created ?? 0} nuevos`,
                       `${counters.updated ?? 0} actualizados`,
                       `${counters.unchanged ?? 0} sin cambios`,
+                      counters.adopted ? `${counters.adopted} ya vinculados (conservan su código)` : null,
+                      counters.merged ? `${counters.merged} sumados a otro depósito` : null,
+                      counters.deactivated ? `${counters.deactivated} ya no vienen del ERP (inactivos)` : null,
                       counters.protected ? `${counters.protected} con progreso local (no se tocaron)` : null,
                       counters.skipped ? `${counters.skipped} cerradas en el ERP` : null,
                       counters.absent ? `${counters.absent} ya no vienen del ERP (quedan en 0)` : null,
@@ -122,6 +125,20 @@ function LastRun({ run }: { run: ErpSyncRunSummary }) {
           ].filter(Boolean).join(" · ")}.
         </p>
       ) : null}
+      {run.notices.length > 0 ? (
+        <details className="rounded-lg border border-stone-200 bg-stone-50 p-3">
+          <summary className="cursor-pointer font-medium text-slate-950">{run.notices.length} aviso(s)</summary>
+          <ul className="mt-2 space-y-1 text-xs text-stone-700">
+            {run.notices.slice(0, VISIBLE_ERRORS).map((notice, index) => (
+              <li key={`${notice.entity}-${notice.external_id}-${index}`} className="break-words">
+                <span className="font-medium">{ERP_SYNC_ENTITY_LABELS[notice.entity] ?? notice.entity}</span>
+                {notice.external_id ? <> · <span className="font-mono">{notice.external_id}</span></> : null}: {notice.message}
+              </li>
+            ))}
+            {run.notices.length > VISIBLE_ERRORS ? <li>… y {run.notices.length - VISIBLE_ERRORS} más.</li> : null}
+          </ul>
+        </details>
+      ) : null}
       {run.errors.length > 0 ? (
         <details className="rounded-lg border border-amber-200 bg-amber-50 p-3">
           <summary className="cursor-pointer font-medium text-amber-900">
@@ -142,46 +159,27 @@ function LastRun({ run }: { run: ErpSyncRunSummary }) {
   );
 }
 
-function WarehouseMappings({ mappings }: { mappings: string[] }) {
-  const notify = useFeedback();
-  const [state, setState] = useState<LinkErpWarehouseState>({ error: null, success: null });
-  const [isPending, startTransition] = useTransition();
-  const formRef = useRef<HTMLFormElement>(null);
-
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (isPending) return;
-    const form = event.currentTarget;
-    startTransition(async () => {
-      try {
-        const next = await linkErpWarehouse(state, new FormData(form));
-        setState(next);
-        if (next.success) { notify(next.success); formRef.current?.reset(); }
-      } catch {
-        setState({ error: "No se pudo vincular el depósito. Intentá nuevamente.", success: null });
-      }
-    });
-  }
-
+/** Depósitos de la empresa. Los del ERP llegan con la sincronización; no se vinculan a mano (TRZ-101). */
+function WarehouseList({ warehouses }: { warehouses: Warehouse[] }) {
   return (
     <div className="space-y-2 border-t border-stone-200 pt-4 text-sm">
-      <h3 className="font-medium text-slate-950">Depósitos del ERP vinculados a DEP-01</h3>
+      <h3 className="font-medium text-slate-950">Depósitos</h3>
       <p className="text-stone-500">
-        Cada saldo del ERP se importa como pallet en el depósito vinculado. Un saldo de un depósito sin vincular no se importa y queda como error.
+        Los depósitos del ERP se importan solos al sincronizar, cada uno con su código en TrazFlow, y su stock entra en ese depósito. Si el ERP deja de informar uno, queda inactivo.
       </p>
-      {mappings.length > 0 ? (
+      {warehouses.length > 0 ? (
         <ul className="flex flex-wrap gap-2">
-          {mappings.map((name) => <li key={name}><Badge>{name}</Badge></li>)}
+          {warehouses.map((warehouse) => (
+            <li key={warehouse.code}>
+              <Badge tone={warehouse.active ? undefined : "warning"}>
+                {warehouseLabel(warehouse)}
+                {warehouse.sourceSystem === "trazflow" ? " (TrazFlow)" : ""}
+                {warehouse.active ? "" : " · inactivo"}
+              </Badge>
+            </li>
+          ))}
         </ul>
-      ) : <p className="text-stone-500">Ningún depósito vinculado todavía.</p>}
-      <form ref={formRef} onSubmit={handleSubmit} className="flex flex-wrap items-end gap-2" aria-busy={isPending}>
-        <label className="form-label min-w-0 flex-1">
-          Depósito en el ERP
-          <input name="externalWarehouseId" required maxLength={300} placeholder="Ej. Depósito Central - SRV" className="form-control mt-1.5 font-normal" />
-        </label>
-        <button disabled={isPending} aria-busy={isPending} className="button-secondary">{isPending ? "Vinculando…" : "Vincular"}</button>
-      </form>
-      {state.error ? <InlineAlert variant="danger">{state.error}</InlineAlert> : null}
+      ) : <p className="text-stone-500">Todavía no hay depósitos: se importan en la próxima sincronización.</p>}
     </div>
   );
 }

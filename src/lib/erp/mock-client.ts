@@ -14,7 +14,7 @@ import {
   type ErpMasterData,
   type ErpPullOptions,
 } from "./types.ts";
-import { assertValidDispatchReport, assertValidIdempotencyKey } from "./validation.ts";
+import { assertValidDispatchReport, assertValidErpWarehouses, assertValidIdempotencyKey } from "./validation.ts";
 
 export type MockErpClientOptions = {
   /** Falla permanente de todas las llamadas. `validation` solo afecta a reportDispatch. */
@@ -62,9 +62,12 @@ export class MockErpClient implements ErpClient {
   async pullMasterData(options: ErpPullOptions = {}): Promise<ErpMasterData> {
     this.#simulate("pullMasterData");
     const changed = updatedSinceFilter(options);
+    // Depósitos y stock van siempre completos: el que no viene se marca inactivo / en 0.
+    assertValidErpWarehouses(this.#data.warehouses);
     return structuredClone({
       contractVersion: ERP_CONTRACT_VERSION,
       fetchedAt: this.#now().toISOString(),
+      warehouses: this.#data.warehouses,
       products: this.#data.products.filter(changed),
       lots: this.#data.lots.filter(changed),
       stock: this.#data.stock,

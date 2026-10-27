@@ -43,7 +43,7 @@ export class ErpSyncStartError extends Error {
 class ErpSyncStageError extends Error {}
 
 /**
- * Sincroniza productos, lotes, saldos de stock y órdenes (con sus líneas) de una empresa desde su ERP.
+ * Sincroniza depósitos, productos, lotes, saldos de stock y órdenes (con sus líneas) de una empresa desde su ERP.
  *
  * Antes de traer los maestros consulta el estado de los remitos de los despachos ya reportados
  * (checkErpDispatchDocuments, TRZ-100). El orden importa: primero se ve la confirmación del remito y después se
@@ -78,8 +78,14 @@ export async function syncCompanyFromErp(params: SyncCompanyParams): Promise<Erp
 
     await checkDispatchDocuments(db, runId, companyId, erp);
 
-    const master = await fromErp("productos, lotes y stock", () => erp.pullMasterData());
+    const master = await fromErp("depósitos, productos, lotes y stock", () => erp.pullMasterData());
     assertContract(master.contractVersion);
+    // Depósitos primero (TRZ-101): el stock y las órdenes nombran depósitos que tienen que estar importados.
+    await apply("erp_sync_apply_warehouses", master.warehouses.map((warehouse) => ({
+      externalId: warehouse.externalId,
+      name: warehouse.name,
+      active: warehouse.active,
+    })), "los depósitos");
     await apply("erp_sync_apply_products", master.products.map((product) => ({
       externalId: product.externalId,
       sku: product.sku,

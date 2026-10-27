@@ -23,6 +23,7 @@ import {
 } from "@/lib/erp-integration/queries";
 import { isErpEnabled } from "@/lib/erp-sync/enabled";
 import { getLatestErpSyncRun } from "@/lib/erp-sync/queries";
+import { getWarehouses } from "@/lib/warehouses/queries";
 
 export const metadata: Metadata = { title: "Integración ERP | TrazFlow" };
 
@@ -49,9 +50,10 @@ export default async function IntegrationsPage({ searchParams }: {
   }
 
   const { filters, problems } = parseIntegrationFilters(await searchParams);
-  const [summary, lastRun, activity, unreported, detail] = await Promise.all([
+  const [summary, lastRun, warehouses, activity, unreported, detail] = await Promise.all([
     getIntegrationSummary(),
     getLatestErpSyncRun(profile.companyId),
+    getWarehouses(profile.companyId),
     getIntegrationActivity(filters),
     getDispatchedUnreported(filters.unreportedPage),
     filters.event ? getIntegrationEventDetail(filters.event.kind, filters.event.id) : null,
@@ -79,7 +81,7 @@ export default async function IntegrationsPage({ searchParams }: {
           : <InlineAlert variant="warning">El evento pedido no existe o no pertenece a tu empresa.</InlineAlert>
       ) : null}
 
-      <ErpSyncPanel lastRun={lastRun} />
+      <ErpSyncPanel lastRun={lastRun} warehouses={warehouses} />
 
       <section className="section-stack" aria-labelledby="unreported-title">
         <SectionHeader id="unreported-title" title="Despachadas sin reportar"

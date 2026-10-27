@@ -8,6 +8,8 @@ import { createLocation, assignLocation } from "@/lib/locations/actions";
 import { canLocatePallet, findScannedLocation } from "@/lib/locations/rules";
 import type { LocationActionState, WarehouseLocation } from "@/lib/locations/types";
 import type { Pallet } from "@/lib/types";
+import { activeWarehouses, warehouseLabel, type Warehouse } from "@/lib/warehouses/types";
+import { WarehouseField } from "@/components/warehouses/warehouse-field";
 import { LocationQr } from "./location-qr";
 import { useLocationFeedback } from "./use-location-feedback";
 
@@ -15,8 +17,8 @@ const initial: LocationActionState = { error: null, success: null };
 function Result({ state }: { state: LocationActionState }) {
   return <>{state.error && <InlineAlert variant="danger">{state.error}</InlineAlert>}{state.success && <InlineAlert variant="success">{state.success}</InlineAlert>}</>;
 }
-export function LocationsPanel({ locations, pallets, locationIds, canMove, initialPalletId = "" }: {
-  locations: WarehouseLocation[]; pallets: Pallet[]; locationIds: Record<string, string | null>; canMove: boolean; initialPalletId?: string;
+export function LocationsPanel({ locations, pallets, warehouses = [], locationIds, canMove, initialPalletId = "" }: {
+  locations: WarehouseLocation[]; pallets: Pallet[]; warehouses?: Warehouse[]; locationIds: Record<string, string | null>; canMove: boolean; initialPalletId?: string;
 }) {
   const router = useRouter();
   const created = useLocationFeedback();
@@ -29,7 +31,10 @@ export function LocationsPanel({ locations, pallets, locationIds, canMove, initi
   const [scanError, setScanError] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
   const pallet = pallets.find((p) => p.id === palletId);
-  const destination = locations.find((l) => l.id === locationId);
+  // TRZ-101: un pallet solo se ubica en su depósito (mover entre depósitos es una transferencia, fuera de alcance).
+  const destinations = pallet?.warehouseCode ? locations.filter((l) => l.warehouse_code === pallet.warehouseCode) : locations;
+  const destination = destinations.find((l) => l.id === locationId);
+  const active = activeWarehouses(warehouses);
   const sameLocation = Boolean(pallet && destination && locationIds[palletId] === locationId);
   const clearMoveError = moved.clearError;
 
@@ -72,14 +77,19 @@ export function LocationsPanel({ locations, pallets, locationIds, canMove, initi
     } else {
       const found = findScannedLocation(locations, value);
       if (!found) { setScanError("La ubicación no existe o no pertenece a tu empresa."); return; }
+      if (pallet?.warehouseCode && found.warehouse_code !== pallet.warehouseCode) {
+        setScanError(`La ubicación ${found.code} es del depósito ${found.warehouse_code} y el pallet está en ${pallet.warehouseCode}.`);
+        return;
+      }
       setLocationId(found.id);
     }
-  }, [scan, pallets, locations, clearMoveError]);
+  }, [scan, pallets, locations, pallet, clearMoveError]);
   return <div className="space-y-8">
     <section className="surface space-y-4 p-6">
-      <SectionHeader title="Crear ubicación" description="Depósito DEP-01 · Los códigos y coordenadas permanecen estables." />
+      <SectionHeader title="Crear ubicación" description={`${active.length === 1 ? `Depósito ${warehouseLabel(active[0])} · ` : ""}Los códigos y coordenadas permanecen estables.`} />
       <form onSubmit={submitCreate} onChange={created.clearError} aria-busy={creating} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {([['code', 'Código único'], ['aisle', 'Pasillo o fila'], ['rack', 'Estantería'], ['level', 'Nivel'], ['position', 'Posición']] as const).map(([name, label]) => <label key={name} className="form-label">{label}<input name={name} disabled={creating} required maxLength={40} pattern={name === 'code' ? '[A-Za-z0-9][A-Za-z0-9_-]{0,39}' : undefined} className="form-control mt-2" /></label>)}
+        <WarehouseField warehouses={warehouses} disabled={creating} />
         <button disabled={creating} className="button-primary self-end">{creating ? "Creando…" : "Crear ubicación"}</button>
         <div className="sm:col-span-2"><Result state={created.state} /></div>
       </form>
@@ -91,7 +101,7 @@ export function LocationsPanel({ locations, pallets, locationIds, canMove, initi
         <button type="button" className="button-secondary" disabled={moving} onClick={() => { setScanError(null); clearMoveError(); setScan("pallet"); }}>Escanear pallet</button>
         {pallet && <div className="space-y-2 text-sm"><p>Ubicación actual: <strong>{pallet.currentLocation ?? "Sin asignar"}</strong></p><Link className="table-action" href={`/dashboard/traceability?qr=${encodeURIComponent(pallet.qrCode)}`}>Ver ficha e historial</Link></div>}
         {canMove && <>
-          <label className="form-label">Ubicación de destino<select name="locationId" required value={locationId} onChange={(e) => { setLocationId(e.target.value); clearMoveError(); setScanError(null); }} disabled={moving} className="form-control mt-2"><option value="">Seleccionar ubicación</option>{locations.map((l) => <option key={l.id} value={l.id}>{l.warehouse_code} / {l.code} · {l.aisle} / {l.rack} / {l.level} / {l.position}</option>)}</select></label>
+          <label className="form-label">Ubicación de destino<select name="locationId" required value={locationId} onChange={(e) => { setLocationId(e.target.value); clearMoveError(); setScanError(null); }} disabled={moving} className="form-control mt-2"><option value="">Seleccionar ubicación</option>{destinations.map((l) => <option key={l.id} value={l.id}>{l.warehouse_code} / {l.code} · {l.aisle} / {l.rack} / {l.level} / {l.position}</option>)}</select></label>
           <button type="button" className="button-secondary" disabled={moving} onClick={() => { setScanError(null); clearMoveError(); setScan("location"); }}>Escanear ubicación</button>
           <input type="hidden" name="expectedLocationId" value={palletId ? locationIds[palletId] ?? "" : ""} />
           {pallet && !canLocatePallet(pallet.status) && <InlineAlert variant="danger">El pallet ya no está en depósito.</InlineAlert>}

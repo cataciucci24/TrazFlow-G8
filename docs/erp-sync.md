@@ -2,7 +2,8 @@
 
 > Depende del contrato de US-ERP-02 ([`erp-contract.md`](erp-contract.md)). Código: `src/lib/erp-sync/` y las
 > migraciones `20261019120000_erp_sync_schema.sql` y `20261019120100_erp_sync_rpcs.sql`. TRZ-100 separó el saldo
-> del ERP de los pallets físicos: migraciones `20261028100000` a `20261028100300` (`trz100_*`).
+> del ERP de los pallets físicos: migraciones `20261028100000` a `20261028100300` (`trz100_*`). TRZ-101 trae los
+> depósitos del ERP: migraciones `20261029100000` y `20261029100100` (`trz101_*`).
 
 ## Qué hace
 
@@ -10,6 +11,7 @@ Importa y actualiza desde `ErpClient`, sin conocer el proveedor:
 
 | ERP | TrazFlow | `external_id` |
 |---|---|---|
+| `warehouses[]` | `warehouses` (+ vínculo en `erp_warehouse_mappings`) | `externalId` del depósito |
 | `products[]` | `products` | `externalId` del producto |
 | `lots[]` | `batches` (cantidad 0) | `externalId` del lote |
 | `stock[]` (lote × depósito) | `erp_stock_balances` (saldo, solo lectura) | clave natural `(empresa, lote, depósito del ERP)` |
@@ -63,7 +65,8 @@ lotes además tienen `external_active` (`false` = deshabilitado en el ERP; no se
    propósito: primero se ve la confirmación del remito y después se trae el saldo, que ya la refleja, así que los
    pallets despachados se liberan del tope en la misma corrida. Si falla, la sincronización sigue y termina
    `partial`. Ver "Estado del remito".
-3. `pullMasterData()` → `erp_sync_apply_products`, `_lots` y `_stock`.
+3. `pullMasterData()` → `erp_sync_apply_warehouses` (TRZ-101, antes que todo lo que nombra depósitos),
+   `erp_sync_apply_products`, `_lots` y `_stock`.
 4. `pullDispatchOrders()` → `erp_sync_apply_orders` (con sus líneas).
 5. `erp_sync_finish(run, error)` deja `success`, `partial` (hubo registros con error, o falló una etapa después de
    aplicar algo) o `failed` (no se aplicó nada).
@@ -102,33 +105,73 @@ base autenticado como ese actor. Un cron o webhook sin usuario queda para más a
   del ERP en los registros importados (SKU, nombre, unidad, lote, vencimiento, cantidad, cliente, fecha) ni borrar
   esos registros. El estado operativo (`status`, ubicación) sigue el flujo normal.
 
-## Depósitos
+## Depósitos (TRZ-101)
 
-Hoy TrazFlow tiene un solo depósito por empresa (`DEP-01`). Cada depósito del ERP se vincula a mano desde
-*Pallets → Integración ERP* (tabla `erp_warehouse_mappings`); se pueden vincular varios al mismo depósito de
-TrazFlow y sus saldos se suman. Un saldo de un depósito sin vincular es un error de ese registro y queda auditado.
+Los depósitos de TrazFlow están en la tabla `warehouses`: `code` (el que usan ubicaciones, pallets y saldos; no
+cambia nunca), `name`, `external_id` (null si se cargó en TrazFlow), `source_system`, `active` y `synced_at`. Únicos
+por `(company_id, code)` y `(company_id, external_id)`. `warehouse_locations`, `erp_warehouse_mappings`,
+`erp_stock_balances` y `pallets` apuntan a `warehouses` con una FK compuesta `(company_id, warehouse_code)`; los
+`check (warehouse_code = 'DEP-01')` ya no existen.
 
-Cada pallet sabe en qué depósito está (`pallets.warehouse_code`, backfill `DEP-01`; para los entregados es el
-depósito de origen). La app no lo elige: no está en los grants de insert/update y la base usa el default, el mismo
-que `warehouse_locations` y `erp_warehouse_mappings`. Si el pallet tiene ubicación física, una FK compuesta exige
-que sea del mismo depósito (`pallets_location_warehouse_fkey`; con `current_location_id` null no se verifica).
+- **Empresas que ya existían:** la migración les crea `DEP-01` ("Depósito principal"). Sus ubicaciones, QR,
+  historial y pallets no cambian.
+- **Empresas nuevas:** no reciben un depósito automático. Sin ERP, se cargan en el onboarding (hoy, como las
+  empresas, con un `insert` a mano; ver `supabase/seed.sql`). Con ERP, los trae la primera sincronización.
+- **RLS:** logística y depósito de la empresa leen. Nadie escribe por la API: los del ERP los escribe
+  `erp_sync_apply_warehouses`.
+- **Al crear una ubicación o un pallet** se puede indicar el depósito (la app muestra el selector solo si hay más
+  de uno activo). Sin indicarlo, la base usa el único depósito activo (`default_warehouse_code`). Errores:
+  `TF110` sin depósitos, `TF111` hay varios y no se eligió, `TF112` depósito inactivo, `23503` no existe. El
+  depósito no se cambia después: mover pallets o ubicaciones entre depósitos (transferencias) está fuera de alcance.
+- **Ubicar un pallet:** `assign_pallet_location` rechaza una ubicación de otro depósito (`TF113`). El texto de
+  `current_location` sigue siendo `{código del depósito} / {código de la ubicación}` (p. ej. `DEPOSITO-NORTE / N1`).
+- **Con ERP, "Armar pallet"** ofrece cada saldo por lote **y depósito**; el pallet queda en el depósito del saldo
+  elegido. El tope por saldo sigue siendo por `(empresa, lote, warehouse_code)`.
 
-**Preparado para TRZ-101 etapa 2 (tabla `warehouses`):** el depósito de TrazFlow se identifica siempre por
-`(company_id, warehouse_code)` en texto en `warehouse_locations`, `erp_warehouse_mappings`, `erp_stock_balances` y
-`pallets`. Las tablas y columnas nuevas no tienen `check (warehouse_code = 'DEP-01')` (las dos anteriores sí): la
-etapa 2 solo tiene que agregar las FK y sacar esos checks. El default `'DEP-01'` de `pallets.warehouse_code`
-habría que reemplazarlo por el depósito que corresponda al alta.
+### Sincronización (`erp_sync_apply_warehouses`)
+
+Recibe la lista **completa** de depósitos del ERP (también con `updatedSince`, como el stock) y, por cada uno, por
+`(company_id, external_id)`:
+
+1. **Ya importado** → actualiza nombre y activo (`updated` / `unchanged`).
+2. **Tiene un vínculo de antes** (cargado a mano antes de TRZ-101) a un depósito de TrazFlow que todavía no es de
+   ningún depósito del ERP → ese depósito pasa a ser este, con su mismo código, ubicaciones y pallets (`adopted`).
+   Si dos depósitos del ERP estaban vinculados al mismo, gana el vínculo más viejo. En la nube, "Depósito Central -
+   SRV" queda como `DEP-01`.
+3. **Tiene un vínculo de antes a un depósito que ya es de otro del ERP** → no se crea otro; sus saldos se siguen
+   sumando ahí, como antes (`merged`).
+4. **Si no** → depósito nuevo con un código generado y su vínculo, con `created_by` = quien sincroniza (`created`).
+
+Un depósito cargado a mano en TrazFlow sin vínculo **nunca** se toma como uno del ERP: el sistema no adivina cuál
+es cuál. Los depósitos del ERP que dejan de venir quedan `active = false` (`deactivated`), nunca se borran; si
+vuelven, se reactivan con el mismo código. Un depósito inactivo no se ofrece para ubicaciones ni pallets nuevos; lo
+que ya tiene sigue funcionando.
+
+**Código generado** (`erp_warehouse_code`): el nombre del ERP sin tildes, en mayúsculas, con guiones y hasta 36
+caracteres ("Depósito Norte" → `DEPOSITO-NORTE`; sin letras ni números, `DEP`). Si ya existe en la empresa se agrega
+`-2`, `-3`… Se calcula una sola vez: si el ERP renombra el depósito, cambia el nombre y el código queda. Cumple
+`^[A-Z0-9][A-Z0-9_-]{0,39}$`.
+
+**Vínculos (`erp_warehouse_mappings`):** se mantienen porque el stock y el tope resuelven el depósito de TrazFlow
+con ellos, pero ya no se cargan a mano (se sacaron el formulario de texto libre y los permisos de insert/delete de
+la API). Los crea la sincronización. La migración borró el vínculo mal tipeado `Deposito central - erv` de la nube
+(no tenía saldos). Un saldo de un depósito que el ERP no incluyó en su lista es un error de ese registro.
+
+**Avisos:** lo que pasó con cada depósito (importado, adoptado, sumado, inactivado) queda en
+`erp_sync_runs.notices`, con la misma forma que `errors`. No son errores: la corrida no queda `partial` por ellos.
+El panel de Integración ERP los muestra junto con la lista de depósitos.
 
 ## Validaciones por registro (cada una se audita en `erp_sync_runs.errors`)
 
 - Falta `externalId`, o viene repetido en la misma respuesta.
+- Depósito sin `active` booleano o con un `externalId` de más de 300 caracteres.
 - Unidad sin equivalente. `Caja/Box/CJ` → `cajas`, `Kg/Kilogramo` → `kilogramos`, `Unidad/Unit/Nos` → `unidades`
   (`src/lib/erp-sync/units.ts`).
 - Producto con un SKU que ya usa otro producto de TrazFlow (cargado a mano). No se fusionan por SKU.
 - Lote cuyo producto no está sincronizado, o que ya está asociado a otro producto.
 - Saldo sin lote, de un lote que no corresponde al producto, con una unidad distinta a la del producto, con
-  cantidad negativa, con decimales en `unidades`/`cajas` (o más de 2 en `kilogramos`), o de un depósito sin
-  vincular. El `external_id` del error es `{lote}@{depósito}`.
+  cantidad negativa, con decimales en `unidades`/`cajas` (o más de 2 en `kilogramos`), o de un depósito que el ERP
+  no incluyó en su lista de depósitos. El `external_id` del error es `{lote}@{depósito}`.
 - Orden sin cliente, con estado desconocido, con fecha que no es `YYYY-MM-DD`, sin líneas, o con una línea
   inválida (ver "Líneas de orden").
 
@@ -137,8 +180,9 @@ habría que reemplazarlo por el depósito que corresponda al alta.
 | Columna | Descripción |
 |---|---|
 | `status` | `running` \| `success` \| `partial` \| `failed` |
-| `counters` | Por entidad (`products`, `lots`, `stock`, `orders`): `received`, `created`, `updated`, `unchanged`, `failed`; además `absent` (stock), `protected`, `skipped`, `customers_created` y `customers_updated` (órdenes). `dispatch_documents`: `received`, `draft`, `confirmed`, `cancelled`, `not_found`, `failed`. |
-| `errors` | `[{ entity, external_id, message }]`, hasta 200 por ejecución. `entity`: `products`, `lots`, `stock`, `orders` o `dispatch_document`. |
+| `counters` | Por entidad (`warehouses`, `products`, `lots`, `stock`, `orders`): `received`, `created`, `updated`, `unchanged`, `failed`; además `adopted`, `merged` y `deactivated` (depósitos), `absent` (stock), `protected`, `skipped`, `customers_created` y `customers_updated` (órdenes). `dispatch_documents`: `received`, `draft`, `confirmed`, `cancelled`, `not_found`, `failed`. |
+| `errors` | `[{ entity, external_id, message }]`, hasta 200 por ejecución. `entity`: `warehouses`, `products`, `lots`, `stock`, `orders` o `dispatch_document`. |
+| `notices` | Avisos que no son errores (TRZ-101), misma forma, hasta 200. Hoy solo `entity: "warehouses"`. |
 | `error_message` | Falla que cortó la ejecución (ERP caído, configuración inválida…). |
 
 RLS: solo `logistics_manager` de la empresa puede leer. Nadie escribe directo: solo las RPC `erp_sync_*`.
@@ -310,6 +354,13 @@ Stock. Lo hace la función `update_assigned_pallet_quantity` (migración
   cantidad corregida.
 - `supabase/tests/trz100_cloud_state_fixture.sql` + `trz100_cloud_state_checks.sql`: la migración sobre una réplica
   del estado de la nube (el método está en el encabezado del fixture).
+- `supabase/tests/trz101_erp_warehouses.sql`: depósitos creados, adoptados (gana el vínculo más viejo), sumados,
+  actualizados, renombrados (el código no cambia), inactivados y reactivados; segunda sincronización sin duplicados;
+  código generado; `DEP-01` y lo que tiene, intactos; empresa nueva con ERP (el stock entra sin vincular nada);
+  depósito manual sin vínculo (no se adivina); FKs; selección de depósito al crear ubicaciones y pallets; tope por
+  depósito; ubicación de otro depósito; RLS por empresa y rol; escrituras directas denegadas.
+- `supabase/tests/trz101_cloud_state_checks.sql`: las migraciones de TRZ-101 y una primera sincronización sobre la
+  réplica de la nube (pasos en su encabezado).
 - Correr cada uno con `psql -v ON_ERROR_STOP=1 -f …` sobre una base local migrada.
 - `src/lib/erp-sync/*.test.ts` (`npm test`): orden de las llamadas (los remitos antes de `pullMasterData`), líneas
   de orden, traducción de unidades, fallas del ERP (timeout, 401, configuración, contrato, consulta de remitos que
@@ -320,6 +371,9 @@ Stock. Lo hace la función `update_assigned_pallet_quantity` (migración
 ## Mejoras futuras
 
 - Flag de ERP por empresa: cambiar `isErpEnabled`.
+- Transferencias de pallets entre depósitos (TRZ-101 no las incluye: el depósito de un pallet no se cambia).
+- Unir a un depósito del ERP un depósito cargado a mano que no estaba vinculado (hoy quedan separados).
+- Pantalla para dar de alta depósitos de una empresa sin ERP (hoy, a mano en el onboarding).
 - Repartir un pallet entre dos líneas del mismo producto: hoy el reporte va con `orderLineExternalId` null en ese
   caso.
 - Reconsultar remitos confirmados para detectar una anulación posterior.

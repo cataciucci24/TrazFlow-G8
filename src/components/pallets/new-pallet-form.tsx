@@ -14,22 +14,27 @@ import { formatStockQuantity, type ErpStockRow } from "@/lib/erp-stock/types";
 import { createPallet, type CreatePalletState } from "@/lib/pallets/actions";
 import { quantityStep } from "@/lib/pallets/units";
 import type { ExistingProduct, ProductBatch } from "@/lib/types";
+import type { Warehouse } from "@/lib/warehouses/types";
+import { WarehouseField } from "@/components/warehouses/warehouse-field";
 
 const initialState: CreatePalletState = { error: null, success: null };
 const NO_PRODUCT: ProductSelection = { sku: "", unitOfMeasure: null };
 
 /**
- * Alta de pallet. Sin ERP: producto, lote existente y cantidad, como siempre. Con ERP (`erpLots`, TRZ-100): se
- * elige un lote sincronizado del ERP con saldo y se carga la cantidad real del pallet físico.
+ * Alta de pallet. Sin ERP: producto, lote existente y cantidad, como siempre (y el depósito, si la empresa tiene
+ * más de uno). Con ERP (`erpLots`, TRZ-100): se elige un lote sincronizado del ERP con saldo en un depósito (el
+ * pallet queda en ese depósito, TRZ-101) y se carga la cantidad real del pallet físico.
  */
 export function NewPalletForm({
   existingBatches,
   existingProducts,
   erpLots,
+  warehouses = [],
 }: {
   existingBatches: ProductBatch[];
   existingProducts: ExistingProduct[];
   erpLots?: ErpStockRow[];
+  warehouses?: Warehouse[];
 }) {
   const notify = useFeedback();
   const [state, setState] = useState(initialState);
@@ -87,10 +92,11 @@ export function NewPalletForm({
             {state.error && <InlineAlert variant="danger" className="sm:col-span-2">{state.error}</InlineAlert>}
             {state.success && <InlineAlert variant="success" className="sm:col-span-2">{state.success}</InlineAlert>}
             {erpLots !== undefined
-              ? <ErpLotField lots={erpLots} onChange={setErpLot} />
+              ? <ErpLotField lots={erpLots} warehouses={warehouses} onChange={setErpLot} />
               : <>
                   <ProductField existingProducts={existingProducts} onChange={setProduct} />
                   <LotField productSku={product.sku} existingBatches={existingBatches} />
+                  <WarehouseField warehouses={warehouses} className="sm:col-span-2" />
                 </>}
             <Field label={unit ? `Cantidad (${unit})` : "Cantidad"} name="quantity" type="number"
               placeholder={erpLot && erpLot.available > 0 ? `Hasta ${formatStockQuantity(erpLot.available, erpLot.unitOfMeasure)}` : "Mayor que 0"}

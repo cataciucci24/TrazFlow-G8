@@ -42,6 +42,18 @@ test("pullMasterData devuelve los fixtures con la versión del contrato", async 
   assert.deepEqual(data.products, MOCK_ERP_FIXTURES.products);
   assert.deepEqual(data.lots, MOCK_ERP_FIXTURES.lots);
   assert.deepEqual(data.stock, MOCK_ERP_FIXTURES.stock);
+  assert.deepEqual(data.warehouses, MOCK_ERP_FIXTURES.warehouses);
+});
+
+test("TRZ-101: dos depósitos con externalId estable, y cada saldo y línea nombra uno de ellos", async () => {
+  const data = await client().pullMasterData();
+  assert.deepEqual(data.warehouses.map((warehouse) => warehouse.externalId), ["Depósito Central - SRV", "Depósito Norte - SRV"]);
+  const ids = new Set(data.warehouses.map((warehouse) => warehouse.externalId));
+  for (const row of data.stock) assert.ok(ids.has(row.warehouseExternalId), row.warehouseExternalId);
+  for (const order of await client().pullDispatchOrders()) {
+    for (const line of order.lines) if (line.warehouseExternalId) assert.ok(ids.has(line.warehouseExternalId), line.externalId);
+  }
+  assert.ok(data.stock.some((row) => row.warehouseExternalId === "Depósito Norte - SRV"), "Norte tiene algo de stock para probar varios depósitos");
 });
 
 test("cada lote y cada stock apuntan a un producto existente por externalId", async () => {
@@ -60,6 +72,7 @@ test("updatedSince filtra productos y lotes pero no el stock", async () => {
   assert.deepEqual(data.products.map((product) => product.externalId), ["QSO-HORMA", "SAL-FINA"]);
   assert.deepEqual(data.lots.map((lot) => lot.externalId), ["QSO-2026-1003"]);
   assert.equal(data.stock.length, MOCK_ERP_FIXTURES.stock.length);
+  assert.equal(data.warehouses.length, MOCK_ERP_FIXTURES.warehouses.length, "los depósitos vienen siempre completos");
 });
 
 test("pullDispatchOrders solo trae órdenes abiertas", async () => {

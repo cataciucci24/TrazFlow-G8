@@ -3,6 +3,9 @@
 > Versión del contrato: **1** (`ERP_CONTRACT_VERSION` en `src/lib/erp/types.ts`). TRZ-100 le sumó la operación
 > `getDispatchStatus` (§5.2) como **extensión aditiva**: no cambia ningún payload existente, así que la versión
 > sigue en 1. `contractVersion` versiona la forma de los payloads, y esta operación no agrega campos a ninguno.
+> TRZ-101 le sumó `warehouses` a `pullMasterData` (§4.1). Es un campo nuevo, obligatorio en la respuesta; quedó
+> en la versión 1 porque los dos proveedores (mock y ERPNext) son de TrazFlow y se actualizaron juntos: no hay un
+> ERP externo que mande payloads v1 sin el campo.
 > Implementación: `src/lib/erp/`. Proveedores: `mock` (por defecto) y `erpnext` (ERPNext/Frappe v15).
 >
 > Reemplaza a la propuesta anterior de US-C1 (Odoo + Edge Function), que se eliminó; queda en el historial de git.
@@ -62,15 +65,20 @@ Todas las fechas-hora son ISO 8601 en UTC; las fechas sin hora (`manufacturingDa
 
 ## 4. ERP → TrazFlow
 
-### 4.1 `pullMasterData` — productos, lotes y stock
+### 4.1 `pullMasterData` — depósitos, productos, lotes y stock
 
-`updatedSince` filtra productos y lotes modificados desde ese instante. El stock se devuelve siempre completo (es
-una foto, no un cambio). Un registro que deja de venir **no** se borra en TrazFlow (regla de US-ERP-03).
+`updatedSince` filtra productos y lotes modificados desde ese instante. Depósitos y stock se devuelven siempre
+completos (un depósito que no viene se marca inactivo; un saldo que no viene pasa a 0). Un registro que deja de
+venir **no** se borra en TrazFlow (regla de US-ERP-03).
 
 ```json
 {
   "contractVersion": 1,
   "fetchedAt": "2026-10-15T15:00:00.000Z",
+  "warehouses": [
+    { "externalId": "Depósito Central - SRV", "name": "Depósito Central", "active": true,
+      "updatedAt": "2026-10-01T12:00:00.000Z" }
+  ],
   "products": [
     { "externalId": "ACE-500", "sku": "ACE-500", "name": "Aceite de girasol 500 ml", "uom": "Caja",
       "batchTracked": true, "active": true, "updatedAt": "2026-10-01T12:00:00.000Z" }
@@ -89,6 +97,10 @@ una foto, no un cambio). Un registro que deja de venir **no** se borra en TrazFl
 
 | Campo | Obligatorio | Notas |
 |---|---|---|
+| `warehouses[]` | Sí (TRZ-101) | Lista completa, sin grupos de depósitos. Forma validada por `assertValidErpWarehouses` (`invalid_response` si no es una lista de `{ externalId, name, active, updatedAt }`). |
+| `warehouses[].externalId` | Sí | Id estable: el mismo valor que `stock[].warehouseExternalId` y `lines[].warehouseExternalId`. Clave de upsert junto con `company_id`. |
+| `warehouses[].name` | Sí | Nombre visible. Se usa para generar el código del depósito en TrazFlow al importarlo. |
+| `warehouses[].active` | Sí | `false` = deshabilitado en el ERP. Queda inactivo en TrazFlow. |
 | `products[].externalId` | Sí | Clave de upsert junto con `company_id`. |
 | `products[].uom` | Sí | Unidad de stock **como la nombra el ERP**. Traducirla a `products.unit_of_measure` es tarea de la sincronización (US-ERP-03). |
 | `products[].active` | Sí | `false` = deshabilitado en el ERP. No se borra. |
@@ -218,11 +230,13 @@ panel de integración.
 
 ## 7. Mock (`ERP_PROVIDER=mock`)
 
-- Fixtures deterministas en `src/lib/erp/fixtures.ts`: 4 productos (uno inactivo), 5 lotes, stock por lote y
-  5 órdenes (4 abiertas, 1 entregada). Los ids imitan los de ERPNext.
+- Fixtures deterministas en `src/lib/erp/fixtures.ts`: 2 depósitos ("Depósito Central - SRV" y "Depósito Norte -
+  SRV", con 30 cajas del lote L-2026-0921 y sin órdenes), 4 productos (uno inactivo), 5 lotes, stock por lote y
+  depósito y 5 órdenes (4 abiertas, 1 entregada). Los ids imitan los de ERPNext.
 - Estado en memoria por proceso: reportar un despacho marca la orden como entregada y guarda la clave. Reiniciar
   el servidor vuelve a los fixtures.
-- **No descuenta stock:** reportar un despacho no cambia el saldo de los fixtures (120/80/200/150/356,5).
+- **No descuenta stock:** reportar un despacho no cambia el saldo de los fixtures (120/80/200/150/356,5 en Central
+  y 30 en Norte).
 - `getDispatchStatus`: si la clave está en memoria responde `confirmed` con la referencia del reporte, simulando que
   administración confirma enseguida. Si no está (el proceso se reinició, o es otra instancia en Vercel) responde
   `confirmed` igual, con `erpReference: null`: el mock no guarda estado confiable entre procesos y no queremos
@@ -242,6 +256,7 @@ API REST de Frappe (`/api/resource/<Doctype>` y `/api/method/<ruta>`), autentica
 | Operación | Llamadas | Mapeo |
 |---|---|---|
 | `healthcheck` | `GET /api/method/frappe.auth.get_logged_user` | `Guest` o error → `unauthorized`. |
+| Depósitos | `GET /api/resource/Warehouse` (`is_group = 0`, sin `updatedSince`; incluye deshabilitados) | `name` → `externalId`, `warehouse_name` (o `name` si viene vacío) → `name`, `disabled` → `active`, `modified`. |
 | Productos | `GET /api/resource/Item` (`is_stock_item = 1`) | `name` → `externalId`, `item_code` → `sku`, `item_name`, `stock_uom` → `uom`, `has_batch_no`, `disabled`. |
 | Lotes | `GET /api/resource/Batch` | `name` (= `batch_id`) → `externalId` y `lotNumber`, `item`, `manufacturing_date`, `expiry_date`, `disabled`. |
 | Stock | `GET /api/method/erpnext.stock.doctype.batch.batch.get_batch_qty?item_code=…` por ítem con lote y activo | `{ batch_no, warehouse, qty }`, solo `qty > 0`. |
@@ -273,10 +288,10 @@ Decisiones y requisitos de la instancia:
 
 `npm test` corre, entre otros, `src/lib/erp/*.test.ts`:
 
-- `mock-client.test.ts`: contrato de los fixtures, filtros, duplicados (incluido payload reordenado por `jsonb`),
+- `mock-client.test.ts`: contrato de los fixtures (incluidos los depósitos: cada saldo y línea nombra uno), filtros, duplicados (incluido payload reordenado por `jsonb`),
   conflicto, 422, timeout/401/500, fallas de una sola vez, `getDispatchStatus` (en memoria, sin memoria, `draft`,
   fallas) y que el reporte no descuenta stock.
-- `erpnext-client.test.ts`: contract tests con respuestas de ERPNext falsas (forma real de Item, Batch,
+- `erpnext-client.test.ts`: contract tests con respuestas de ERPNext falsas (forma real de Warehouse, Item, Batch,
   get_batch_qty, Sales Order), cuerpo exacto del Delivery Note, idempotencia y carrera 409, traducción de errores
   HTTP, timeout/red, sanitización de mensajes y `getDispatchStatus` (borrador, confirmado, anulado, no encontrado,
   varios remitos, errores HTTP y respuesta inválida).
