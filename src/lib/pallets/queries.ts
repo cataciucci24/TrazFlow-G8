@@ -32,7 +32,12 @@ type RawPalletRow = {
     | null;
 };
 
-type RawPalletBatch = { batch_number: string; source_system?: "trazflow" | "erp"; products: RawProduct | RawProduct[] | null };
+type RawPalletBatch = {
+  batch_number: string;
+  expiration_date?: string | null;
+  source_system?: "trazflow" | "erp";
+  products: RawProduct | RawProduct[] | null;
+};
 
 export type StalePallet = Pallet & {
   createdAt: string;
@@ -67,11 +72,13 @@ function mapPalletRow(row: RawPalletRow): Pallet {
       syncedAt: row.synced_at ?? null,
     },
     lotSourceSystem: batch?.source_system ?? "trazflow",
+    batchExpirationDate: batch?.expiration_date ?? null,
+    palletCreatedAt: row.created_at,
   };
 }
 
 const PALLET_SELECT =
-  "id, qr_code, status, current_location, current_location_id, warehouse_code, quantity, created_at, source_system, external_id, synced_at, batches ( batch_number, source_system, products ( name, sku, unit_of_measure ) )";
+  "id, qr_code, status, current_location, current_location_id, warehouse_code, quantity, created_at, source_system, external_id, synced_at, batches ( batch_number, expiration_date, source_system, products ( name, sku, unit_of_measure ) )";
 
 /** Pallets de la empresa disponibles para asociar a una orden (en depósito, sin asignar). */
 export async function getAvailablePallets(companyId: string): Promise<Pallet[]> {

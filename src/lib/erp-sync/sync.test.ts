@@ -73,6 +73,7 @@ test("consulta remitos y aplica depósitos, productos, lotes, stock y órdenes e
     "erp_sync_apply_lots",
     "erp_sync_apply_stock",
     "erp_sync_apply_orders",
+    "erp_set_batch_picking_policy",
     "erp_sync_finish",
   ]);
   assert.deepEqual(calls[0].args, { p_company_id: "company-1", p_actor_id: "user-1", p_provider: "mock" });
@@ -104,7 +105,7 @@ test("consulta remitos y aplica depósitos, productos, lotes, stock y órdenes e
     unit: "kilogramos",
     warehouseExternalId: "Depósito Central - SRV",
   }]);
-  assert.equal(calls[8].args.p_error, null);
+  assert.equal(calls[9].args.p_error, null);
 });
 
 test("consulta los remitos ANTES de traer el stock, para liberar los pallets en la misma corrida", async () => {
@@ -207,6 +208,7 @@ test("un error inesperado no filtra detalles a la auditoría", async () => {
     getDispatchStatus: async () => { throw new Error("no"); },
     reportDelivery: async () => { throw new Error("no"); },
     attachDeliveryReceipt: async () => { throw new Error("no"); },
+    getBatchPickingPolicy: async () => { throw new Error("no"); },
   };
   const run = await syncCompanyFromErp({ ...base, db, getClient: () => leaky });
   assert.equal(run.errorMessage, "Error inesperado durante la sincronización.");

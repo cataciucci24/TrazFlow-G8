@@ -6,6 +6,7 @@ import {
   ErpError,
   erpErrorCodeFromStatus,
   isErpError,
+  type BatchPickingPolicy,
   type DeliveryDiscrepancyKind,
   type DeliveryPalletOutcome,
   type DeliveryReceipt,
@@ -200,6 +201,13 @@ export function deliveryReceiptFileName(receipt: Pick<DeliveryReceipt, "idempote
 }
 
 /* ---------- Mapeo ERPNext → contrato ---------- */
+
+export function mapBatchPickingPolicy(value: unknown): BatchPickingPolicy {
+  const text = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (text === "lifo") return "lifo";
+  if (text === "expiry" || text === "expiry date") return "expiry";
+  return "fifo";
+}
 
 export function mapItem(item: ErpNextItem): ErpProduct {
   return {
@@ -552,6 +560,25 @@ export class ErpNextClient implements ErpClient {
     const body = await this.#request<{ message?: { name?: unknown } }>("POST", "/api/method/upload_file", form);
     if (typeof body.message?.name !== "string" || !body.message.name) throw invalidResponse("upload_file sin el archivo creado");
     return { erpReference: note.name, duplicate: false, acceptedAt: this.#now().toISOString() };
+  }
+
+  /**
+   * TRZ-65: Stock Settings → "Pick Serial / Batch Based On" (pick_serial_and_batch_based_on: FIFO, LIFO o Expiry).
+   * Sin valor (o en una versión que no tiene el campo) responde fifo, que es el comportamiento por defecto de ERPNext.
+   */
+  async getBatchPickingPolicy(): Promise<BatchPickingPolicy> {
+    let value: unknown = null;
+    try {
+      value = await this.#method<unknown>("frappe.client.get_single_value", {
+        doctype: "Stock Settings",
+        field: "pick_serial_and_batch_based_on",
+      });
+    } catch (error) {
+      // El campo no existe en esta versión: se usa el valor por defecto. Credenciales o red caídas sí se propagan.
+      if (isErpError(error) && (error.code === "validation" || error.code === "not_found")) return "fifo";
+      throw error;
+    }
+    return mapBatchPickingPolicy(value);
   }
 
   /** El Delivery Note que generó el despacho. Si todavía no existe, la entrega llegó antes: se reintenta. */

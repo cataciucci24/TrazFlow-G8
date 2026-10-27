@@ -223,6 +223,16 @@ export function buildDeliveryIdempotencyKey(orderExternalId: string): string {
   return `delivery:${id}`;
 }
 
+/* ---------- Política de salida de lotes (TRZ-65) ---------- */
+
+/** Cómo elige el ERP qué lote sale primero: el más viejo (fifo), el más nuevo (lifo) o el que vence antes (expiry). */
+export const BATCH_PICKING_POLICIES = ["fifo", "lifo", "expiry"] as const;
+export type BatchPickingPolicy = (typeof BATCH_PICKING_POLICIES)[number];
+
+export function isBatchPickingPolicy(value: unknown): value is BatchPickingPolicy {
+  return BATCH_PICKING_POLICIES.some((policy) => policy === value);
+}
+
 export type ErpHealth = {
   provider: ErpProvider;
   ok: true;
