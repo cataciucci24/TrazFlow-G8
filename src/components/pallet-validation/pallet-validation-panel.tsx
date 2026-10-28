@@ -6,6 +6,7 @@ import { ScanButton } from "@/components/ui/scan-button";
 import { useCallback, useRef, useState, useTransition } from "react";
 
 import { QrScanner } from "@/components/pallet-validation/qr-scanner";
+import { PalletScanDetails } from "@/components/pallets/pallet-scan-details";
 import { validatePallet } from "@/lib/pallet-validation/actions";
 import { latestScans } from "@/lib/pallet-validation/scan-history";
 import { formatPalletLocation, sortByLocation } from "@/lib/locations/format";
@@ -57,6 +58,7 @@ export function PalletValidationPanel({
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [manualCode, setManualCode] = useState("");
   const [result, setResult] = useState<PalletValidationResult | null>(null);
+  const [scannedCode, setScannedCode] = useState<string | null>(null);
   const [scanHistory, setScanHistory] = useState<{ code: string; message: string; success: boolean }[]>([]);
 
   const [incorrectPallets, setIncorrectPallets] = useState<string[]>(
@@ -85,11 +87,13 @@ export function PalletValidationPanel({
       scanLocked.current = true;
       setSubmissionError(null);
       setResult(null);
+      setScannedCode(null);
       startTransition(async () => {
         try {
           const validationResult = await validatePallet(orderId, qrCode);
 
           setResult(validationResult);
+          setScannedCode(qrCode.trim());
           setScanHistory((current) => [{
             code: qrCode,
             message: validationResult.message,
@@ -151,21 +155,10 @@ export function PalletValidationPanel({
       </div>
 
       {submissionError && <InlineAlert variant="danger">{submissionError}</InlineAlert>}
+      {scannedCode && <PalletScanDetails key={scannedCode} qrCode={scannedCode} />}
       {result && (
         <InlineAlert variant={isSuccess ? "success" : isDuplicate ? "warning" : "danger"}>
           <p className="font-medium">{result.message}</p>
-          {result.pallet && (
-            <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
-              <dt>Código:</dt>
-              <dd>{result.pallet.qrCode}</dd>
-              <dt>Producto:</dt>
-              <dd>
-                {result.pallet.productName} ({result.pallet.productSku})
-              </dd>
-              <dt>Lote:</dt>
-              <dd>{result.pallet.batchNumber}</dd>
-            </dl>
-          )}
         </InlineAlert>
       )}
 

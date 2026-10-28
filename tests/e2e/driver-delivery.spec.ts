@@ -41,7 +41,7 @@ test(`el chofer procesa un QR y la entrega queda cerrada (${viewport.width}px)`,
     await page.getByLabel('Contraseña').fill('test1234');
     await present();
     await page.getByRole('button', { name: 'Ingresar' }).click();
-    // The first navigation can compile a route in the Next.js dev server.
+    // La primera navegación compila dashboard y entregas en next dev.
     await expect(page.getByRole('heading', { name: 'Mis entregas' })).toBeVisible({ timeout: 60_000 });
     await present();
   });
@@ -58,12 +58,19 @@ test(`el chofer procesa un QR y la entrega queda cerrada (${viewport.width}px)`,
     const dialog = page.getByRole('dialog', { name: 'Confirmar resultado' });
     await expect(dialog).toBeVisible();
     await expect(dialog.getByText(code, { exact: true })).toBeVisible();
+    const details = dialog.getByRole('region', { name: 'Ficha del pallet escaneado' });
+    await expect(details.getByText('10 cajas', { exact: true })).toBeVisible();
+    await expect(details.getByText('En tránsito', { exact: true })).toBeVisible();
+    await expect(details.getByText('Despacho confirmado', { exact: true })).toBeVisible();
+    await expect(details.getByText('Operador Demo · Operador de depósito', { exact: true })).toBeVisible();
+    await expect(details).not.toContainText('chofer@');
     await page.screenshot({ path: testInfo.outputPath('confirm-delivery.png') });
     await present();
     await dialog.getByRole('button', { name: 'Entregado', exact: true }).click();
     await expect(page.getByText('1 / 1', { exact: true })).toBeVisible();
     await expect(page.getByText('Entregado', { exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: /Escanear pallet en la entrega/ })).toBeDisabled();
+    await expect(page.getByRole('region', { name: 'Ficha del pallet escaneado' }).getByText('Entrega confirmada', { exact: true })).toBeVisible();
     await present();
     const state = await request.get('http://127.0.0.1:54329/test/state');
     expect(await state.json()).toEqual({ delivered: true, confirmations: 1 });

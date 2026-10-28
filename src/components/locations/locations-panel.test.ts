@@ -54,6 +54,7 @@ function harness() {
     if (name.endsWith("design-system")) return { InlineAlert: "alert", SectionHeader: "heading", TableShell: "table-shell" };
     if (name.endsWith("location-qr")) return { LocationQr: "qr" };
     if (name.endsWith("qr-scanner")) return { QrScanner: "scanner" };
+    if (name.endsWith("pallet-scan-details")) return { PalletScanDetails: "pallet-scan-details" };
     if (name.endsWith("warehouse-field")) return { WarehouseField: "warehouse-field" };
     if (name === "@/lib/warehouses/types") return require("../../lib/warehouses/types.ts");
     return require(name);

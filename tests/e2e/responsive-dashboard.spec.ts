@@ -8,7 +8,8 @@ async function login(page: Page, email: string) {
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Contraseña").fill("test1234");
   await page.getByRole("button", { name: "Ingresar" }).click();
-  await expect(page).toHaveURL(/\/dashboard/);
+  const heading = email === "deposito@trazflow.test" ? "Confirmar despacho" : "Centro de control";
+  await expect(page.getByRole("heading", { name: heading, exact: true })).toBeVisible({ timeout: 60_000 });
 }
 
 async function fitsViewport(page: Page) {
@@ -83,11 +84,15 @@ test("depósito valida por código y mantiene escaneo y confirmación al alcance
   await page.getByRole("link").filter({ hasText: "Destinatario Demo" }).click();
   const scan = page.getByRole("button", { name: "Abrir cámara para escanear QR" });
   const confirm = page.getByRole("button", { name: "Confirmar despacho", exact: true });
-  await expect(scan).toBeVisible();
+  // La primera apertura también compila el detalle de la orden en next dev.
+  await expect(scan).toBeVisible({ timeout: 60_000 });
   await expect(confirm).toBeDisabled();
   await page.getByLabel("Código del pallet").fill("PAL-DEMO-001");
   await page.getByRole("button", { name: "Validar", exact: true }).click();
   await expect(page.locator(".feedback-success").filter({ hasText: "Pallet validado correctamente." })).toBeVisible();
+  const details = page.getByRole("region", { name: "Ficha del pallet escaneado" });
+  await expect(details.getByText("Validación de carga", { exact: true })).toBeVisible();
+  await expect(details.getByText("10 cajas", { exact: true })).toBeVisible();
   await expect(confirm).toBeEnabled();
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
   const scanBox = await scan.boundingBox();
