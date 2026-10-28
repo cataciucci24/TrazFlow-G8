@@ -70,6 +70,24 @@ select pg_temp.assert_true(
   exists (select 1 from net.http_request_queue q join trz104_ids i on q.id = i.sync_id
           where q.url = 'https://trz104.example.test/api/cron/erp-sync'),
   'encola la sincronización');
+select pg_temp.assert_true(
+  not exists (select 1 from net.http_request_queue q join trz104_ids i on q.id in (i.outbox_id, i.sync_id)
+              where q.headers ? 'x-vercel-protection-bypass'),
+  'sin secreto de bypass no manda el header de Vercel');
+
+/* ---------- Bypass de Deployment Protection (opcional) ---------- */
+
+delete from vault.secrets where name = 'trazflow_vercel_bypass';
+select vault.create_secret('bypass-de-prueba-trz104', 'trazflow_vercel_bypass', 'test TRZ-104');
+
+create temp table trz104_bypass_id as
+select public.trazflow_cron_request('/api/cron/erp-outbox') as id;
+
+select pg_temp.assert_true(
+  exists (select 1 from net.http_request_queue q join trz104_bypass_id i on q.id = i.id
+          where q.headers ->> 'x-vercel-protection-bypass' = 'bypass-de-prueba-trz104'
+            and q.headers ->> 'Authorization' = 'Bearer secreto-de-prueba-trz104'),
+  'con secreto de bypass manda el header de Vercel y el Bearer');
 
 /* ---------- Rutas no permitidas ---------- */
 
