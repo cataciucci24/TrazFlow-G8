@@ -127,7 +127,7 @@ export default async function DispatchOrderDetailPage({
 
       <section className="section-stack">
       <SectionHeader title="Información de la orden" description="Destino, fechas y estado operativo actual." />
-      <div className="surface grid grid-cols-1 gap-5 p-6 text-sm sm:grid-cols-2">
+      <div className="surface detail-fields grid grid-cols-1 gap-5 p-4 text-sm sm:grid-cols-2 sm:p-6">
         <div>
           <p className="text-stone-500">Distribuidor de destino</p>
           <p className="font-semibold">{order.distributorName}</p>
@@ -195,33 +195,32 @@ export default async function DispatchOrderDetailPage({
         {associatedPallets.length === 0 ? (
           <div className="surface"><EmptyState title="Orden sin pallets asociados" description="Los pallets incorporados a esta orden aparecerán acá con su estado." /></div>
         ) : (
-          <TableShell label="Pallets asociados a la orden">
-            <table className="data-table min-w-[560px]">
-              <thead>
-                <tr>
-                  <th scope="col">QR</th>
-                  <th scope="col">Producto</th>
-                  <th scope="col" className="table-secondary-column">Lote</th>
-                  <th scope="col">Estado</th>
+          <TableShell label="Pallets asociados a la orden" mobileLayout="rows">
+            <table role="table" aria-label="Pallets asociados a la orden" className="data-table min-w-[560px]">
+              <thead role="rowgroup">
+                <tr role="row">
+                  <th role="columnheader" scope="col">QR</th>
+                  <th role="columnheader" scope="col">Producto</th>
+                  <th role="columnheader" scope="col">Lote</th>
+                  <th role="columnheader" scope="col">Estado</th>
                   {canAssociate && (
-                    <th scope="col" className="text-right">Acciones</th>
+                    <th role="columnheader" scope="col" className="text-right">Acciones</th>
                   )}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-stone-200">
+              <tbody role="rowgroup">
                 {associatedPallets.map((pallet) => (
-                  <tr key={pallet.id}>
-                    <td className="font-mono font-semibold">{pallet.qrCode}</td>
-                    <td>
+                  <tr role="row" key={pallet.id}>
+                    <td role="cell" data-label="QR" className="mobile-primary font-mono font-semibold">{pallet.qrCode}</td>
+                    <td role="cell" data-label="Producto" className="mobile-wide">
                       {pallet.productName} ({pallet.productSku})
-                      <span className="table-secondary block md:hidden">Lote {pallet.batchNumber}</span>
                     </td>
-                    <td className="table-secondary-column text-stone-600">{pallet.batchNumber}</td>
-                    <td>
+                    <td role="cell" data-label="Lote" className="text-stone-600">{pallet.batchNumber}</td>
+                    <td role="cell" data-label="Estado" className="mobile-priority">
                       <PalletStatusBadge status={pallet.status} />
                     </td>
                     {canAssociate && (
-                      <td className="text-right">
+                      <td role="cell" data-label="Acciones" className="mobile-actions text-right">
                         <DissociatePalletButton
                           orderId={order.id}
                           palletId={pallet.id}

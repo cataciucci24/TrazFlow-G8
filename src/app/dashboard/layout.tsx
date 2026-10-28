@@ -11,6 +11,7 @@ export default async function DashboardLayout({
 
   return (
     <FeedbackProvider>
+      <a href="#main-content" className="skip-link">Ir al contenido</a>
       <div className="min-h-dvh bg-stone-50 text-stone-950 lg:flex">
         <DashboardSidebar role={profile.role} />
         <section className="min-w-0 flex-1 lg:h-dvh lg:overflow-y-auto">

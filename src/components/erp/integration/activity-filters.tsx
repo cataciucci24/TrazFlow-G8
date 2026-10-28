@@ -37,7 +37,7 @@ export function ActivityFilters({ filters, active }: { filters: IntegrationFilte
             placeholder="SAL-ORD-…, PAL-…, stock:…, lote" className="form-control mt-2" />
         </label>
       </div>
-      <div className="mt-3 flex flex-wrap gap-2">
+      <div className="mobile-button-group mt-3 flex flex-wrap gap-2">
         <button type="submit" className="button-primary">Aplicar filtros</button>
         {active ? <Link href={INTEGRATIONS_PATH} className="button-ghost">Limpiar filtros</Link> : null}
       </div>

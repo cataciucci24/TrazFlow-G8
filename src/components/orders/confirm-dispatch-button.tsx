@@ -64,7 +64,7 @@ export function ConfirmDispatchButton({
           type="button"
           disabled={isPending || isBlocked || isSuccess} aria-busy={isPending}
           onClick={() => { setResult(null); setOpen(true); }}
-          className="button-primary"
+          className="button-primary confirm-action"
         >
           {isPending ? "Confirmando..." : "Confirmar despacho"}
         </button>
