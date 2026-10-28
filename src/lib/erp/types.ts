@@ -223,6 +223,47 @@ export function buildDeliveryIdempotencyKey(orderExternalId: string): string {
   return `delivery:${id}`;
 }
 
+/* ---------- Movimientos de stock (TRZ-62) y escaneos de despacho (TRZ-63) ---------- */
+
+/** receipt = alta (Material Receipt), issue = baja (Material Issue). */
+export const STOCK_ENTRY_TYPES = ["receipt", "issue"] as const;
+export type StockEntryType = (typeof STOCK_ENTRY_TYPES)[number];
+
+/** Alta o ajuste de stock que TrazFlow le pide al ERP. Queda en borrador: lo confirma el ERP. */
+export type StockEntryReport = {
+  contractVersion: ErpContractVersion;
+  /** stock-entry:{id} */
+  idempotencyKey: string;
+  entryType: StockEntryType;
+  productExternalId: string;
+  lotExternalId: string;
+  warehouseExternalId: string;
+  quantity: number;
+  uom: string;
+  reason: string;
+  requestedAt: string;
+  requestedBy: { id: string; name: string | null };
+};
+
+/**
+ * Un pallet escaneado en el despacho (scan) o que dejó de estarlo (unscan: se desasoció o se corrigió su cantidad).
+ * scanIdempotencyKey es la clave del escaneo al que se refiere; en un scan es la misma idempotencyKey.
+ */
+export type PalletScanReport = {
+  contractVersion: ErpContractVersion;
+  /** pallet-scan:{orden}:{pallet}:{n} o pallet-unscan:{orden}:{pallet}:{n} */
+  idempotencyKey: string;
+  action: "scan" | "unscan";
+  scanIdempotencyKey: string;
+  orderExternalId: string;
+  palletCode: string;
+  productExternalId: string;
+  lotExternalId: string;
+  quantity: number;
+  uom: string;
+  at: string;
+};
+
 /* ---------- Política de salida de lotes (TRZ-65) ---------- */
 
 /** Cómo elige el ERP qué lote sale primero: el más viejo (fifo), el más nuevo (lifo) o el que vence antes (expiry). */

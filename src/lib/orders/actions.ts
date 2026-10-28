@@ -430,6 +430,13 @@ export async function dissociatePallet(
 
   if (row.outcome === "dissociated") {
     revalidatePath(`/dashboard/orders/${orderId}`);
+    // TRZ-63: si el pallet estaba escaneado, el outbox tiene el aviso para sacarlo del Pick List.
+    after(() =>
+      processCompanyErpOutbox({
+        db: { rpc: (fn, args) => supabase.rpc(fn, args), storage: supabase.storage },
+        companyId: profile.companyId,
+      }),
+    );
   }
 
   return {

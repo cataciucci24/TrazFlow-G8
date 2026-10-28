@@ -133,6 +133,8 @@ function spyClient(inner: ErpClient = new MockErpClient()) {
     reportDelivery: (report) => inner.reportDelivery(report),
     attachDeliveryReceipt: (receipt, content) => inner.attachDeliveryReceipt(receipt, content),
     getBatchPickingPolicy: () => inner.getBatchPickingPolicy(),
+    reportStockEntry: (entry) => inner.reportStockEntry(entry),
+    reportPalletScan: (scan) => inner.reportPalletScan(scan),
   };
   return { client, received };
 }
