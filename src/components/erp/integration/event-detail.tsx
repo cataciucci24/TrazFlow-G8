@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { formatSyncedAt } from "@/components/erp/erp-origin";
+import { InlineAlert } from "@/components/ui/design-system";
 import { RetryEventButton } from "@/components/erp/integration/integration-buttons";
 import { IntegrationBadgeView } from "@/components/erp/integration/integration-badge";
 import { activityBadge } from "@/lib/erp-integration/status";
@@ -22,7 +23,7 @@ const ERROR_HELP: Record<string, string> = {
 };
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return <div><dt className="text-stone-500">{label}</dt><dd className="font-medium text-slate-950">{children}</dd></div>;
+  return <div className="min-w-0"><dt className="text-stone-500">{label}</dt><dd className="break-words font-medium text-slate-950">{children}</dd></div>;
 }
 
 export function EventDetail({ detail, closeHref }: { detail: IntegrationEventDetail; closeHref: string }) {
@@ -51,7 +52,7 @@ function SyncDetail({ detail }: { detail: Extract<IntegrationEventDetail, { kind
         <Field label="Proveedor">{detail.provider}</Field>
         <Field label="Iniciada por">{detail.triggeredByName ?? "—"}</Field>
       </dl>
-      {detail.errorMessage ? <p className="text-sm text-red-700">{detail.errorMessage}</p> : null}
+      {detail.errorMessage ? <InlineAlert variant="danger" announce={false}>{detail.errorMessage}</InlineAlert> : null}
       {detail.errors.length > 0 ? (
         <div className="space-y-2 text-sm">
           <h3 className="font-medium text-slate-950">{detail.errors.length} registro(s) con error</h3>
@@ -94,10 +95,10 @@ function OutboxDetail({ detail }: { detail: Extract<IntegrationEventDetail, { ki
       </dl>
 
       {detail.errorMessage || detail.errorCode ? (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900">
+        <InlineAlert variant="danger" announce={false}>
           <p><span className="font-mono">[{detail.errorCode ?? "error"}]</span> {detail.errorMessage}</p>
           {detail.errorCode && ERROR_HELP[detail.errorCode] ? <p className="mt-1">{ERROR_HELP[detail.errorCode]}</p> : null}
-        </div>
+        </InlineAlert>
       ) : null}
 
       {detail.status === "failed" ? <RetryEventButton eventId={detail.id} /> : null}

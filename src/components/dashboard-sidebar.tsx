@@ -7,8 +7,9 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { LogoutButton } from "@/components/logout-button";
 import { BrandLogo } from "@/components/brand-mark";
 import type { UserRole } from "@/lib/types";
+import type { CompanyPlanResult } from "@/lib/plans/types";
 
-type DashboardSidebarProps = { role: UserRole };
+type DashboardSidebarProps = { role: UserRole; companyPlan?: CompanyPlanResult | null };
 
 const roleDetails = {
   logistics_manager: { label: "Logística", color: "bg-[var(--brand)]", tone: "bg-[var(--brand-soft)] text-[var(--brand-hover)]" },
@@ -16,7 +17,7 @@ const roleDetails = {
   driver_operator: { label: "Chofer", color: "bg-[var(--brand)]", tone: "bg-[var(--brand-soft)] text-[var(--brand-hover)]" },
 } as const;
 
-export function DashboardSidebar({ role }: DashboardSidebarProps) {
+export function DashboardSidebar({ role, companyPlan }: DashboardSidebarProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -56,6 +57,7 @@ export function DashboardSidebar({ role }: DashboardSidebarProps) {
 
   const links = role === "logistics_manager"
     ? [
+        { href: "/dashboard", label: "Inicio", icon: <HomeIcon />, active: pathname === "/dashboard" },
         { href: "/dashboard/orders", label: "Órdenes de despacho", icon: <OrdersIcon />, active: isOrders },
         { href: "/dashboard/inventory", label: "Stock", icon: <InventoryIcon />, active: isInventory },
         { href: "/dashboard/alerts", label: "Alertas", icon: <AlertIcon />, active: isAlerts },
@@ -90,14 +92,24 @@ export function DashboardSidebar({ role }: DashboardSidebarProps) {
 
   const account = (
     <div className="mt-auto shrink-0 border-t border-[var(--border)] bg-[var(--surface-subtle)] px-5 py-5">
-      <p className="mb-3 text-[11px] font-bold tracking-[0.12em] text-[var(--muted)]">TU SESIÓN</p>
-      <div className="mb-4 flex items-center gap-3">
+      <p className="mb-3 text-[11px] font-bold tracking-[0.12em] text-[var(--muted)]">TU CUENTA</p>
+      {role === "logistics_manager" ? <Link href="/dashboard/account" onNavigate={closeMenu}
+        aria-current={pathname.startsWith("/dashboard/account") ? "page" : undefined}
+        aria-label="Tu cuenta: ver plan de la empresa" className={`account-link ${pathname.startsWith("/dashboard/account") ? "account-link-active" : ""}`}>
+        <span className={`grid size-10 shrink-0 place-items-center rounded-xl ${roleDetail.tone}`}><UserIcon /></span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold text-stone-900">{roleDetail.label}</span>
+          <span className="mt-1 block text-xs text-[var(--muted)]">{companyPlan?.available ? companyPlan.plan ? `Plan actual: ${companyPlan.plan.name}` : "Sin plan asignado" : "Plan no disponible"}</span>
+          <span className="mt-1 block text-xs font-bold text-[var(--brand)]">Cuenta y plan</span>
+        </span>
+        <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5 shrink-0 fill-none stroke-current" strokeWidth="2"><path d="m9 5 7 7-7 7" /></svg>
+      </Link> : <div className="mb-4 flex items-center gap-3">
         <span className={`grid size-10 shrink-0 place-items-center rounded-xl ${roleDetail.tone}`}><ScanIcon /></span>
         <div>
           <p className="text-sm font-semibold text-stone-900">{roleDetail.label}</p>
           <p className="text-xs text-[var(--muted)]">Rol activo</p>
         </div>
-      </div>
+      </div>}
       <LogoutButton className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-stone-600 transition-colors hover:bg-stone-100 hover:text-stone-950">
         <LogoutIcon /> Cerrar sesión
       </LogoutButton>
@@ -107,36 +119,36 @@ export function DashboardSidebar({ role }: DashboardSidebarProps) {
   return (
     <>
       <header className="sticky top-0 z-20 flex h-[76px] items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--surface)] px-5 lg:hidden">
-        <Link href="/dashboard" aria-label="TrazFlow, inicio" className="rounded-lg"><BrandLogo /></Link>
         <button type="button" aria-expanded={menuOpen} aria-controls="dashboard-mobile-menu" aria-haspopup="dialog"
           className="button-secondary gap-2"
           onClick={() => { dialogRef.current?.showModal(); setMenuOpen(true); }}>
           <MenuIcon /> Menú
         </button>
+        <Link href="/dashboard" aria-label="TrazFlow, inicio" className="rounded-lg"><BrandLogo /></Link>
       </header>
       <aside className="sticky top-0 hidden h-dvh w-[288px] shrink-0 flex-col border-r border-[var(--border)] bg-[var(--surface)] lg:flex">
         <div className="flex h-[76px] shrink-0 items-center border-b border-[var(--border)] px-6">
           <Link href="/dashboard" aria-label="TrazFlow, inicio" className="rounded-lg"><BrandLogo /></Link>
         </div>
-        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-          {navigation}
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">{navigation}</div>
           {account}
         </div>
       </aside>
       <dialog ref={dialogRef} id="dashboard-mobile-menu" aria-labelledby="dashboard-menu-title" aria-modal="true"
         onClose={() => setMenuOpen(false)}
         onClick={(event) => { if (event.target === event.currentTarget) closeMenu(); }}
-        className="fixed inset-y-0 left-0 m-0 h-dvh max-h-dvh w-[min(320px,calc(100%-2rem))] max-w-none overflow-hidden border-0 bg-[var(--surface)] p-0 text-stone-950 shadow-xl backdrop:bg-stone-950/40">
+        className="dashboard-mobile-menu fixed inset-y-0 left-0 m-0 h-dvh max-h-dvh w-[min(320px,calc(100%-2rem))] max-w-none overflow-hidden border-0 bg-[var(--surface)] p-0 text-stone-950 shadow-xl backdrop:bg-stone-950/40">
         <div className="flex h-full flex-col">
           <div className="flex min-h-[76px] shrink-0 items-center justify-between gap-3 border-b border-[var(--border)] px-5">
-            <Link href="/dashboard" onNavigate={closeMenu} aria-label="TrazFlow, inicio" className="rounded-lg"><BrandLogo /></Link>
             <button type="button" autoFocus onClick={closeMenu} aria-label="Cerrar menú" className="grid size-11 shrink-0 place-items-center rounded-xl text-stone-600 hover:bg-stone-100 hover:text-stone-950">
               <CloseIcon />
             </button>
+            <Link href="/dashboard" onNavigate={closeMenu} aria-label="TrazFlow, inicio" className="rounded-lg"><BrandLogo /></Link>
           </div>
           <h2 id="dashboard-menu-title" className="sr-only">Menú de navegación de TrazFlow</h2>
-          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
-            {navigation}
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">{navigation}</div>
             {account}
           </div>
         </div>
@@ -147,6 +159,14 @@ export function DashboardSidebar({ role }: DashboardSidebarProps) {
 
 function InventoryIcon() {
   return <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5 fill-none stroke-current" strokeWidth="2"><path d="M4 7 12 3l8 4-8 4-8-4Z" /><path d="M4 12l8 4 8-4" /><path d="M4 17l8 4 8-4" /></svg>;
+}
+
+function HomeIcon() {
+  return <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5 fill-none stroke-current" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m3 10 9-7 9 7M5 9v12h14V9M9 21v-8h6v8" /></svg>;
+}
+
+function UserIcon() {
+  return <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5 fill-none stroke-current" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="8" r="4" /><path d="M5 21v-2a7 7 0 0 1 14 0v2" /></svg>;
 }
 
 function OrdersIcon() {

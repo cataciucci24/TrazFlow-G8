@@ -22,7 +22,7 @@ export function PageHeader({ title, description, eyebrow, action }: PageHeaderPr
         <h1 className="page-title">{title}</h1>
         {description ? <p className="page-description">{description}</p> : null}
       </div>
-      {action ? <div className="shrink-0">{action}</div> : null}
+      {action ? <div className="page-header-actions">{action}</div> : null}
     </header>
   );
 }
@@ -41,13 +41,43 @@ export function SectionHeader({ title, description, action, id }: SectionHeaderP
         <h2 id={id} className="section-title">{title}</h2>
         {description ? <p className="section-description">{description}</p> : null}
       </div>
-      {action ? <div className="shrink-0">{action}</div> : null}
+      {action ? <div className="section-header-actions">{action}</div> : null}
     </div>
   );
 }
 
 export function Surface({ children, className = "" }: { children: ReactNode; className?: string }) {
   return <div className={`surface ${className}`}>{children}</div>;
+}
+
+/** Shared operational card for the warehouse and driver home screens. */
+export function OperationCard({ code, title, status, children }: {
+  code: string;
+  title: string;
+  status: ReactNode;
+  children?: ReactNode;
+}) {
+  return <>
+    <div className="operation-card-heading">
+      <div className="min-w-0">
+        <p className="font-mono font-bold">{code}</p>
+        <p className="mt-1 break-words text-sm text-stone-600">{title}</p>
+      </div>
+      {status}
+    </div>
+    {children}
+  </>;
+}
+
+/** Same progress semantics and appearance for dispatch validation and delivery. */
+export function OperationProgress({ completed, total, label }: { completed: number; total: number; label: string }) {
+  return <div className="operation-progress">
+    <div role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={total || 1} aria-valuenow={completed}
+      aria-valuetext={`${completed} de ${total} ${label}`} className="operation-progress-track">
+      <div className="operation-progress-fill" style={{ width: `${total ? Math.min(100, (completed / total) * 100) : 0}%` }} />
+    </div>
+    <p className="mt-2 text-sm text-stone-500">{completed} de {total} {label}</p>
+  </div>;
 }
 
 export function TableShell({ children, label, mobileLayout = "table", className = "" }: {

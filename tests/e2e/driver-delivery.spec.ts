@@ -5,7 +5,10 @@ const matrix = new QRCodeWriter().encode(code, BarcodeFormat.QR_CODE, 280, 280, 
 const blackPixels: number[] = [];
 for (let y = 0; y < 280; y++) for (let x = 0; x < 280; x++) if (matrix.get(x, y)) blackPixels.push(y * 280 + x);
 
-test('el chofer procesa un QR y la entrega queda cerrada', async ({ page, request }, testInfo) => {
+for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 }]) {
+test(`el chofer procesa un QR y la entrega queda cerrada (${viewport.width}px)`, async ({ page, request }, testInfo) => {
+  test.setTimeout(180_000);
+  await page.setViewportSize(viewport);
   // Pausas para exponer las pantallas, nunca para sincronizar las aserciones.
   // Solo se activan con la configuración de presentación.
   const present = async (milliseconds = 4000) => {
@@ -38,13 +41,16 @@ test('el chofer procesa un QR y la entrega queda cerrada', async ({ page, reques
     await page.getByLabel('Contraseña').fill('test1234');
     await present();
     await page.getByRole('button', { name: 'Ingresar' }).click();
-    await expect(page.getByRole('heading', { name: 'Mis entregas' })).toBeVisible();
+    // The first navigation can compile a route in the Next.js dev server.
+    await expect(page.getByRole('heading', { name: 'Mis entregas' })).toBeVisible({ timeout: 60_000 });
     await present();
   });
   await test.step('Abrir la orden asignada', async () => {
     await page.getByRole('link').filter({ hasText: 'Destinatario Demo' }).click();
-    await expect(page.getByRole('heading', { name: 'Confirmar entrega' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Confirmar entrega' })).toBeVisible({ timeout: 60_000 });
     await expect(page.getByText('0 / 1', { exact: true })).toBeVisible();
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath('delivery.png'), fullPage: true });
     await present();
   });
   await test.step('Escanear y confirmar el QR', async () => {
@@ -52,6 +58,7 @@ test('el chofer procesa un QR y la entrega queda cerrada', async ({ page, reques
     const dialog = page.getByRole('dialog', { name: 'Confirmar resultado' });
     await expect(dialog).toBeVisible();
     await expect(dialog.getByText(code, { exact: true })).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath('confirm-delivery.png') });
     await present();
     await dialog.getByRole('button', { name: 'Entregado', exact: true }).click();
     await expect(page.getByText('1 / 1', { exact: true })).toBeVisible();
@@ -67,3 +74,4 @@ test('el chofer procesa un QR y la entrega queda cerrada', async ({ page, reques
     await present(4000);
   });
 });
+}
