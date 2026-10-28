@@ -26,6 +26,9 @@ export function TraceabilitySearch({ defaultQr, palletCodes }: TraceabilitySearc
           defaultValue={defaultQr}
           maxLength={512}
           autoComplete="off"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
           list="existing-pallet-codes"
           placeholder="PAL-001"
           className="form-control"

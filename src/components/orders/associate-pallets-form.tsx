@@ -10,6 +10,7 @@ import {
   type AssociatePalletsState,
 } from "@/lib/orders/actions";
 import { PALLET_STATUS_LABELS } from "@/lib/pallets/labels";
+import { formatPalletLocation } from "@/lib/locations/format";
 import type { Pallet } from "@/lib/types";
 import type { BatchPickingPolicy } from "@/lib/erp/types";
 import { BATCH_PICKING_POLICY_LABELS, suggestedPalletIds } from "@/lib/pallets/picking";
@@ -65,7 +66,7 @@ export function AssociatePalletsForm({
               disabled={isPending}
               className="form-check"
             />
-            <label htmlFor={`pallet-${pallet.id}`} className="flex-1">
+            <label htmlFor={`pallet-${pallet.id}`} className="min-w-0 flex-1">
               <span className="font-mono font-semibold text-slate-950">{pallet.qrCode}</span>{" "}
               <span className="text-stone-500">
                 — {pallet.productName} ({pallet.productSku}), lote{" "}
@@ -75,8 +76,11 @@ export function AssociatePalletsForm({
               {suggested.has(pallet.id) && (
                 <span className="ml-2 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">Sugerido</span>
               )}
+              <span className={`mt-0.5 block break-all font-mono text-xs ${pallet.location ? "font-semibold text-slate-700" : "text-stone-400"}`}>
+                <span className="sr-only">Ubicación: </span>{formatPalletLocation(pallet.location)}
+              </span>
             </label>
-            <span className="text-xs text-stone-500">
+            <span className="shrink-0 text-xs text-stone-500">
               {PALLET_STATUS_LABELS[pallet.status]}
             </span>
           </li>

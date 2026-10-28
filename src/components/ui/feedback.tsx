@@ -45,7 +45,7 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
     <FeedbackContext.Provider value={notify}>
       {children}
       <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">{announcement ? <span key={announcement.id}>{announcement.message}</span> : null}</div>
-      <section aria-label="Notificaciones de acciones" className="pointer-events-none fixed right-4 bottom-4 left-4 z-40 grid gap-2 sm:left-auto sm:w-96">
+      <section aria-label="Notificaciones de acciones" className="action-notices pointer-events-none fixed right-4 bottom-4 left-4 z-40 grid gap-2 sm:left-auto sm:w-96">
         {notices.map((notice) => <div key={notice.id} className="pointer-events-auto"><SuccessNotice notice={notice} onDismiss={dismiss} /></div>)}
       </section>
     </FeedbackContext.Provider>

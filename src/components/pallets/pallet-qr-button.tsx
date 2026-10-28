@@ -127,7 +127,7 @@ function PalletQrModal({ pallet, onClose }: { pallet: Pallet; onClose: () => voi
 
   return (
     <Modal open onClose={onClose} title="QR del pallet" description="Escaneá este código o descargá la etiqueta completa del pallet."
-      actions={<><button type="button" onClick={downloadLabel} disabled={loading || error} className="button-primary">Descargar etiqueta</button><button type="button" onClick={onClose} className="button-secondary">Cerrar</button></>}>
+      actions={<><button type="button" onClick={onClose} className="button-secondary">Cerrar</button><button type="button" onClick={downloadLabel} disabled={loading || error} className="button-primary">Descargar etiqueta</button></>}>
       {loading && <LoadingState label="Generando imagen QR…" />}
       {error && <InlineAlert variant="danger">No se pudo mostrar el QR. Cerrá e intentá nuevamente.</InlineAlert>}
       <div ref={imageRef} className="mx-auto mt-4 w-fit bg-white" />

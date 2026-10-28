@@ -81,7 +81,7 @@ export function QrScanner({ disabled, onCancel, onScan, title = "Escanear pallet
               ref={videoRef}
               muted
               playsInline
-              className="aspect-square w-full object-cover"
+              className="scanner-video aspect-square w-full object-cover"
             />
             </div>
           </div>

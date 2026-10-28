@@ -56,6 +56,7 @@ export function DashboardSidebar({ role }: DashboardSidebarProps) {
 
   const links = role === "logistics_manager"
     ? [
+        { href: "/dashboard", label: "Inicio", icon: <HomeIcon />, active: pathname === "/dashboard" },
         { href: "/dashboard/orders", label: "Órdenes de despacho", icon: <OrdersIcon />, active: isOrders },
         { href: "/dashboard/next-orders", label: "Próximos pedidos", icon: <OrdersIcon />, active: pathname.startsWith("/dashboard/next-orders") },
         { href: "/dashboard/inventory", label: "Stock", icon: <InventoryIcon />, active: isInventory },
@@ -108,12 +109,12 @@ export function DashboardSidebar({ role }: DashboardSidebarProps) {
   return (
     <>
       <header className="sticky top-0 z-20 flex h-[76px] items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--surface)] px-5 lg:hidden">
-        <Link href="/dashboard" aria-label="TrazFlow, inicio" className="rounded-lg"><BrandLogo /></Link>
         <button type="button" aria-expanded={menuOpen} aria-controls="dashboard-mobile-menu" aria-haspopup="dialog"
           className="button-secondary gap-2"
           onClick={() => { dialogRef.current?.showModal(); setMenuOpen(true); }}>
           <MenuIcon /> Menú
         </button>
+        <Link href="/dashboard" aria-label="TrazFlow, inicio" className="rounded-lg"><BrandLogo /></Link>
       </header>
       <aside className="sticky top-0 hidden h-dvh w-[288px] shrink-0 flex-col border-r border-[var(--border)] bg-[var(--surface)] lg:flex">
         <div className="flex h-[76px] shrink-0 items-center border-b border-[var(--border)] px-6">
@@ -127,13 +128,13 @@ export function DashboardSidebar({ role }: DashboardSidebarProps) {
       <dialog ref={dialogRef} id="dashboard-mobile-menu" aria-labelledby="dashboard-menu-title" aria-modal="true"
         onClose={() => setMenuOpen(false)}
         onClick={(event) => { if (event.target === event.currentTarget) closeMenu(); }}
-        className="fixed inset-y-0 left-0 m-0 h-dvh max-h-dvh w-[min(320px,calc(100%-2rem))] max-w-none overflow-hidden border-0 bg-[var(--surface)] p-0 text-stone-950 shadow-xl backdrop:bg-stone-950/40">
+        className="dashboard-mobile-menu fixed inset-y-0 left-0 m-0 h-dvh max-h-dvh w-[min(320px,calc(100%-2rem))] max-w-none overflow-hidden border-0 bg-[var(--surface)] p-0 text-stone-950 shadow-xl backdrop:bg-stone-950/40">
         <div className="flex h-full flex-col">
           <div className="flex min-h-[76px] shrink-0 items-center justify-between gap-3 border-b border-[var(--border)] px-5">
-            <Link href="/dashboard" onNavigate={closeMenu} aria-label="TrazFlow, inicio" className="rounded-lg"><BrandLogo /></Link>
             <button type="button" autoFocus onClick={closeMenu} aria-label="Cerrar menú" className="grid size-11 shrink-0 place-items-center rounded-xl text-stone-600 hover:bg-stone-100 hover:text-stone-950">
               <CloseIcon />
             </button>
+            <Link href="/dashboard" onNavigate={closeMenu} aria-label="TrazFlow, inicio" className="rounded-lg"><BrandLogo /></Link>
           </div>
           <h2 id="dashboard-menu-title" className="sr-only">Menú de navegación de TrazFlow</h2>
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
@@ -148,6 +149,10 @@ export function DashboardSidebar({ role }: DashboardSidebarProps) {
 
 function InventoryIcon() {
   return <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5 fill-none stroke-current" strokeWidth="2"><path d="M4 7 12 3l8 4-8 4-8-4Z" /><path d="M4 12l8 4 8-4" /><path d="M4 17l8 4 8-4" /></svg>;
+}
+
+function HomeIcon() {
+  return <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5 fill-none stroke-current" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m3 10 9-7 9 7M5 9v12h14V9M9 21v-8h6v8" /></svg>;
 }
 
 function OrdersIcon() {
