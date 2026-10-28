@@ -32,3 +32,31 @@ El script revierte sus fixtures. Los tests de Node cubren la respuesta pública,
 autenticación, códigos inválidos, estados vacíos, errores y respuestas tardías.
 Playwright verifica el QR de entrega, la ficha previa y su actualización posterior
 con el servidor de fixtures (no reemplaza las pruebas SQL).
+
+Verificación remota con registros existentes, sin insertar ni modificar datos:
+
+```sh
+npx supabase db query --linked --file supabase/tests/trz106_cloud_state_checks.sql
+```
+
+## Prueba manual con la base del proyecto
+
+1. Ejecutar `npm run dev` y entrar a `http://localhost:3000` con un usuario operativo.
+2. Como logística o depósito, abrir **Ubicaciones** y seleccionar un pallet.
+   Debe aparecer su ficha con producto, lote, cantidad, ubicación y última acción.
+   Seleccionar o consultar la ficha no registra movimientos.
+3. Como depósito, usar **Escanear pallet** en esa pantalla. Al leer su QR debe
+   seleccionar el pallet y mostrar la misma ficha. Se puede usar otro dispositivo
+   para mostrar la etiqueta; un celular conectado por HTTP a la IP de la PC puede
+   bloquear la cámara (usar localhost o un entorno HTTPS).
+4. Como depósito, abrir una orden pendiente en **Confirmar despacho** e ingresar
+   su código en el campo manual. Luego de validar, la última acción debe indicar
+   «Validación de carga», con el nombre del operador y la fecha. Esta prueba sí
+   valida un pallet real de esa orden: elegir una orden destinada a pruebas.
+5. Como chofer asignado a una orden en tránsito, abrir **Mis entregas** y escanear
+   un pallet. La ficha debe verse antes de confirmar. Cerrar el diálogo permite
+   consultar sin registrar la entrega; confirmar «Entregado» sí modifica la orden
+   real y actualiza la última acción de la ficha.
+
+La migración está en la base compartida. El front de esta rama se prueba localmente;
+la web desplegada recibe estos cambios cuando se despliegue la rama correspondiente.
