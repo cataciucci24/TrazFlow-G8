@@ -1,3 +1,5 @@
+import type { PalletLocation } from "../locations/format.ts";
+
 export type ValidationOutcome =
   | "validated"
   | "already_validated"
@@ -27,6 +29,8 @@ export type OrderPalletValidation = {
   productName: string;
   productSku: string;
   batchNumber: string;
+  /** Ubicación física (TRZ-105). null si no tiene o el rol no ve warehouse_locations. */
+  location: PalletLocation | null;
   validatedAt: string | null;
   validatedBy: string | null;
 };

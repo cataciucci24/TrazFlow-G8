@@ -10,6 +10,7 @@ import { mismatchSummary } from "@/lib/orders/lines";
 import { getAvailablePallets, getPalletsForOrder } from "@/lib/pallets/queries";
 import { getBatchPickingPolicy } from "@/lib/erp-stock/queries";
 import { sortPalletsForPicking } from "@/lib/pallets/picking";
+import { formatPalletLocation } from "@/lib/locations/format";
 import { ORDER_STATUS_LABELS } from "@/lib/orders/labels";
 import { AssociatePalletsForm } from "@/components/orders/associate-pallets-form";
 import { ConfirmDispatchButton } from "@/components/orders/confirm-dispatch-button";
@@ -195,38 +196,41 @@ export default async function DispatchOrderDetailPage({
         {associatedPallets.length === 0 ? (
           <div className="surface"><EmptyState title="Orden sin pallets asociados" description="Los pallets incorporados a esta orden aparecerán acá con su estado." /></div>
         ) : (
-          <TableShell label="Pallets asociados a la orden">
-            <table className="data-table min-w-[560px]">
-              <thead>
-                <tr>
-                  <th scope="col">QR</th>
-                  <th scope="col">Producto</th>
-                  <th scope="col" className="table-secondary-column">Lote</th>
-                  <th scope="col">Estado</th>
+          <TableShell label="Pallets asociados a la orden" mobileLayout="rows">
+            <table role="table" className="data-table min-w-[720px]">
+              <thead role="rowgroup">
+                <tr role="row">
+                  <th role="columnheader" scope="col">QR</th>
+                  <th role="columnheader" scope="col">Producto</th>
+                  <th role="columnheader" scope="col">Lote</th>
+                  <th role="columnheader" scope="col">Ubicación</th>
+                  <th role="columnheader" scope="col">Estado</th>
                   {canAssociate && (
-                    <th scope="col" className="text-right">Acciones</th>
+                    <th role="columnheader" scope="col" className="text-right">Acciones</th>
                   )}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-stone-200">
+              <tbody role="rowgroup" className="divide-y divide-stone-200">
                 {associatedPallets.map((pallet) => (
-                  <tr key={pallet.id}>
-                    <td className="font-mono font-semibold">{pallet.qrCode}</td>
-                    <td>
-                      {pallet.productName} ({pallet.productSku})
-                      <span className="table-secondary block md:hidden">Lote {pallet.batchNumber}</span>
+                  <tr role="row" key={pallet.id}>
+                    <td role="cell" data-label="QR" className="mobile-primary break-all font-mono font-semibold">{pallet.qrCode}</td>
+                    <td role="cell" data-label="Producto">{pallet.productName} ({pallet.productSku})</td>
+                    <td role="cell" data-label="Lote" className="text-stone-600">{pallet.batchNumber}</td>
+                    <td role="cell" data-label="Ubicación" className={`mobile-priority break-all font-mono text-xs ${pallet.location ? "font-semibold text-slate-700" : "text-stone-400"}`}>
+                      {formatPalletLocation(pallet.location)}
                     </td>
-                    <td className="table-secondary-column text-stone-600">{pallet.batchNumber}</td>
-                    <td>
+                    <td role="cell" data-label="Estado" className="mobile-priority">
                       <PalletStatusBadge status={pallet.status} />
                     </td>
                     {canAssociate && (
-                      <td className="text-right">
-                        <DissociatePalletButton
-                          orderId={order.id}
-                          palletId={pallet.id}
-                          disabled={validatedAtByPalletId.get(pallet.id) != null}
-                        />
+                      <td role="cell" data-label="Acciones" className="mobile-actions text-right">
+                        <div className="table-row-actions">
+                          <DissociatePalletButton
+                            orderId={order.id}
+                            palletId={pallet.id}
+                            disabled={validatedAtByPalletId.get(pallet.id) != null}
+                          />
+                        </div>
                       </td>
                     )}
                   </tr>
