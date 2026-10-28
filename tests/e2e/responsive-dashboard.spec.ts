@@ -8,7 +8,8 @@ async function login(page: Page, email: string) {
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Contraseña").fill("test1234");
   await page.getByRole("button", { name: "Ingresar" }).click();
-  await expect(page).toHaveURL(/\/dashboard/, { timeout: 60_000 });
+  const heading = email === "deposito@trazflow.test" ? "Confirmar despacho" : "Centro de control";
+  await expect(page.getByRole("heading", { name: heading, exact: true })).toBeVisible({ timeout: 60_000 });
 }
 
 async function fitsViewport(page: Page) {
