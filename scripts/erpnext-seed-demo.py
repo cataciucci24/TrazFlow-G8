@@ -104,13 +104,17 @@ def run():
             frappe.get_doc({"doctype": "Warehouse", "warehouse_name": wh, "company": comp, "parent_warehouse": root_wh, "is_group": 0}).insert()
             log(f"depósito {wh} - {ABBR}")
 
-    # Los depósitos que crea el wizard ("Sucursales - SRV", etc.) no se usan: deshabilitados, TrazFlow los importa
-    # como inactivos en vez de mostrarlos como depósitos de la demo.
+    # Los depósitos que crea el wizard ("Sucursales - SRV", etc.) no se usan y se borran: TrazFlow importa también
+    # los deshabilitados (como inactivos) y la sincronización nunca borra. Solo si están vacíos.
+    central = f"{WAREHOUSES[0]} - {ABBR}"
     keep = {f"{wh} - {ABBR}" for wh in WAREHOUSES}
-    for wh in frappe.get_all("Warehouse", filters={"company": comp, "is_group": 0, "disabled": 0}, pluck="name"):
-        if wh not in keep:
-            frappe.db.set_value("Warehouse", wh, "disabled", 1)
-            log(f"depósito {wh} deshabilitado")
+    if frappe.db.get_value("Company", comp, "default_warehouse") not in keep:
+        frappe.db.set_value("Company", comp, "default_warehouse", central)
+        log(f"depósito por defecto de {comp}: {central}")
+    for wh in frappe.get_all("Warehouse", filters={"company": comp, "is_group": 0}, pluck="name"):
+        if wh not in keep and not frappe.db.exists("Stock Ledger Entry", {"warehouse": wh}):
+            frappe.delete_doc("Warehouse", wh)
+            log(f"depósito {wh} borrado")
 
     for uom, whole in UOMS.items():
         if not frappe.db.exists("UOM", uom):

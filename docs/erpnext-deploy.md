@@ -154,7 +154,7 @@ tests del contrato), así la demo con ERPNext se ve igual que con mock y encaja 
 
 | Qué | Detalle |
 |---|---|
-| Depósitos | `Depósito Central - SRV`, `Depósito Norte - SRV`. Los que crea el wizard ("Sucursales - SRV", etc.) quedan deshabilitados: TrazFlow los importa como inactivos |
+| Depósitos | `Depósito Central - SRV`, `Depósito Norte - SRV`. Los que crea el wizard ("Sucursales - SRV", etc.) se borran si están vacíos: deshabilitados, TrazFlow igual los importa (como inactivos) y la sincronización nunca borra |
 | Productos | `ACE-500`, `ARR-1KG`, `QSO-HORMA`, `SAL-FINA` (deshabilitado), todos con lote |
 | Lotes y stock | Los 5 lotes del mock con las mismas cantidades, por un Material Receipt |
 | Clientes | `CUST-NORTE` (Distribuidora Norte), `CUST-SUR` (Almacén del Sur): los mismos ids que en la nube |
@@ -194,7 +194,7 @@ curl -s -H "Authorization: token $ERP_API_KEY:$ERP_API_SECRET" "$ERP_BASE_URL/ap
 ```
 
 Resultado al 28/10/2026, corriendo `ErpNextClient` (el adaptador real) contra el servidor, solo lectura:
-`healthcheck` ok; `pullMasterData` con 6 depósitos (2 activos), 4 productos, 5 lotes y 6 saldos; `pullDispatchOrders`
+`healthcheck` ok; `pullMasterData` con 2 depósitos, 4 productos, 5 lotes y 6 saldos; `pullDispatchOrders`
 con 4 órdenes `pending`. No se probó todavía `reportDispatch` ni el envío de entregas.
 
 ## 10. Variables
