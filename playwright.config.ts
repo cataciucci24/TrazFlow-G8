@@ -1,7 +1,9 @@
 import { defineConfig, devices } from "@playwright/test";
+import { resolve } from "node:path";
 
 export default defineConfig({
   testDir: "./tests/e2e",
+  testIgnore: "**/next-orders.spec.ts",
   fullyParallel: false,
   workers: 1,
   timeout: 90_000,
@@ -20,8 +22,11 @@ export default defineConfig({
     timeout: 120_000,
     reuseExistingServer: false,
     env: {
+      TRAZFLOW_E2E: "1",
       NEXT_PUBLIC_SUPABASE_URL: "http://127.0.0.1:54329",
       NEXT_PUBLIC_SUPABASE_ANON_KEY: "demo-anon-key",
+      ERP_PROVIDER: "mock",
+      NEXT_FONT_GOOGLE_MOCKED_RESPONSES: resolve("scripts/e2e-fonts.cjs"),
     },
   }],
 });

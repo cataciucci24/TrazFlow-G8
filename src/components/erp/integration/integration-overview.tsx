@@ -28,7 +28,7 @@ export async function IntegrationOverview({ companyId, summary, staleAfterHours 
           {overall.reasons.map((reason) => <li key={reason}>{reason}</li>)}
         </ul>
       ) : <p className="text-sm text-stone-600">Conexión activa, sincronización al día y sin reportes pendientes.</p>}
-      <dl className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+      <dl className="detail-fields grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
         <div>
           <dt className="text-stone-500">Conexión con el ERP</dt>
           <dd className="font-medium text-slate-950">

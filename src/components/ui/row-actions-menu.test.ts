@@ -158,6 +158,7 @@ test("menuPosition: abajo a la derecha, arriba si no entra, nunca fuera de la pa
   const viewport = { width: 390, height: 800 };
   const menu = { width: 208, height: 200 };
   assert.deepEqual(api.menuPosition({ top: 100, bottom: 136, left: 330, right: 374 }, menu, viewport), { top: 140, left: 166 });
+  assert.deepEqual(api.menuPosition({ top: 100, bottom: 144, left: 40, right: 140 }, menu, viewport), { top: 148, left: 40 }, "un botón a la izquierda abre el menú desde su mismo borde");
   assert.deepEqual(api.menuPosition({ top: 700, bottom: 736, left: 330, right: 374 }, menu, viewport), { top: 496, left: 166 });
   assert.equal(api.menuPosition({ top: 100, bottom: 136, left: 0, right: 40 }, menu, viewport).left, 8, "no se sale por la izquierda");
   assert.equal(api.menuPosition({ top: 100, bottom: 136, left: 0, right: 40 }, { width: 500, height: 200 }, viewport).left, 8, "más ancho que la pantalla");

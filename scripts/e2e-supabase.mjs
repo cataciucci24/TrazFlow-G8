@@ -7,6 +7,12 @@ const palletId = '30000000-0000-4000-8000-000000000001';
 const user = { id: driverId, email: 'chofer@trazflow.test', aud: 'authenticated', role: 'authenticated', app_metadata: {}, user_metadata: {}, created_at: '2026-01-01T00:00:00Z' };
 let delivered = false;
 let confirmations = 0;
+let activeRole = 'driver_operator';
+let validated = false;
+const roleEmails = { 'chofer@trazflow.test': 'driver_operator', 'deposito@trazflow.test': 'warehouse_operator', 'logistica@trazflow.test': 'logistics_manager' };
+const product = { id: 'product-demo', name: 'Producto Demo con descripción extendida para comprobar el diseño en celular', sku: 'SKU-DEMO', unit_of_measure: 'cajas' };
+const batch = { id: 'batch-demo', batch_number: 'LOTE-DEMO', expiration_date: '2099-12-31', source_system: 'erp', products: product };
+const pallet = { id: palletId, qr_code: 'PAL-DEMO-001', status: 'assigned', current_location: 'Depósito central — Sector de preparación de pedidos', warehouse_code: 'CENTRAL', quantity: 10, created_at: '2026-10-25T12:00:00Z', source_system: 'trazflow', external_id: null, synced_at: null, batches: batch, traceability_events: [{ count: 1 }] };
 const part = value => Buffer.from(JSON.stringify(value)).toString('base64url');
 const token = `${part({ alg: 'HS256', typ: 'JWT' })}.${part({ sub: driverId, aud: 'authenticated', role: 'authenticated', exp: 4102444800 })}.fixture`;
 createServer(async (req, res) => {
@@ -20,24 +26,46 @@ createServer(async (req, res) => {
   const body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString()) : {};
   const send = (data, status = 200) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(data)); };
   if (url.pathname === '/health') return send({ ok: true });
-  if (url.pathname === '/test/reset') { delivered = false; confirmations = 0; return send({ ok: true }); }
+  if (url.pathname === '/test/reset') { delivered = false; confirmations = 0; validated = false; activeRole = 'driver_operator'; return send({ ok: true }); }
   if (url.pathname === '/test/state') return send({ delivered, confirmations });
   if (url.pathname === '/auth/v1/token') {
-    if (body.email !== user.email || body.password !== 'test1234') return send({ code: 'invalid_credentials', message: 'Invalid login credentials' }, 400);
+    if (!roleEmails[body.email] || body.password !== 'test1234') return send({ code: 'invalid_credentials', message: 'Invalid login credentials' }, 400);
+    activeRole = roleEmails[body.email];
     return send({ access_token: token, refresh_token: 'fixture-refresh', token_type: 'bearer', expires_in: 360000, user });
   }
   if (url.pathname === '/auth/v1/user') return send(user);
-  if (url.pathname === '/rest/v1/users') return send({ id: driverId, company_id: 'company-demo', name: 'Chofer Demo', email: user.email, role: 'driver_operator', revoked_at: null });
-  if (url.pathname === '/rest/v1/order_delivery_receipts') return send([]);
+  if (url.pathname === '/rest/v1/users') {
+    const profile = { id: driverId, company_id: 'company-demo', name: 'Operador Demo', email: user.email, role: activeRole, revoked_at: null };
+    return send(url.searchParams.has('role') ? [profile] : profile);
+  }
   if (url.pathname === '/rest/v1/dispatch_orders') {
-    const order = { id: orderId, driver_id: driverId, distributor_id: 'recipient-demo', status: delivered ? 'delivered' : 'confirmed', estimated_dispatch_date: '2026-10-25', created_at: '2026-10-25T12:00:00Z', notes: null, distributors: { name: 'Destinatario Demo' }, driver: { name: 'Chofer Demo' }, order_pallets: [{ delivery_outcome: delivered ? 'delivered' : null }] };
+    const order = { id: orderId, driver_id: driverId, distributor_id: 'recipient-demo', status: delivered ? 'delivered' : activeRole === 'driver_operator' ? 'confirmed' : 'draft', source_system: 'trazflow', external_id: null, synced_at: null, estimated_dispatch_date: '2026-10-25', created_at: '2026-10-25T12:00:00Z', notes: 'Pedido de prueba con observaciones para comprobar que todo el contenido siga visible en una pantalla pequeña.', distributors: { name: 'Destinatario Demo' }, driver: { name: 'Chofer Demo' }, order_pallets: [{ validated_at: validated ? '2026-10-25T12:00:00Z' : null, delivery_outcome: delivered ? 'delivered' : null }] };
     return send(url.searchParams.has('id') ? order : delivered ? [] : [order]);
+  }
+  if (url.pathname === '/rest/v1/pallets') return send([pallet]);
+  if (url.pathname === '/rest/v1/products') return send([product]);
+  if (url.pathname === '/rest/v1/batches') return send([batch]);
+  if (url.pathname === '/rest/v1/warehouses') return send([{ code: 'CENTRAL', name: 'Depósito central', source_system: 'erp', active: true, external_id: 'CENTRAL', synced_at: null }]);
+  if (url.pathname === '/rest/v1/order_pallets') return send([{ pallet_id: palletId, pallets: pallet, validated_at: validated ? '2026-10-25T12:00:00Z' : null, validated_by: validated ? driverId : null }]);
+  if (url.pathname === '/rest/v1/order_notifications') return send([{ id: 'notice-demo', event_type: 'dispatch_wrong_pallet', description: 'Un pallet escaneado no corresponde a esta orden.', pallet_id: palletId, created_at: '2026-10-25T12:00:00Z' }]);
+  if (['order_delivery_receipts', 'traceability_events', 'distributor_batch_stocks', 'distributor_product_stocks', 'dispatch_order_lines'].some(table => url.pathname === `/rest/v1/${table}`)) return send([]);
+  if (url.pathname === '/rest/v1/erp_sync_runs' || url.pathname === '/rest/v1/erp_company_settings') return send(null);
+  if (url.pathname === '/rest/v1/rpc/get_expiration_thresholds') return send([{ critical_days: 30, caution_days: 60, upcoming_days: 90 }]);
+  if (url.pathname === '/rest/v1/rpc/erp_stock_overview') return send([]);
+  if (url.pathname === '/rest/v1/rpc/erp_outbox_driver_claim') return send([]);
+  if (url.pathname === '/rest/v1/rpc/erp_integration_summary') return send([{ pending_count: 1, unreported_count: 1 }]);
+  if (url.pathname === '/rest/v1/rpc/erp_dispatched_unreported') return send([{ order_id: orderId, order_external_id: 'ERP-ORDEN-DEMO-001', order_status: 'confirmed', confirmed_at: '2026-10-25T12:00:00Z', distributor_name: 'Destinatario Demo', event_id: '40000000-0000-4000-8000-000000000001', event_status: 'failed', attempts: 1, last_error_code: 'timeout', next_attempt_at: null, total_count: 1 }]);
+  if (url.pathname === '/rest/v1/rpc/erp_integration_activity') return send([{ kind: 'dispatch_confirmed', id: '40000000-0000-4000-8000-000000000001', status: 'failed', occurred_at: '2026-10-25T12:00:00Z', finished_at: null, attempts: 1, next_attempt_at: null, error_code: 'timeout', error_message: 'El ERP no respondió a tiempo. El reporte queda pendiente para el siguiente intento.', error_count: 1, order_id: orderId, order_external_id: 'ERP-ORDEN-DEMO-001', pallet_count: 1, erp_reference: null, provider: 'mock', total_count: 1 }]);
+  if (url.pathname === '/rest/v1/rpc/validate_order_pallet') {
+    if (body.p_order_id !== orderId || body.p_qr_code !== pallet.qr_code) return send({ message: 'Unexpected validation input' }, 400);
+    validated = true;
+    return send([{ outcome: 'validated', pallet_id: palletId, qr_code: pallet.qr_code, product_name: product.name, product_sku: product.sku, batch_number: batch.batch_number, validated_at: '2026-10-25T12:00:00Z' }]);
   }
   if (url.pathname === '/rest/v1/rpc/get_order_delivery_pallets') return send([{ pallet_id: palletId, qr_code: 'PAL-DEMO-001', product_name: 'Producto Demo', product_sku: 'SKU-DEMO', batch_number: 'LOTE-DEMO', quantity: 10, unit_of_measure: 'cajas', delivery_outcome: delivered ? 'delivered' : null, processed_at: delivered ? '2026-10-25T12:00:00Z' : null }]);
   if (url.pathname === '/rest/v1/rpc/get_pallet_scan_details') return send(body.p_qr_code === 'PAL-DEMO-001' ? [{
     qr_code: 'PAL-DEMO-001', product_name: 'Producto Demo', product_sku: 'SKU-DEMO', batch_number: 'LOTE-DEMO',
-    quantity: 10, unit_of_measure: 'cajas', physical_location: delivered ? 'Destinatario Demo' : 'En tránsito',
-    last_event_type: delivered ? 'delivery_confirmed' : 'dispatch_confirmed', last_event_at: '2026-10-25T12:00:00Z',
+    quantity: 10, unit_of_measure: 'cajas', physical_location: delivered ? 'Destinatario Demo' : activeRole === 'driver_operator' ? 'En tránsito' : pallet.current_location,
+    last_event_type: delivered ? 'delivery_confirmed' : validated ? 'qr_scan' : activeRole === 'driver_operator' ? 'dispatch_confirmed' : 'location_assigned', last_event_at: '2026-10-25T12:00:00Z',
     actor_name: delivered ? 'Chofer Demo' : 'Operador Demo', actor_role: delivered ? 'driver_operator' : 'warehouse_operator',
   }] : []);
   if (url.pathname === '/rest/v1/rpc/confirm_delivery_pallet') {
