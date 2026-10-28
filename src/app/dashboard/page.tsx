@@ -2,7 +2,7 @@ import { requireUserProfile, hasRole } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { getExpirationAlerts } from "@/lib/pallets/queries";
 import { getDistributorStockAlerts } from "@/lib/stock-alerts/queries";
-import { EmptyState, OrderStatusBadge, PageHeader, SectionHeader } from "@/components/ui/design-system";
+import { EmptyState, OperationCard, OperationProgress, OrderStatusBadge, PageHeader, SectionHeader } from "@/components/ui/design-system";
 import type { OrderStatus } from "@/lib/types";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -38,24 +38,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                   <Link
                     key={order.id}
                     href={`/dashboard/orders/${order.id}`}
-                    className="surface p-5 transition hover:border-[var(--brand-border)]"
+                    className="surface operation-card"
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="font-mono font-bold">{order.id.slice(0, 8).toUpperCase()}</p>
-                        <p className="mt-1 text-sm text-stone-500">{distributor?.name ?? "Distribuidor sin nombre"}</p>
-                      </div>
-                      <OrderStatusBadge status={order.status as OrderStatus} />
-                    </div>
-                    <div className="mt-4 h-2 overflow-hidden rounded-full bg-stone-100">
-                      <div
-                        className="h-full rounded-full bg-emerald-600"
-                        style={{ width: `${pallets.length ? (validated / pallets.length) * 100 : 0}%` }}
-                      />
-                    </div>
-                    <p className="mt-2 text-sm text-stone-500">
-                      {validated} de {pallets.length} pallets confirmados
-                    </p>
+                    <OperationCard code={order.id.slice(0, 8).toUpperCase()} title={distributor?.name ?? "Distribuidor sin nombre"}
+                      status={<OrderStatusBadge status={order.status as OrderStatus} />}>
+                      <OperationProgress completed={validated} total={pallets.length} label="pallets confirmados" />
+                    </OperationCard>
                   </Link>
                 );
               })}

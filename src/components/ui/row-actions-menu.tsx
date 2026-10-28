@@ -23,12 +23,15 @@ const GAP = 4;
 const MARGIN = 8;
 
 /**
- * Dónde va el menú (posición fija, en px del viewport): debajo del botón y alineado a su derecha. Si no entra
+ * Dónde va el menú (posición fija, en px del viewport): debajo del botón y hacia el espacio disponible. Si no entra
  * abajo y sí arriba, se abre hacia arriba. Nunca queda a menos de MARGIN de un borde de la pantalla.
  */
 export function menuPosition(trigger: Rect, menu: Size, viewport: Size): { top: number; left: number } {
   const maxLeft = Math.max(MARGIN, viewport.width - menu.width - MARGIN);
-  const left = Math.min(Math.max(trigger.right - menu.width, MARGIN), maxLeft);
+  const preferredLeft = (trigger.left + trigger.right) / 2 <= viewport.width / 2
+    ? trigger.left
+    : trigger.right - menu.width;
+  const left = Math.min(Math.max(preferredLeft, MARGIN), maxLeft);
   const below = trigger.bottom + GAP;
   const above = trigger.top - GAP - menu.height;
   const fitsBelow = below + menu.height <= viewport.height - MARGIN;
@@ -216,6 +219,7 @@ export function RowActionsMenu({ label, actions }: {
         <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5" fill="currentColor">
           <circle cx="5" cy="12" r="1.75" /><circle cx="12" cy="12" r="1.75" /><circle cx="19" cy="12" r="1.75" />
         </svg>
+        <span className="md:hidden">Acciones</span>
       </button>
       {menu && typeof document !== "undefined" ? createPortal(menu, document.body) : null}
     </>

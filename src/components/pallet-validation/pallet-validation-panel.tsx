@@ -1,6 +1,7 @@
 "use client";
 
-import { Badge, EmptyState, InlineAlert } from "@/components/ui/design-system";
+import { Badge, EmptyState, InlineAlert, OperationProgress } from "@/components/ui/design-system";
+import { ScanButton } from "@/components/ui/scan-button";
 
 import { useCallback, useRef, useState, useTransition } from "react";
 
@@ -127,31 +128,25 @@ export function PalletValidationPanel({
     <div className="list-content space-y-5">
       <div className="grid gap-8 lg:grid-cols-[350px_minmax(0,1fr)]">
         <div className="space-y-3">
-          <button
-          type="button"
-          disabled={isPending || pallets.length === 0} aria-busy={isPending}
+          <ScanButton
+          disabled={isPending || pallets.length === 0} busy={isPending}
           onClick={() => {
             setResult(null);
             setIsScannerOpen(true);
           }}
-          aria-label="Abrir cámara para escanear QR"
-          className="scanner-trigger group"
-        >
-          <svg viewBox="0 0 24 24" className="mb-4 size-11 stroke-stone-500 group-hover:stroke-[var(--brand)]" fill="none" strokeWidth="1.5"><path d="M4 9V5h4M20 9V5h-4M4 15v4h4M20 15v4h-4M8 8h3v3H8zM13 8h3v3h-3zM8 13h3v3H8zM13 13h3v3h-3z" /></svg>
-          <span className="text-base">{isPending ? "Validando…" : "Tocá para escanear el QR"}</span>
-          <span className="mt-2 text-xs text-slate-500">Se abrirá la cámara del dispositivo</span>
-          </button>
+          accessibleLabel="Abrir cámara para escanear QR"
+          label="Tocá para escanear el QR" busyLabel="Validando…"
+          />
           <form onSubmit={handleManualSubmit} className="flex gap-2">
             <label className="sr-only" htmlFor="manual-pallet-code">Código del pallet</label>
-            <input id="manual-pallet-code" value={manualCode} onChange={(event) => setManualCode(event.target.value)} disabled={isPending || pallets.length === 0} placeholder="PAL-XXXX" className="form-control min-w-0 flex-1 font-mono" />
+            <input id="manual-pallet-code" name="qrCode" value={manualCode} onChange={(event) => setManualCode(event.target.value)} disabled={isPending || pallets.length === 0} autoComplete="off" autoCapitalize="none" autoCorrect="off" spellCheck={false} enterKeyHint="go" placeholder="PAL-XXXX" className="form-control min-w-0 flex-1 font-mono" />
             <button type="submit" disabled={isPending || !manualCode.trim() || pallets.length === 0} aria-busy={isPending} className="button-primary">{isPending ? "Validando…" : "Validar"}</button>
           </form>
         </div>
         <div className="surface p-5">
           <h2 className="text-sm font-bold tracking-[0.08em] text-stone-500">ESTADO DE LA ORDEN</h2>
           <div className="mt-4 flex items-center justify-between"><p className="font-mono font-bold">{orderId.slice(0, 8).toUpperCase()}</p><Badge tone={missingPallets.length === 0 ? "success" : "warning"}>{missingPallets.length === 0 ? "COMPLETA" : `${missingPallets.length} PENDIENTES`}</Badge></div>
-          <div className="mt-4 h-2 overflow-hidden rounded-full bg-stone-100"><div className="h-full rounded-full bg-emerald-600" style={{ width: `${pallets.length ? (validatedCount / pallets.length) * 100 : 0}%` }} /></div>
-          <p className="mt-2 text-sm text-stone-500">{validatedCount} de {pallets.length} pallets confirmados</p>
+          <OperationProgress completed={validatedCount} total={pallets.length} label="pallets confirmados" />
         </div>
       </div>
 
@@ -218,7 +213,7 @@ export function PalletValidationPanel({
                   ))}
                 </div>
               </div>
-              <ul className="divide-y divide-stone-200 rounded-xl border border-stone-200 px-4">
+              <ul className="operation-list">
                 {sortedMissingPallets.map((pallet) => <PalletRow key={pallet.id} pallet={pallet} />)}
               </ul>
             </section>
@@ -226,7 +221,7 @@ export function PalletValidationPanel({
           {validatedPallets.length > 0 && (
             <section aria-labelledby="validated-pallets-title" className="space-y-3">
               <h3 id="validated-pallets-title" className="text-xs font-bold tracking-[0.1em] text-stone-500">VALIDADOS ({validatedPallets.length})</h3>
-              <ul className="divide-y divide-stone-200 rounded-xl border border-stone-200 px-4">
+              <ul className="operation-list">
                 {validatedPallets.map((pallet) => <PalletRow key={pallet.id} pallet={pallet} />)}
               </ul>
             </section>

@@ -10,5 +10,6 @@ const TONES: Record<IntegrationBadge, BadgeTone> = {
 };
 
 export function IntegrationBadgeView({ badge, detail }: { badge: IntegrationBadge; detail?: string }) {
-  return <Badge tone={TONES[badge]}>{INTEGRATION_BADGE_LABELS[badge]}{detail ? ` · ${detail}` : ""}</Badge>;
+  const label = INTEGRATION_BADGE_LABELS[badge];
+  return <Badge tone={TONES[badge]}>{label}{detail && detail !== label ? ` · ${detail}` : ""}</Badge>;
 }

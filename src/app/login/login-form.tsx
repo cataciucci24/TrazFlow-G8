@@ -63,6 +63,8 @@ export function LoginForm() {
             onChange={(event) => setEmail(event.target.value)}
             type="email"
             autoComplete="email"
+            autoCapitalize="none"
+            spellCheck={false}
             disabled={isPending}
             required
             placeholder="nombre@empresa.com"
