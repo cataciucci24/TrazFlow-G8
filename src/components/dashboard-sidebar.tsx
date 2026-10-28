@@ -7,8 +7,9 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { LogoutButton } from "@/components/logout-button";
 import { BrandLogo } from "@/components/brand-mark";
 import type { UserRole } from "@/lib/types";
+import type { CompanyPlanResult } from "@/lib/plans/types";
 
-type DashboardSidebarProps = { role: UserRole };
+type DashboardSidebarProps = { role: UserRole; companyPlan?: CompanyPlanResult | null };
 
 const roleDetails = {
   logistics_manager: { label: "Logística", color: "bg-[var(--brand)]", tone: "bg-[var(--brand-soft)] text-[var(--brand-hover)]" },
@@ -16,7 +17,7 @@ const roleDetails = {
   driver_operator: { label: "Chofer", color: "bg-[var(--brand)]", tone: "bg-[var(--brand-soft)] text-[var(--brand-hover)]" },
 } as const;
 
-export function DashboardSidebar({ role }: DashboardSidebarProps) {
+export function DashboardSidebar({ role, companyPlan }: DashboardSidebarProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -91,14 +92,24 @@ export function DashboardSidebar({ role }: DashboardSidebarProps) {
 
   const account = (
     <div className="mt-auto shrink-0 border-t border-[var(--border)] bg-[var(--surface-subtle)] px-5 py-5">
-      <p className="mb-3 text-[11px] font-bold tracking-[0.12em] text-[var(--muted)]">TU SESIÓN</p>
-      <div className="mb-4 flex items-center gap-3">
+      <p className="mb-3 text-[11px] font-bold tracking-[0.12em] text-[var(--muted)]">TU CUENTA</p>
+      {role === "logistics_manager" ? <Link href="/dashboard/account" onNavigate={closeMenu}
+        aria-current={pathname.startsWith("/dashboard/account") ? "page" : undefined}
+        aria-label="Tu cuenta: ver plan de la empresa" className={`account-link ${pathname.startsWith("/dashboard/account") ? "account-link-active" : ""}`}>
+        <span className={`grid size-10 shrink-0 place-items-center rounded-xl ${roleDetail.tone}`}><UserIcon /></span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold text-stone-900">{roleDetail.label}</span>
+          <span className="mt-1 block text-xs text-[var(--muted)]">{companyPlan?.available ? companyPlan.plan ? `Plan actual: ${companyPlan.plan.name}` : "Sin plan asignado" : "Plan no disponible"}</span>
+          <span className="mt-1 block text-xs font-bold text-[var(--brand)]">Cuenta y plan</span>
+        </span>
+        <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5 shrink-0 fill-none stroke-current" strokeWidth="2"><path d="m9 5 7 7-7 7" /></svg>
+      </Link> : <div className="mb-4 flex items-center gap-3">
         <span className={`grid size-10 shrink-0 place-items-center rounded-xl ${roleDetail.tone}`}><ScanIcon /></span>
         <div>
           <p className="text-sm font-semibold text-stone-900">{roleDetail.label}</p>
           <p className="text-xs text-[var(--muted)]">Rol activo</p>
         </div>
-      </div>
+      </div>}
       <LogoutButton className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-stone-600 transition-colors hover:bg-stone-100 hover:text-stone-950">
         <LogoutIcon /> Cerrar sesión
       </LogoutButton>
@@ -119,8 +130,8 @@ export function DashboardSidebar({ role }: DashboardSidebarProps) {
         <div className="flex h-[76px] shrink-0 items-center border-b border-[var(--border)] px-6">
           <Link href="/dashboard" aria-label="TrazFlow, inicio" className="rounded-lg"><BrandLogo /></Link>
         </div>
-        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-          {navigation}
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">{navigation}</div>
           {account}
         </div>
       </aside>
@@ -136,8 +147,8 @@ export function DashboardSidebar({ role }: DashboardSidebarProps) {
             <Link href="/dashboard" onNavigate={closeMenu} aria-label="TrazFlow, inicio" className="rounded-lg"><BrandLogo /></Link>
           </div>
           <h2 id="dashboard-menu-title" className="sr-only">Menú de navegación de TrazFlow</h2>
-          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
-            {navigation}
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">{navigation}</div>
             {account}
           </div>
         </div>
@@ -152,6 +163,10 @@ function InventoryIcon() {
 
 function HomeIcon() {
   return <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5 fill-none stroke-current" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m3 10 9-7 9 7M5 9v12h14V9M9 21v-8h6v8" /></svg>;
+}
+
+function UserIcon() {
+  return <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5 fill-none stroke-current" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="8" r="4" /><path d="M5 21v-2a7 7 0 0 1 14 0v2" /></svg>;
 }
 
 function OrdersIcon() {
