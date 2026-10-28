@@ -12,6 +12,7 @@ import {
 } from "@/lib/orders/actions";
 import type { Distributor } from "@/lib/types";
 import type { Pallet } from "@/lib/types";
+import { formatPalletLocation } from "@/lib/locations/format";
 
 type NewDispatchOrderFormProps = {
   distributors: Distributor[];
@@ -75,7 +76,7 @@ export function NewDispatchOrderForm({
 
       <fieldset className="space-y-2" aria-describedby={state.errors.palletIds ? "palletIds-error" : undefined}>
         <legend className="text-sm font-semibold uppercase tracking-wide text-stone-500">Pallets de la orden</legend>
-        {pallets.length === 0 ? <InlineAlert variant="warning">No hay pallets disponibles en depósito. Primero registrá uno desde Seguimiento.</InlineAlert> : <div className="max-h-56 divide-y divide-stone-200 overflow-y-auto rounded-xl border border-stone-200 px-4">{pallets.map((pallet) => <label key={pallet.id} className="flex min-h-11 cursor-pointer items-center gap-3 py-3 text-sm"><input name="palletIds" type="checkbox" value={pallet.id} checked={selectedPalletIds.includes(pallet.id)} onChange={(event) => setSelectedPalletIds((current) => event.target.checked ? [...current, pallet.id] : current.filter((id) => id !== pallet.id))} disabled={isPending} className="form-check" /><span className="font-mono font-semibold">{pallet.qrCode}</span><span className="text-stone-500">{pallet.productName} · lote {pallet.batchNumber}</span></label>)}</div>}
+        {pallets.length === 0 ? <InlineAlert variant="warning">No hay pallets disponibles en depósito. Primero registrá uno desde Seguimiento.</InlineAlert> : <div className="max-h-56 divide-y divide-stone-200 overflow-y-auto rounded-xl border border-stone-200 px-4">{pallets.map((pallet) => <label key={pallet.id} className="flex min-h-11 cursor-pointer items-center gap-3 py-3 text-sm"><input name="palletIds" type="checkbox" value={pallet.id} checked={selectedPalletIds.includes(pallet.id)} onChange={(event) => setSelectedPalletIds((current) => event.target.checked ? [...current, pallet.id] : current.filter((id) => id !== pallet.id))} disabled={isPending} className="form-check" /><span className="min-w-0 flex-1"><span className="font-mono font-semibold">{pallet.qrCode}</span> <span className="text-stone-500">{pallet.productName} · lote {pallet.batchNumber}</span><span className={`mt-0.5 block break-all font-mono text-xs ${pallet.location ? "font-semibold text-slate-700" : "text-stone-400"}`}><span className="sr-only">Ubicación: </span>{formatPalletLocation(pallet.location)}</span></span></label>)}</div>}
         {state.errors.palletIds && <InlineAlert id="palletIds-error" variant="danger">{state.errors.palletIds}</InlineAlert>}
       </fieldset>
 
