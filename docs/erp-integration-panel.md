@@ -132,54 +132,46 @@ En la actividad y en el detalle de una sincronización, esta página muestra **A
 
 ### Configurarlo en la nube
 
-1. **Vercel → Settings → Environment Variables**, entorno *Production* (sin `NEXT_PUBLIC_`):
+1. **Vercel → Settings → Environment Variables**, para los entornos del deploy que va a llamar el cron (hoy *Preview* de `develop` y *Production*; sin
+   `NEXT_PUBLIC_`):
    - `SUPABASE_SERVICE_ROLE_KEY`: Supabase → Project Settings → API Keys → la clave *secret* (`sb_secret_…`) o la
      *service_role* (legacy).
    - `CRON_SECRET`: generarlo con `openssl rand -hex 32`. Guardalo en el gestor de contraseñas: hace falta en el
      paso 3.
-2. **Redeploy** de producción (las variables nuevas no llegan a un deploy ya hecho).
-3. **Probarlo con `curl`** desde tu máquina, con el dominio de producción (los preview tienen Deployment
-   Protection):
+2. **Redeploy** (las variables nuevas no llegan a un deploy ya hecho).
+3. **Probarlo con `curl`** desde tu máquina, con el dominio que va a ir en Vault. Sin header tiene que responder
+   el JSON 401 de la app: si responde una página de login de Vercel, ese dominio tiene Deployment Protection y
+   pg_net no va a poder entrar.
    ```bash
    curl -i https://<tu-app>.vercel.app/api/cron/erp-outbox                                 # 401
    curl -i -H "Authorization: Bearer $CRON_SECRET" https://<tu-app>.vercel.app/api/cron/erp-outbox   # 200 + resumen
    curl -i -H "Authorization: Bearer $CRON_SECRET" https://<tu-app>.vercel.app/api/cron/erp-sync     # 200 + empresas
    ```
-4. **Supabase → SQL Editor:** aplicar la migración `20261030100000_trz104_erp_sync_service_role.sql` (si no se
-   aplicó con el resto) y después correr estas secciones, una por vez. **No se guardan en el repo** porque llevan
-   la URL y el secreto reales: reemplazá los dos valores al pegarlas.
-   ```sql
-   -- a) Extensiones (una sola vez).
-   create extension if not exists pg_cron with schema pg_catalog;
-   create extension if not exists pg_net with schema extensions;
+4. **Migraciones:** `npx supabase db push`. Las extensiones (`pg_cron`, `pg_net`), la función
+   `trazflow_cron_request` y los dos jobs los crea la migración `20261030110000_trz104_pg_cron_jobs.sql`:
+   - `trazflow-erp-outbox`: `*/5 * * * *` → `/api/cron/erp-outbox`.
+   - `trazflow-erp-sync`: `2,17,32,47 * * * *` → `/api/cron/erp-sync` (no coincide con el outbox).
 
-   -- b) Secretos en Vault (una sola vez). La URL es la del deploy que tiene TRZ-104, sin barra final; el
-   --    secreto es exactamente el CRON_SECRET de Vercel.
+   Cada ejecución lee la URL y el secreto de Vault y encola un `GET` con `Authorization: Bearer …` y timeout de
+   290 s (casi todo el `maxDuration`). **Si falta alguno de los dos secretos, el job no hace nada**: por eso en la
+   base local, sin secretos, los jobs corren sin llamar a nadie. La función es `security definer` y nadie de la
+   API (`anon`, `authenticated`, `service_role`) puede ejecutarla.
+5. **Supabase → SQL Editor: los secretos en Vault** (una sola vez). **No se guardan en el repo**: reemplazá los
+   dos valores al pegarlos. La URL es la del deploy que tiene TRZ-104, sin barra final; el secreto es exactamente
+   el `CRON_SECRET` de Vercel.
+   ```sql
    select vault.create_secret('https://<tu-app>.vercel.app', 'trazflow_app_url', 'URL de TrazFlow (TRZ-104)');
    select vault.create_secret('<CRON_SECRET>', 'trazflow_cron_secret', 'CRON_SECRET de TrazFlow (TRZ-104)');
-
-   -- c) Jobs. pg_net corta a los 2 s por defecto: se le da casi todo el maxDuration (300 s). La sincronización
-   --    corre en los minutos 2, 17, 32 y 47 para no coincidir con el outbox.
-   select cron.schedule('trazflow-erp-outbox', '*/5 * * * *', $job$
-     select net.http_get(
-       url := (select decrypted_secret from vault.decrypted_secrets where name = 'trazflow_app_url') || '/api/cron/erp-outbox',
-       headers := jsonb_build_object('Authorization', 'Bearer ' ||
-         (select decrypted_secret from vault.decrypted_secrets where name = 'trazflow_cron_secret')),
-       timeout_milliseconds := 290000);
-   $job$);
-   select cron.schedule('trazflow-erp-sync', '2,17,32,47 * * * *', $job$
-     select net.http_get(
-       url := (select decrypted_secret from vault.decrypted_secrets where name = 'trazflow_app_url') || '/api/cron/erp-sync',
-       headers := jsonb_build_object('Authorization', 'Bearer ' ||
-         (select decrypted_secret from vault.decrypted_secrets where name = 'trazflow_cron_secret')),
-       timeout_milliseconds := 290000);
-   $job$);
    ```
-5. **Verificar** (solo `select`):
+6. **Verificar** (solo `select`):
    ```sql
-   -- Respuestas de la app a los cron (se guardan 6 h): status_code 200 y el resumen en body.
    -- Los jobs existen y están activos.
    select jobid, jobname, schedule, active from cron.job where jobname like 'trazflow-%';
+
+   -- Últimas corridas de pg_cron (status 'succeeded' = encoló la llamada, o no hizo nada si faltan secretos).
+   select j.jobname, d.status, d.return_message, d.start_time
+   from cron.job_run_details d join cron.job j using (jobid)
+   where j.jobname like 'trazflow-%' order by d.start_time desc limit 10;
 
    -- Respuestas de la app a los cron (se guardan 6 h). 200 = ok; 401 = el secreto no coincide; 404 = ese deploy
    -- todavía no tiene TRZ-104; 500 = falta SUPABASE_SERVICE_ROLE_KEY; timed_out / error_msg = no respondió.
@@ -204,7 +196,10 @@ select vault.update_secret((select id from vault.secrets where name = 'trazflow_
 select vault.update_secret((select id from vault.secrets where name = 'trazflow_cron_secret'), '<nuevo-secreto>');
 ```
 
-Para apagarlo: `select cron.unschedule('trazflow-erp-outbox'); select cron.unschedule('trazflow-erp-sync');`.
+Para apagarlo sin borrar los jobs, borrá uno de los secretos (`delete from vault.secrets where name =
+'trazflow_app_url';`) o pausalos con `select cron.alter_job(<jobid>, active := false);`. Para borrarlos:
+`select cron.unschedule('trazflow-erp-outbox'); select cron.unschedule('trazflow-erp-sync');` (se recrean
+copiando los `cron.schedule` de la migración `20261030110000_trz104_pg_cron_jobs.sql`).
 Mientras una llamada está en curso, cualquier rol que pueda loguearse en la base ve el secreto en
 `net.http_request_queue`: el riesgo es bajo (solo sirve para disparar los cron) y se rota con `update_secret`.
 
