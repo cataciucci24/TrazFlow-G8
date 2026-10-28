@@ -6,6 +6,8 @@ const blackPixels: number[] = [];
 for (let y = 0; y < 280; y++) for (let x = 0; x < 280; x++) if (matrix.get(x, y)) blackPixels.push(y * 280 + x);
 
 test('el chofer procesa un QR y la entrega queda cerrada', async ({ page, request }, testInfo) => {
+  test.setTimeout(180_000);
+  await page.setViewportSize({ width: 390, height: 844 });
   // Pausas para exponer las pantallas, nunca para sincronizar las aserciones.
   // Solo se activan con la configuración de presentación.
   const present = async (milliseconds = 4000) => {
@@ -38,7 +40,8 @@ test('el chofer procesa un QR y la entrega queda cerrada', async ({ page, reques
     await page.getByLabel('Contraseña').fill('test1234');
     await present();
     await page.getByRole('button', { name: 'Ingresar' }).click();
-    await expect(page.getByRole('heading', { name: 'Mis entregas' })).toBeVisible();
+    // La primera navegación compila dashboard y entregas en next dev.
+    await expect(page.getByRole('heading', { name: 'Mis entregas' })).toBeVisible({ timeout: 60_000 });
     await present();
   });
   await test.step('Abrir la orden asignada', async () => {
@@ -52,11 +55,19 @@ test('el chofer procesa un QR y la entrega queda cerrada', async ({ page, reques
     const dialog = page.getByRole('dialog', { name: 'Confirmar resultado' });
     await expect(dialog).toBeVisible();
     await expect(dialog.getByText(code, { exact: true })).toBeVisible();
+    const details = dialog.getByRole('region', { name: 'Ficha del pallet escaneado' });
+    await expect(details.getByText('10 cajas', { exact: true })).toBeVisible();
+    await expect(details.getByText('En tránsito', { exact: true })).toBeVisible();
+    await expect(details.getByText('Despacho confirmado', { exact: true })).toBeVisible();
+    await expect(details.getByText('Operador Demo · Operador de depósito', { exact: true })).toBeVisible();
+    await expect(details).not.toContainText('chofer@');
+    await page.screenshot({ path: testInfo.outputPath('trz106-mobile.png') });
     await present();
     await dialog.getByRole('button', { name: 'Entregado', exact: true }).click();
     await expect(page.getByText('1 / 1', { exact: true })).toBeVisible();
     await expect(page.getByText('Entregado', { exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: /Escanear pallet en la entrega/ })).toBeDisabled();
+    await expect(page.getByRole('region', { name: 'Ficha del pallet escaneado' }).getByText('Entrega confirmada', { exact: true })).toBeVisible();
     await present();
     const state = await request.get('http://127.0.0.1:54329/test/state');
     expect(await state.json()).toEqual({ delivered: true, confirmations: 1 });

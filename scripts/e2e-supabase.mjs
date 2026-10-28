@@ -28,11 +28,18 @@ createServer(async (req, res) => {
   }
   if (url.pathname === '/auth/v1/user') return send(user);
   if (url.pathname === '/rest/v1/users') return send({ id: driverId, company_id: 'company-demo', name: 'Chofer Demo', email: user.email, role: 'driver_operator', revoked_at: null });
+  if (url.pathname === '/rest/v1/order_delivery_receipts') return send([]);
   if (url.pathname === '/rest/v1/dispatch_orders') {
     const order = { id: orderId, driver_id: driverId, distributor_id: 'recipient-demo', status: delivered ? 'delivered' : 'confirmed', estimated_dispatch_date: '2026-10-25', created_at: '2026-10-25T12:00:00Z', notes: null, distributors: { name: 'Destinatario Demo' }, driver: { name: 'Chofer Demo' }, order_pallets: [{ delivery_outcome: delivered ? 'delivered' : null }] };
     return send(url.searchParams.has('id') ? order : delivered ? [] : [order]);
   }
   if (url.pathname === '/rest/v1/rpc/get_order_delivery_pallets') return send([{ pallet_id: palletId, qr_code: 'PAL-DEMO-001', product_name: 'Producto Demo', product_sku: 'SKU-DEMO', batch_number: 'LOTE-DEMO', quantity: 10, unit_of_measure: 'cajas', delivery_outcome: delivered ? 'delivered' : null, processed_at: delivered ? '2026-10-25T12:00:00Z' : null }]);
+  if (url.pathname === '/rest/v1/rpc/get_pallet_scan_details') return send(body.p_qr_code === 'PAL-DEMO-001' ? [{
+    qr_code: 'PAL-DEMO-001', product_name: 'Producto Demo', product_sku: 'SKU-DEMO', batch_number: 'LOTE-DEMO',
+    quantity: 10, unit_of_measure: 'cajas', physical_location: delivered ? 'Destinatario Demo' : 'En tránsito',
+    last_event_type: delivered ? 'delivery_confirmed' : 'dispatch_confirmed', last_event_at: '2026-10-25T12:00:00Z',
+    actor_name: delivered ? 'Chofer Demo' : 'Operador Demo', actor_role: delivered ? 'driver_operator' : 'warehouse_operator',
+  }] : []);
   if (url.pathname === '/rest/v1/rpc/confirm_delivery_pallet') {
     if (body.p_order_id !== orderId || body.p_qr_code !== 'PAL-DEMO-001' || body.p_discrepancy_type !== null) return send({ message: 'Unexpected delivery input' }, 400);
     confirmations++;

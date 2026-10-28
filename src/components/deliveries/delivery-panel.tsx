@@ -4,6 +4,7 @@ import { useCallback, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import { QrScanner } from "@/components/pallet-validation/qr-scanner";
+import { PalletScanDetails } from "@/components/pallets/pallet-scan-details";
 import { Modal } from "@/components/ui/modal";
 import { Badge, EmptyState, InlineAlert } from "@/components/ui/design-system";
 import { confirmDeliveryPallet } from "@/lib/deliveries/actions";
@@ -46,6 +47,7 @@ export function DeliveryPanel({ orderId, pallets, canDeliver }: { orderId: strin
 
     {!canDeliver && <InlineAlert>La entrega ya fue cerrada o la orden todavía no está en tránsito.</InlineAlert>}
     {result && <InlineAlert variant={["delivered", "already_processed", "surplus_recorded"].includes(result.outcome) ? "success" : "danger"}>{result.message}</InlineAlert>}
+    {result?.pallet && <PalletScanDetails key={`${result.pallet.qrCode}:${result.outcome}`} qrCode={result.pallet.qrCode} />}
 
     {pallets.length === 0 ? <EmptyState title="Entrega sin pallets" description="No hay pallets esperados para procesar." /> :
       <ul className="divide-y divide-stone-200 rounded-xl border border-stone-200 bg-white px-4">
@@ -65,6 +67,7 @@ export function DeliveryPanel({ orderId, pallets, canDeliver }: { orderId: strin
       description={expectedCode ? "Confirmá la entrega del pallet o registralo como dañado." : "El código no pertenece a los pallets esperados. Registrá la diferencia."}
       actions={<button type="button" className="button-secondary" onClick={() => setPendingCode(null)} disabled={isPending}>Cancelar</button>}>
       <p className="break-all font-mono text-sm font-semibold">{pendingCode}</p>
+      {pendingCode && <PalletScanDetails key={pendingCode} qrCode={pendingCode.trim()} />}
       <div className="mt-4 grid gap-2 sm:grid-cols-2">
         {expectedCode ? <>
           <button type="button" className="button-primary" disabled={isPending} onClick={() => submit(pendingCode!, null)}>Entregado</button>
