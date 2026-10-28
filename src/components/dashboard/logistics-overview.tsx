@@ -113,7 +113,7 @@ export function LogisticsOverview({ expirationAlerts, stockData }: {
             <div className="min-w-0 space-y-3">
               <h3 className="font-semibold">Envíos y disponibilidad</h3>
               <p className="text-sm text-stone-500">Consultá el estado de los despachos y dónde está la mercadería.</p>
-              <div className="flex flex-wrap gap-2">
+              <div className="mobile-button-group flex flex-wrap gap-2">
                 <Link href="/dashboard/orders" className="button-secondary">Revisar órdenes</Link>
                 <Link href="/dashboard/pallets" className="button-secondary">Consultar pallets</Link>
                 <Link href="/dashboard/inventory" className="button-secondary">Consultar stock</Link>
@@ -122,7 +122,7 @@ export function LogisticsOverview({ expirationAlerts, stockData }: {
             <div className="min-w-0 space-y-3">
               <h3 className="font-semibold">Planificar la mercadería</h3>
               <p className="text-sm text-stone-500">Revisá lotes y mercadería sin movimiento para evaluar prioridades.</p>
-              <div className="flex flex-wrap gap-2">
+              <div className="mobile-button-group flex flex-wrap gap-2">
                 <Link href="/dashboard/lots" className="button-secondary">Revisar lotes</Link>
                 <Link href="/dashboard/stagnant" className="button-secondary">Detectar inmovilizaciones</Link>
               </div>

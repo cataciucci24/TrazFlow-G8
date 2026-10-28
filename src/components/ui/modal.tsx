@@ -58,7 +58,7 @@ export function Modal({
         const bounds = event.currentTarget.getBoundingClientRect();
         if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) onClose();
       }}
-      className="fixed inset-0 m-auto max-h-[calc(100dvh-2rem)] w-[min(640px,calc(100vw-2rem))] max-w-none overflow-y-auto overscroll-contain rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] p-0 text-left text-[var(--foreground)] shadow-xl backdrop:bg-stone-950/40"
+      className="app-modal fixed inset-0 m-auto max-h-[calc(100dvh-2rem)] w-[min(640px,calc(100vw-2rem))] max-w-none overflow-y-auto overscroll-contain rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] p-0 text-left text-[var(--foreground)] shadow-xl backdrop:bg-stone-950/40"
     >
       {open && (
         <div className="p-5 sm:p-6">
@@ -72,7 +72,7 @@ export function Modal({
             </button>
           </div>
           {children ? <div className="mt-5">{children}</div> : null}
-          {actions ? <div className="mt-5 flex flex-wrap justify-end gap-3 border-t border-[var(--border)] pt-4">{actions}</div> : null}
+          {actions ? <div className="modal-actions mt-5 flex flex-wrap justify-end gap-3 border-t border-[var(--border)] pt-4">{actions}</div> : null}
           {busy ? <p role="status" className="mt-4 text-sm text-[var(--muted)]">Procesando… Esperá a que termine la operación.</p> : null}
         </div>
       )}
