@@ -76,9 +76,39 @@ un subbloque con savepoint: si un registro falla, se audita y se sigue con el re
 con el mensaje sanitizado de `ErpError`. Cualquier otro error inesperado se guarda como "Error inesperado durante la
 sincronización", sin el detalle.
 
-`syncCompanyFromErp({ db, companyId, actorId, provider, getClient })` es reutilizable: recibe al actor y un cliente de
-base autenticado como ese actor. Un cron o webhook sin usuario queda para más adelante: hoy las RPC exigen que
-`actorId` sea `auth.uid()`, con rol de logística en esa empresa.
+`syncCompanyFromErp({ db, companyId, actorId, provider, getClient })` es reutilizable. La manual recibe al actor y un
+cliente autenticado como ese actor: las RPC exigen que `actorId` sea `auth.uid()`, con rol de logística en esa
+empresa. La automática (TRZ-104) recibe `actorId: null` y un cliente con `service_role`.
+
+## Sincronización automática (TRZ-104)
+
+El cron `GET /api/cron/erp-sync` (cada 15 minutos, llamado por `pg_cron` desde Supabase; configuración y
+verificación en [`erp-integration-panel.md`](erp-integration-panel.md), "Procesamiento automático") corre el mismo
+flujo de arriba para cada empresa con ERP, sin usuario.
+
+- **Atribución: sin usuario.** `erp_sync_runs.trigger_source` es `manual` o `automatic`. Una automática tiene
+  `triggered_by` null, y las órdenes y vínculos de depósito que crea quedan con `created_by` null. La base lo
+  garantiza con checks: una manual siempre tiene usuario, y una orden sin `created_by` solo puede venir del ERP
+  (`source_system = 'erp'`); las órdenes manuales siguen exigiendo autor. Se descartaron atribuirla al último
+  usuario que sincronizó a mano (sería falso, y con `on delete restrict` ese usuario no se podría borrar) y un
+  usuario técnico por empresa (`users.id` referencia `auth.users`: sería una cuenta real con permisos de
+  logística). Solo la página Integración ERP muestra **Automática**; el resto de la app no las distingue.
+- **Permisos** (`20261030100000_trz104_erp_sync_service_role.sql`): `erp_sync_start` con `service_role` exige
+  `p_actor_id` null y una empresa existente, y abre la ejecución como `automatic`. `erp_sync_lock_run` (que usan
+  `erp_sync_finish`, `erp_sync_apply_*` y `erp_sync_save_dispatch_documents`) deja a `service_role` seguir solo
+  las automáticas, y a un usuario solo las manuales que abrió él, con rol y empresa vigentes. Un usuario no puede
+  abrir una sin actor. `anon` no tiene privilegios.
+- **Qué empresas:** mientras `isErpEnabled` sea global, las que tienen al menos una sincronización previa o un
+  depósito vinculado al ERP (`erp_sync_auto_companies`, solo `service_role`). Primero las que hace más que no se
+  sincronizan. Una empresa nueva entra después de su primera sincronización manual. Cuando haya configuración por
+  empresa, se filtra en `runErpSyncCron` (`src/lib/cron/erp-sync-job.ts`).
+- **Una a la vez:** si la empresa ya tiene una sincronización `running` (manual o de otro cron), `erp_sync_start`
+  devuelve `55P03` y el cron la saltea sin error. Errores por registro y estados `success` / `partial` / `failed`,
+  igual que la manual.
+- **Trabajo limitado:** una empresa a la vez y no arranca otra pasados los 120 s (`maxDuration` es 300 s); las que
+  quedaron afuera van primero la próxima vez. La sincronización de una empresa no se parte: con ERPNext,
+  `pullMasterData` hace una llamada de stock por producto, cada una con `ERP_TIMEOUT_MS` (10 s por defecto).
+- **Sin ERP** (`ERP_PROVIDER` vacío): responde 200 y no sincroniza.
 
 ## Reglas que protegen el trabajo local
 
@@ -184,6 +214,8 @@ El panel de Integración ERP los muestra junto con la lista de depósitos.
 | `errors` | `[{ entity, external_id, message }]`, hasta 200 por ejecución. `entity`: `warehouses`, `products`, `lots`, `stock`, `orders` o `dispatch_document`. |
 | `notices` | Avisos que no son errores (TRZ-101), misma forma, hasta 200. Hoy solo `entity: "warehouses"`. |
 | `error_message` | Falla que cortó la ejecución (ERP caído, configuración inválida…). |
+| `trigger_source` | `manual` (logística tocó "Sincronizar") o `automatic` (el cron de TRZ-104). |
+| `triggered_by` | Usuario que la inició; null en las automáticas. |
 
 RLS: solo `logistics_manager` de la empresa puede leer. Nadie escribe directo: solo las RPC `erp_sync_*`.
 `anon` no tiene privilegios sobre las tablas ni sobre las funciones nuevas.
@@ -377,7 +409,7 @@ Stock. Lo hace la función `update_assigned_pallet_quantity` (migración
 - Repartir un pallet entre dos líneas del mismo producto: hoy el reporte va con `orderLineExternalId` null en ese
   caso.
 - Reconsultar remitos confirmados para detectar una anulación posterior.
-- Cron o webhook sin usuario: permitir `service_role` en las RPC con un actor técnico.
+- Partir la sincronización de una empresa en varias ejecuciones (hoy el cron corta entre empresas, no dentro de una).
 - Sincronización incremental con `updatedSince`. Hoy se trae todo, porque el stock es una foto completa y así se
   pueden contar los saldos ausentes.
 - `manufacturingDate` del lote no se guarda (no hay columna).

@@ -49,3 +49,16 @@ test("los componentes cliente solo importan tipos del ERP", () => {
     }
   }
 });
+
+test("TRZ-104: la clave service_role solo se lee en src/lib/supabase/service.ts y nunca con NEXT_PUBLIC_", () => {
+  const service = readFileSync(join(SRC, "lib", "supabase", "service.ts"), "utf8");
+  assert.match(service, /^import "server-only";$/m, "service.ts debe importar server-only");
+  for (const path of sourceFiles(SRC)) {
+    const name = relative(SRC, path);
+    const code = readFileSync(path, "utf8");
+    assert.doesNotMatch(code, /NEXT_PUBLIC_\w*(SERVICE|SECRET|CRON)/, name);
+    if (name !== join("lib", "supabase", "service.ts")) {
+      assert.doesNotMatch(code, /SUPABASE_SERVICE_ROLE_KEY/, `${name} lee la clave service_role`);
+    }
+  }
+});

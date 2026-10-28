@@ -4,7 +4,7 @@ import { formatSyncedAt } from "@/components/erp/erp-origin";
 import { IntegrationBadgeView } from "@/components/erp/integration/integration-badge";
 import { EmptyState, TableShell } from "@/components/ui/design-system";
 import { activityBadge } from "@/lib/erp-integration/status";
-import { ACTIVITY_STATUS_LABELS, activityKindLabel, ERP_DOCUMENT_STATUS_LABELS, type ActivityRow } from "@/lib/erp-integration/types";
+import { ACTIVITY_STATUS_LABELS, activityKindLabel, ERP_DOCUMENT_STATUS_LABELS, SYNC_TRIGGER_LABELS, type ActivityRow } from "@/lib/erp-integration/types";
 
 export function ActivityTable({ rows, detailHref, emptyTitle, emptyDescription, emptyAction }: {
   rows: ActivityRow[];
@@ -33,7 +33,12 @@ export function ActivityTable({ rows, detailHref, emptyTitle, emptyDescription, 
           {rows.map((row) => (
             <tr role="row" key={`${row.kind}:${row.id}`}>
               <td role="cell" data-label="Fecha" className="mobile-primary text-stone-700">{formatSyncedAt(row.occurredAt)}</td>
-              <td role="cell" data-label="Tipo">{activityKindLabel(row.kind)}</td>
+              <td role="cell" data-label="Tipo">
+                {activityKindLabel(row.kind)}
+                {row.triggerSource === "automatic"
+                  ? <span className="block text-xs text-stone-500">{SYNC_TRIGGER_LABELS.automatic}</span>
+                  : null}
+              </td>
               <td role="cell" data-label="Estado" className="mobile-priority">
                 <IntegrationBadgeView badge={activityBadge(row.kind, row.status)} detail={ACTIVITY_STATUS_LABELS[row.status]} />
                 {row.attempts !== null ? <span className="ml-2 text-xs text-stone-500">{row.attempts} intento(s)</span> : null}

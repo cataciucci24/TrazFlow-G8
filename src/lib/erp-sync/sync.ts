@@ -18,11 +18,17 @@ export type ErpSyncDb = {
 };
 
 export type SyncCompanyParams = {
-  /** Cliente autenticado como `actorId`: las RPC rechazan cualquier otro usuario. */
+  /**
+   * Manual: cliente autenticado como `actorId` (las RPC rechazan cualquier otro usuario).
+   * Automática (TRZ-104): cliente con service_role y `actorId` null.
+   */
   db: ErpSyncDb;
   companyId: string;
-  /** Usuario que dispara la sincronización. Queda como triggered_by y como created_by de las órdenes nuevas. */
-  actorId: string;
+  /**
+   * Usuario que dispara la sincronización: queda como triggered_by y como created_by de las órdenes nuevas.
+   * null = sincronización automática del cron, sin usuario (erp_sync_runs.trigger_source = 'automatic').
+   */
+  actorId: string | null;
   /** Nombre del proveedor para la auditoría. */
   provider: string;
   /** Se llama dentro de la ejecución: una configuración inválida queda auditada como falla. */
@@ -50,8 +56,8 @@ class ErpSyncStageError extends Error {}
  * trae el saldo, que ya la refleja, así que los pallets despachados se liberan del tope en la misma corrida. Una
  * falla de esa etapa no corta la sincronización: queda auditada y la corrida termina `partial`.
  *
- * Reutilizable desde una Server Action o, más adelante, un cron/webhook: solo depende de `ErpClient` y de las
- * RPC. Las llamadas al ERP se hacen entre RPC, nunca con una transacción abierta. Si el ERP falla, la
+ * Reutilizable desde la Server Action (manual) y el cron de TRZ-104 (automática): solo depende de `ErpClient` y
+ * de las RPC. Las llamadas al ERP se hacen entre RPC, nunca con una transacción abierta. Si el ERP falla, la
  * ejecución se cierra como `failed` (o `partial` si ya se había aplicado algo) con el mensaje sanitizado.
  */
 export async function syncCompanyFromErp(params: SyncCompanyParams): Promise<ErpSyncRunSummary> {

@@ -249,3 +249,14 @@ test("otra sincronización en curso devuelve un mensaje claro", async () => {
     /en curso/,
   );
 });
+
+test("TRZ-104: la automática (cron) abre el run sin usuario y hace la misma sincronización que la manual", async () => {
+  const manual = fakeDb();
+  await syncCompanyFromErp({ ...base, db: manual.db, getClient: () => new MockErpClient() });
+  const automatic = fakeDb();
+  await syncCompanyFromErp({ ...base, actorId: null, db: automatic.db, getClient: () => new MockErpClient() });
+
+  assert.deepEqual(manual.calls[0].args, { p_company_id: "company-1", p_actor_id: "user-1", p_provider: "mock" });
+  assert.deepEqual(automatic.calls[0].args, { p_company_id: "company-1", p_actor_id: null, p_provider: "mock" });
+  assert.deepEqual(automatic.calls.map((call) => call.fn), manual.calls.map((call) => call.fn));
+});
