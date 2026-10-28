@@ -140,8 +140,10 @@ En la actividad y en el detalle de una sincronización, esta página muestra **A
      paso 3.
 2. **Redeploy** (las variables nuevas no llegan a un deploy ya hecho).
 3. **Probarlo con `curl`** desde tu máquina, con el dominio que va a ir en Vault. Sin header tiene que responder
-   el JSON 401 de la app: si responde una página de login de Vercel, ese dominio tiene Deployment Protection y
-   pg_net no va a poder entrar.
+   el JSON 401 de la app. Si responde 302 a `vercel.com/sso-api`, ese dominio tiene Deployment Protection (pasa
+   con los previews, por ejemplo `develop`): generá un secreto en Vercel → Settings → Deployment Protection →
+   *Protection Bypass for Automation*, sumá `-H "x-vercel-protection-bypass: $VERCEL_BYPASS"` a los `curl` y
+   cargalo en Vault en el paso 5.
    ```bash
    curl -i https://<tu-app>.vercel.app/api/cron/erp-outbox                                 # 401
    curl -i -H "Authorization: Bearer $CRON_SECRET" https://<tu-app>.vercel.app/api/cron/erp-outbox   # 200 + resumen
@@ -162,6 +164,10 @@ En la actividad y en el detalle de una sincronización, esta página muestra **A
    ```sql
    select vault.create_secret('https://<tu-app>.vercel.app', 'trazflow_app_url', 'URL de TrazFlow (TRZ-104)');
    select vault.create_secret('<CRON_SECRET>', 'trazflow_cron_secret', 'CRON_SECRET de TrazFlow (TRZ-104)');
+
+   -- Solo si el dominio tiene Deployment Protection (ver paso 3). Migración 20261030120000: si existe, la
+   -- llamada manda además el header x-vercel-protection-bypass; si no, no lo manda.
+   select vault.create_secret('<VERCEL_BYPASS>', 'trazflow_vercel_bypass', 'Bypass de Deployment Protection (TRZ-104)');
    ```
 6. **Verificar** (solo `select`):
    ```sql
@@ -189,7 +195,9 @@ En la actividad y en el detalle de una sincronización, esta página muestra **A
    from public.erp_sync_runs where trigger_source = 'automatic' order by started_at desc limit 10;
    ```
 
-Si cambia la URL (por ejemplo, de `develop` a producción) o el secreto, no hace falta tocar los jobs:
+Si cambia la URL (por ejemplo, de `develop` a producción) o el secreto, no hace falta tocar los jobs. Al pasar a
+un dominio sin Deployment Protection, el bypass se puede borrar (`delete from vault.secrets where name =
+'trazflow_vercel_bypass';`):
 
 ```sql
 select vault.update_secret((select id from vault.secrets where name = 'trazflow_app_url'), 'https://<nueva-url>.vercel.app');
