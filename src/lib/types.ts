@@ -1,5 +1,6 @@
 import type { ErpOrigin } from "@/lib/erp-sync/types";
 import type { ProductUnit } from "@/lib/pallets/units";
+import type { PalletLocation } from "@/lib/locations/format";
 
 /**
  * Roles vigentes de la app. El enum `user_role` de Postgres todavía puede
@@ -136,6 +137,8 @@ export type Pallet = {
   status: PalletStatus;
   currentLocation: string | null;
   currentLocationId?: string | null;
+  /** Ubicación física (current_location_id → warehouse_locations, TRZ-105). null si no tiene o RLS no la deja ver. */
+  location?: PalletLocation | null;
   /** Depósito de TrazFlow donde está (o del que salió) el pallet (TRZ-101). */
   warehouseCode?: string | null;
   productName: string;

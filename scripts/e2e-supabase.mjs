@@ -75,6 +75,12 @@ createServer(async (req, res) => {
     return send([{ outcome: 'validated', pallet_id: palletId, qr_code: pallet.qr_code, product_name: product.name, product_sku: product.sku, batch_number: batch.batch_number, validated_at: '2026-10-25T12:00:00Z' }]);
   }
   if (url.pathname === '/rest/v1/rpc/get_order_delivery_pallets') return send([{ pallet_id: palletId, qr_code: 'PAL-DEMO-001', product_name: 'Producto Demo', product_sku: 'SKU-DEMO', batch_number: 'LOTE-DEMO', quantity: 10, unit_of_measure: 'cajas', delivery_outcome: delivered ? 'delivered' : null, processed_at: delivered ? '2026-10-25T12:00:00Z' : null }]);
+  if (url.pathname === '/rest/v1/rpc/get_pallet_scan_details') return send(body.p_qr_code === 'PAL-DEMO-001' ? [{
+    qr_code: 'PAL-DEMO-001', product_name: 'Producto Demo', product_sku: 'SKU-DEMO', batch_number: 'LOTE-DEMO',
+    quantity: 10, unit_of_measure: 'cajas', physical_location: delivered ? 'Destinatario Demo' : activeRole === 'driver_operator' ? 'En tránsito' : pallet.current_location,
+    last_event_type: delivered ? 'delivery_confirmed' : validated ? 'qr_scan' : activeRole === 'driver_operator' ? 'dispatch_confirmed' : 'location_assigned', last_event_at: '2026-10-25T12:00:00Z',
+    actor_name: delivered ? 'Chofer Demo' : 'Operador Demo', actor_role: delivered ? 'driver_operator' : 'warehouse_operator',
+  }] : []);
   if (url.pathname === '/rest/v1/rpc/confirm_delivery_pallet') {
     if (body.p_order_id !== orderId || body.p_qr_code !== 'PAL-DEMO-001' || body.p_discrepancy_type !== null) return send({ message: 'Unexpected delivery input' }, 400);
     confirmations++;

@@ -59,6 +59,7 @@ export function DashboardSidebar({ role, companyPlan }: DashboardSidebarProps) {
     ? [
         { href: "/dashboard", label: "Inicio", icon: <HomeIcon />, active: pathname === "/dashboard" },
         { href: "/dashboard/orders", label: "Órdenes de despacho", icon: <OrdersIcon />, active: isOrders },
+        { href: "/dashboard/next-orders", label: "Próximos pedidos", icon: <OrdersIcon />, active: pathname.startsWith("/dashboard/next-orders") },
         { href: "/dashboard/inventory", label: "Stock", icon: <InventoryIcon />, active: isInventory },
         { href: "/dashboard/alerts", label: "Alertas", icon: <AlertIcon />, active: isAlerts },
         { href: "/dashboard/pallets", label: "Pallets", icon: <PalletIcon />, active: isPallets },

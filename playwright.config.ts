@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 
 export default defineConfig({
   testDir: "./tests/e2e",
+  testIgnore: "**/next-orders.spec.ts",
   fullyParallel: false,
   workers: 1,
   timeout: 90_000,

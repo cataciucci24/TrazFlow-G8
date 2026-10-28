@@ -14,6 +14,14 @@ export type OutboxStatus = (typeof OUTBOX_STATUSES)[number];
 export type ActivityStatus = (typeof ACTIVITY_STATUSES)[number];
 export type ActivityKind = (typeof ACTIVITY_KINDS)[number];
 
+/** Origen de una sincronización (TRZ-104). Solo se muestra en la página Integración ERP. */
+export type SyncTriggerSource = "manual" | "automatic";
+
+export const SYNC_TRIGGER_LABELS: Record<SyncTriggerSource, string> = {
+  manual: "Manual",
+  automatic: "Automática",
+};
+
 export const ACTIVITY_KIND_LABELS: Record<ActivityKind, string> = {
   sync: "Sincronización",
   dispatch_confirmed: "Reporte de despacho",
@@ -102,6 +110,8 @@ export type ActivityRow = {
   provider: string | null;
   /** Solo en reportes enviados; null = sin consultar (o una sincronización). */
   erpDocumentStatus: ErpDocumentStatus | null;
+  /** Solo en sincronizaciones; null en los reportes. */
+  triggerSource: SyncTriggerSource | null;
 };
 
 export type UnreportedOrder = {
@@ -182,7 +192,9 @@ export type SyncRunDetail = {
   errorMessage: string | null;
   counters: Record<string, Record<string, number>>;
   errors: { entity: string; external_id: string | null; message: string }[];
+  /** null en las automáticas: no las inicia un usuario. */
   triggeredByName: string | null;
+  triggerSource: SyncTriggerSource;
 };
 
 export type IntegrationEventDetail = OutboxEventDetail | SyncRunDetail;

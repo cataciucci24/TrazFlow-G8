@@ -81,7 +81,8 @@ if (user && (pathname === "/login" || pathname === "/register") &&!request.nextU
 
 export const config = {
   matcher: [
-    // Todas las rutas menos los estáticos, la optimización de imágenes y los assets.
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    // Todas las rutas menos los estáticos, la optimización de imágenes, los assets y los cron (TRZ-104):
+    // /api/cron/* no tiene sesión (se autentica con CRON_SECRET en el Route Handler) y no debe pasar por acá.
+    "/((?!_next/static|_next/image|favicon.ico|api/cron/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };

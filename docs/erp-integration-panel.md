@@ -3,7 +3,8 @@
 > Ruta: `/dashboard/integrations` ("Integración ERP" en la navegación, solo `logistics_manager`).
 > Código: `src/app/dashboard/integrations/`, `src/components/erp/integration/`, `src/lib/erp-integration/` y la
 > migración `20261019150000_erp_integration_panel.sql`. Depende de US-ERP-03 ([`erp-sync.md`](erp-sync.md)) y
-> US-ERP-04 (outbox `erp_outbox_events`).
+> US-ERP-04 (outbox `erp_outbox_events`). El procesamiento automático (TRZ-104) está en `src/app/api/cron/` y
+> `src/lib/cron/`.
 
 Objetivo: que logística detecte fallas de sincronización o de reporte al ERP sin entrar a la base.
 
@@ -65,8 +66,8 @@ Un valor inválido se ignora y se avisa arriba de la página.
 El estado general toma el más grave en ese orden y lista todos los motivos.
 
 **Umbral de desactualizado:** variable de servidor `ERP_SYNC_STALE_AFTER_HOURS`, en horas (24 por defecto, admite
-decimales, máximo 8760). Un valor inválido usa el defecto. Como hoy la sincronización es manual, con 24 h el panel
-avisa si nadie sincronizó en el último día.
+decimales, máximo 8760). Un valor inválido usa el defecto. Desde TRZ-104 la sincronización automática corre cada
+15 minutos: si el panel marca "Desactualizado", el cron no está corriendo o el ERP viene fallando.
 
 ## Acciones
 
@@ -89,8 +90,126 @@ Después de cada una se revalidan Integración ERP, Órdenes, el detalle de orde
 - **Enviar pendientes ahora**: procesa hasta 5 reportes vencidos de la empresa (pendientes cuyo próximo intento ya
   llegó), con timeout de 15 s por envío. Los que esperan su backoff no se adelantan.
 
-No hay cron: sin esta acción, los reportes pendientes se procesan cuando alguien confirma otro despacho de la
-empresa (US-ERP-04).
+Los botones siguen funcionando igual; desde TRZ-104 además hay procesamiento automático (sección siguiente).
+
+## Procesamiento automático (TRZ-104)
+
+Sin que nadie use la app, dos tareas programadas llaman a la app desplegada en Vercel:
+
+| Route Handler | Frecuencia | Qué hace |
+|---|---|---|
+| `GET /api/cron/erp-outbox` | cada 5 min | Envía al ERP los reportes `pending` cuyo próximo intento venció, de **todas** las empresas (`processErpOutbox` con `service_role`). |
+| `GET /api/cron/erp-sync` | cada 15 min (minutos 2, 17, 32, 47) | Sincronización completa de cada empresa con ERP (`syncCompanyFromErp` sin usuario). Ver [`erp-sync.md`](erp-sync.md), "Sincronización automática". |
+
+**Quién las llama: `pg_cron` + `pg_net` en Supabase.** Se descartó Vercel Cron porque el plan Hobby solo permite
+un cron por día, con hasta 59 minutos de desvío. Otras opciones evaluadas: crontab en la VM de ERPNext, GitHub
+Actions (mínimo 5 min, con atrasos y corridas descartadas) y Edge Function. El Route Handler es el mismo para
+cualquier opción: si el proyecto pasa a Vercel Pro, alcanza con un `vercel.json` con los mismos paths.
+
+**Autenticación:** header `Authorization: Bearer <CRON_SECRET>`, comparado en tiempo constante
+(`src/lib/cron/auth.ts`). Sin `CRON_SECRET` en el servidor, o con menos de 16 caracteres, responde siempre 401.
+`src/proxy.ts` excluye `/api/cron/*`: esas rutas no tienen sesión y no redirigen a login.
+
+**Respuestas:** 401 sin el secreto · 200 `{ ok: true, erp: false }` sin ERP configurado (no envía ni sincroniza) ·
+200 con el resumen (contadores del outbox o el resultado por empresa) · 500 si falta `SUPABASE_SERVICE_ROLE_KEY`
+o la base no responde. Nunca devuelven payloads, claves ni datos del operador.
+
+**Límites por ejecución** (`maxDuration = 300 s`, el máximo de Hobby):
+
+- Outbox: tandas de 5 reportes con 20 s de timeout por envío (una tanda dura menos que el lease de 2 min), hasta
+  25 por ejecución, y no arranca otra tanda pasados los 150 s. Si una tanda tuvo envíos sin respuesta, corta. El
+  backoff, los 10 intentos, el lease y la idempotencia los sigue decidiendo la base: dos ejecuciones solapadas no
+  toman el mismo reporte (`for update skip locked` + lease).
+- Sincronización: una empresa a la vez y no arranca otra pasados los 120 s. Ver `erp-sync.md`.
+
+**Clave `service_role`:** solo en `src/lib/supabase/service.ts` (`server-only`), leída de
+`SUPABASE_SERVICE_ROLE_KEY`, nunca con `NEXT_PUBLIC_`. Los `server-boundary.test.ts` verifican que ningún componente
+cliente la importe y que solo la usen los Route Handlers de `/api/cron`. El panel sigue leyendo con la sesión del
+usuario.
+
+En la actividad y en el detalle de una sincronización, esta página muestra **Automática** cuando la hizo el cron
+(sin usuario). Es el único lugar de la app que las distingue.
+
+### Configurarlo en la nube
+
+1. **Vercel → Settings → Environment Variables**, para los entornos del deploy que va a llamar el cron (hoy *Preview* de `develop` y *Production*; sin
+   `NEXT_PUBLIC_`):
+   - `SUPABASE_SERVICE_ROLE_KEY`: Supabase → Project Settings → API Keys → la clave *secret* (`sb_secret_…`) o la
+     *service_role* (legacy).
+   - `CRON_SECRET`: generarlo con `openssl rand -hex 32`. Guardalo en el gestor de contraseñas: hace falta en el
+     paso 3.
+2. **Redeploy** (las variables nuevas no llegan a un deploy ya hecho).
+3. **Probarlo con `curl`** desde tu máquina, con el dominio que va a ir en Vault. Sin header tiene que responder
+   el JSON 401 de la app. Si responde 302 a `vercel.com/sso-api`, ese dominio tiene Deployment Protection (pasa
+   con los previews, por ejemplo `develop`): generá un secreto en Vercel → Settings → Deployment Protection →
+   *Protection Bypass for Automation*, sumá `-H "x-vercel-protection-bypass: $VERCEL_BYPASS"` a los `curl` y
+   cargalo en Vault en el paso 5.
+   ```bash
+   curl -i https://<tu-app>.vercel.app/api/cron/erp-outbox                                 # 401
+   curl -i -H "Authorization: Bearer $CRON_SECRET" https://<tu-app>.vercel.app/api/cron/erp-outbox   # 200 + resumen
+   curl -i -H "Authorization: Bearer $CRON_SECRET" https://<tu-app>.vercel.app/api/cron/erp-sync     # 200 + empresas
+   ```
+4. **Migraciones:** `npx supabase db push`. Las extensiones (`pg_cron`, `pg_net`), la función
+   `trazflow_cron_request` y los dos jobs los crea la migración `20261030110000_trz104_pg_cron_jobs.sql`:
+   - `trazflow-erp-outbox`: `*/5 * * * *` → `/api/cron/erp-outbox`.
+   - `trazflow-erp-sync`: `2,17,32,47 * * * *` → `/api/cron/erp-sync` (no coincide con el outbox).
+
+   Cada ejecución lee la URL y el secreto de Vault y encola un `GET` con `Authorization: Bearer …` y timeout de
+   290 s (casi todo el `maxDuration`). **Si falta alguno de los dos secretos, el job no hace nada**: por eso en la
+   base local, sin secretos, los jobs corren sin llamar a nadie. La función es `security definer` y nadie de la
+   API (`anon`, `authenticated`, `service_role`) puede ejecutarla.
+5. **Supabase → SQL Editor: los secretos en Vault** (una sola vez). **No se guardan en el repo**: reemplazá los
+   dos valores al pegarlos. La URL es la del deploy que tiene TRZ-104, sin barra final; el secreto es exactamente
+   el `CRON_SECRET` de Vercel.
+   ```sql
+   select vault.create_secret('https://<tu-app>.vercel.app', 'trazflow_app_url', 'URL de TrazFlow (TRZ-104)');
+   select vault.create_secret('<CRON_SECRET>', 'trazflow_cron_secret', 'CRON_SECRET de TrazFlow (TRZ-104)');
+
+   -- Solo si el dominio tiene Deployment Protection (ver paso 3). Migración 20261030120000: si existe, la
+   -- llamada manda además el header x-vercel-protection-bypass; si no, no lo manda.
+   select vault.create_secret('<VERCEL_BYPASS>', 'trazflow_vercel_bypass', 'Bypass de Deployment Protection (TRZ-104)');
+   ```
+6. **Verificar** (solo `select`):
+   ```sql
+   -- Los jobs existen y están activos.
+   select jobid, jobname, schedule, active from cron.job where jobname like 'trazflow-%';
+
+   -- Últimas corridas de pg_cron (status 'succeeded' = encoló la llamada, o no hizo nada si faltan secretos).
+   select j.jobname, d.status, d.return_message, d.start_time
+   from cron.job_run_details d join cron.job j using (jobid)
+   where j.jobname like 'trazflow-%' order by d.start_time desc limit 10;
+
+   -- Respuestas de la app a los cron (se guardan 6 h). 200 = ok; 401 = el secreto no coincide; 404 = ese deploy
+   -- todavía no tiene TRZ-104; 500 = falta SUPABASE_SERVICE_ROLE_KEY; timed_out / error_msg = no respondió.
+   select status_code, timed_out, error_msg, left(content, 300) as body, created
+   from net._http_response order by created desc limit 10;
+
+   -- Reportes pendientes vencidos hace más de 10 minutos: con el cron andando debería dar 0
+   -- (salvo que el ERP esté caído; ahí quedan pending con su backoff).
+   select id, company_id, attempts, next_attempt_at, last_error_code
+   from public.erp_outbox_events
+   where status = 'pending' and next_attempt_at < now() - interval '10 minutes';
+
+   -- Últimas sincronizaciones automáticas.
+   select company_id, status, started_at, finished_at, error_message, jsonb_array_length(errors) as errores
+   from public.erp_sync_runs where trigger_source = 'automatic' order by started_at desc limit 10;
+   ```
+
+Si cambia la URL (por ejemplo, de `develop` a producción) o el secreto, no hace falta tocar los jobs. Al pasar a
+un dominio sin Deployment Protection, el bypass se puede borrar (`delete from vault.secrets where name =
+'trazflow_vercel_bypass';`):
+
+```sql
+select vault.update_secret((select id from vault.secrets where name = 'trazflow_app_url'), 'https://<nueva-url>.vercel.app');
+select vault.update_secret((select id from vault.secrets where name = 'trazflow_cron_secret'), '<nuevo-secreto>');
+```
+
+Para apagarlo sin borrar los jobs, borrá uno de los secretos (`delete from vault.secrets where name =
+'trazflow_app_url';`) o pausalos con `select cron.alter_job(<jobid>, active := false);`. Para borrarlos:
+`select cron.unschedule('trazflow-erp-outbox'); select cron.unschedule('trazflow-erp-sync');` (se recrean
+copiando los `cron.schedule` de la migración `20261030110000_trz104_pg_cron_jobs.sql`).
+Mientras una llamada está en curso, cualquier rol que pueda loguearse en la base ve el secreto en
+`net.http_request_queue`: el riesgo es bajo (solo sirve para disparar los cron) y se rota con `update_secret`.
 
 ## Seguridad
 

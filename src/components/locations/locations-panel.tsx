@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useCallback, useState, useTransition, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { QrScanner } from "@/components/pallet-validation/qr-scanner";
+import { PalletScanDetails } from "@/components/pallets/pallet-scan-details";
 import { InlineAlert, SectionHeader, TableShell } from "@/components/ui/design-system";
 import { createLocation, assignLocation } from "@/lib/locations/actions";
 import { canLocatePallet, findScannedLocation } from "@/lib/locations/rules";
@@ -29,6 +30,7 @@ export function LocationsPanel({ locations, pallets, warehouses = [], locationId
   const [locationId, setLocationId] = useState("");
   const [scan, setScan] = useState<"pallet" | "location" | null>(null);
   const [scanError, setScanError] = useState<string | null>(null);
+  const [scanVersion, setScanVersion] = useState(0);
   const [filter, setFilter] = useState("");
   const pallet = pallets.find((p) => p.id === palletId);
   // TRZ-101: un pallet solo se ubica en su depósito (mover entre depósitos es una transferencia, fuera de alcance).
@@ -71,8 +73,9 @@ export function LocationsPanel({ locations, pallets, warehouses = [], locationId
   const onScan = useCallback((value: string) => {
     setScan(null); setScanError(null); clearMoveError();
     if (scan === "pallet") {
+      setScanVersion((version) => version + 1);
       const found = pallets.find((p) => p.qrCode === value.trim());
-      if (!found) { setScanError("El pallet no existe o no pertenece a tu empresa."); return; }
+      if (!found) { setPalletId(""); setScanError("El pallet no existe o no pertenece a tu empresa."); return; }
       setPalletId(found.id);
     } else {
       const found = findScannedLocation(locations, value);
@@ -100,6 +103,7 @@ export function LocationsPanel({ locations, pallets, warehouses = [], locationId
         <label className="form-label">Pallet<select name="palletId" value={palletId} required onChange={(e) => { setPalletId(e.target.value); clearMoveError(); setScanError(null); }} disabled={moving} className="form-control mt-2"><option value="">Seleccionar pallet</option>{pallets.map((p) => <option key={p.id} value={p.id}>{p.qrCode} · {p.productName}</option>)}</select></label>
         <button type="button" className="button-secondary" disabled={moving} onClick={() => { setScanError(null); clearMoveError(); setScan("pallet"); }}>Escanear pallet</button>
         {pallet && <div className="space-y-2 text-sm"><p>Ubicación actual: <strong>{pallet.currentLocation ?? "Sin asignar"}</strong></p><Link className="table-action" href={`/dashboard/traceability?qr=${encodeURIComponent(pallet.qrCode)}`}>Ver ficha e historial</Link></div>}
+        {pallet && <PalletScanDetails key={`${pallet.id}:${pallet.currentLocation}:${moved.state.success}:${scanVersion}`} qrCode={pallet.qrCode} />}
         {canMove && <>
           <label className="form-label">Ubicación de destino<select name="locationId" required value={locationId} onChange={(e) => { setLocationId(e.target.value); clearMoveError(); setScanError(null); }} disabled={moving} className="form-control mt-2"><option value="">Seleccionar ubicación</option>{destinations.map((l) => <option key={l.id} value={l.id}>{l.warehouse_code} / {l.code} · {l.aisle} / {l.rack} / {l.level} / {l.position}</option>)}</select></label>
           <button type="button" className="button-secondary" disabled={moving} onClick={() => { setScanError(null); clearMoveError(); setScan("location"); }}>Escanear ubicación</button>
