@@ -1,9 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 
 import { hasRole, requireUserProfile } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
+import { processCompanyErpOutbox } from "@/lib/erp-outbox/run";
 import type {
   PalletValidationResult,
   ValidationOutcome,
@@ -67,6 +69,13 @@ export async function validatePallet(
 
   if (row.outcome === "validated") {
     revalidatePath(`/dashboard/orders/${orderId}`);
+    // TRZ-63: el escaneo quedó en el outbox (trigger de order_pallets); se manda sin hacer esperar al operador.
+    after(() =>
+      processCompanyErpOutbox({
+        db: { rpc: (fn, args) => supabase.rpc(fn, args), storage: supabase.storage },
+        companyId: profile.companyId,
+      }),
+    );
   }
 
   const hasPalletDetails =

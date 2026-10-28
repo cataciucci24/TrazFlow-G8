@@ -17,6 +17,8 @@ import {
   type ErpHealth,
   type ErpMasterData,
   type ErpPullOptions,
+  type PalletScanReport,
+  type StockEntryReport,
 } from "./types.ts";
 import {
   assertValidDeliveryReceipt,
@@ -24,6 +26,8 @@ import {
   assertValidDispatchReport,
   assertValidErpWarehouses,
   assertValidIdempotencyKey,
+  assertValidPalletScanReport,
+  assertValidStockEntryReport,
 } from "./validation.ts";
 
 export type MockErpClientOptions = {
@@ -47,9 +51,13 @@ type Operation =
   | "getDispatchStatus"
   | "reportDelivery"
   | "attachDeliveryReceipt"
-  | "getBatchPickingPolicy";
+  | "getBatchPickingPolicy"
+  | "reportStockEntry"
+  | "reportPalletScan";
 
-const WRITE_OPERATIONS: ReadonlySet<Operation> = new Set(["reportDispatch", "reportDelivery", "attachDeliveryReceipt"]);
+const WRITE_OPERATIONS: ReadonlySet<Operation> = new Set([
+  "reportDispatch", "reportDelivery", "attachDeliveryReceipt", "reportStockEntry", "reportPalletScan",
+]);
 
 type StoredReport = { fingerprint: string; result: DispatchReportResult };
 
@@ -182,6 +190,36 @@ export class MockErpClient implements ErpClient {
   async getBatchPickingPolicy(): Promise<BatchPickingPolicy> {
     this.#simulate("getBatchPickingPolicy");
     return this.#batchPickingPolicy;
+  }
+
+  /** TRZ-62: guarda el movimiento como borrador MOCK-STE-…, idempotente por clave. */
+  async reportStockEntry(entry: StockEntryReport): Promise<DeliveryReportResult> {
+    this.#simulate("reportStockEntry");
+    assertValidStockEntryReport(entry);
+    return this.#storeWrite(entry.idempotencyKey, `MOCK-STE-${entry.idempotencyKey.slice("stock-entry:".length)}`, stableStringify(entry));
+  }
+
+  /** TRZ-63: un unscan necesita que su scan ya haya llegado; si no, not_ready. */
+  async reportPalletScan(scan: PalletScanReport): Promise<DeliveryReportResult> {
+    this.#simulate("reportPalletScan");
+    assertValidPalletScanReport(scan);
+    if (scan.action === "unscan" && !this.#deliveries.has(scan.scanIdempotencyKey)) {
+      throw new ErpError("not_ready", `Todavía no llegó el escaneo ${scan.scanIdempotencyKey}: se reintenta.`);
+    }
+    return this.#storeWrite(scan.idempotencyKey, `MOCK-PICK-${scan.orderExternalId}`, stableStringify(scan));
+  }
+
+  #storeWrite(key: string, erpReference: string, fingerprint: string): DeliveryReportResult {
+    const previous = this.#deliveries.get(key);
+    if (previous) {
+      if (previous.fingerprint !== fingerprint) {
+        throw new ErpError("conflict", `La clave ${key} ya se usó con otro contenido.`, { status: 409 });
+      }
+      return { ...previous.result, duplicate: true };
+    }
+    const result: DeliveryReportResult = { erpReference, duplicate: false, acceptedAt: this.#now().toISOString() };
+    this.#deliveries.set(key, { fingerprint, result });
+    return { ...result };
   }
 
   #storeDelivery(key: string, dispatchKey: string, fingerprint: string): DeliveryReportResult {

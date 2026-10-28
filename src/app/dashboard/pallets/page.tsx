@@ -8,6 +8,7 @@ import { hasRole, requireUserProfile } from "@/lib/auth/session";
 import { isErpEnabled } from "@/lib/erp-sync/enabled";
 import { getErpStockOverview } from "@/lib/erp-stock/queries";
 import { ErpStockTable } from "@/components/erp/erp-stock-table";
+import { ErpStockEntryForm } from "@/components/erp/erp-stock-entry-form";
 import { getExpirationThresholds } from "@/lib/expiration/queries";
 import { getLatestErpSyncRun } from "@/lib/erp-sync/queries";
 import { getCompanyLots, getCompanyPallets, getCompanyProducts } from "@/lib/pallets/queries";
@@ -44,6 +45,7 @@ export default async function PalletsPage() {
       </InlineAlert>
     </> : null}
     {erpEnabled && erpLots ? <ErpStockTable rows={erpLots} expiringDays={thresholds?.criticalDays ?? 30} /> : null}
+    {erpEnabled && erpLots ? <ErpStockEntryForm rows={erpLots} /> : null}
     <PalletTrackingPanel pallets={pallets} existingBatches={existingBatches} existingProducts={products} erpManaged={erpEnabled} />
   </div>;
 }

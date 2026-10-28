@@ -3,9 +3,11 @@
 import { isProductUnit, isValidQuantity, type ProductUnit } from "@/lib/pallets/units";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 
 import { hasRole, requireUserProfile } from "@/lib/auth/session";
 import { isErpEnabled } from "@/lib/erp-sync/enabled";
+import { processCompanyErpOutbox } from "@/lib/erp-outbox/run";
 import { erpStockErrorMessage } from "@/lib/pallets/erp-stock-errors";
 import { warehouseErrorMessage } from "@/lib/warehouses/errors";
 import { createClient } from "@/lib/supabase/server";
@@ -319,6 +321,16 @@ async function updateAssignedPalletQuantity(palletId: string, formData: FormData
 
   revalidatePalletPaths();
   if (row.order_id) revalidatePath(`/dashboard/orders/${row.order_id}`);
+  if (row.validation_cleared) {
+    // TRZ-63: se borró la validación, así que el outbox tiene el aviso para sacar el pallet del Pick List.
+    const profile = await requireUserProfile();
+    after(() =>
+      processCompanyErpOutbox({
+        db: { rpc: (fn, args) => supabase.rpc(fn, args), storage: supabase.storage },
+        companyId: profile.companyId,
+      }),
+    );
+  }
   return {
     error: null,
     success: `Pallet ${row.qr_code} actualizado. Reimprimí su etiqueta: tiene la cantidad anterior.`
