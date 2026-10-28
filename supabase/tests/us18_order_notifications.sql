@@ -25,6 +25,10 @@ insert into companies (id, name)
 values
   ('21000000-0000-0000-0000-000000000001', 'Company US18 A'),
   ('21000000-0000-0000-0000-000000000002', 'Company US18 B');
+-- TRZ-101: las empresas nuevas no reciben un depósito automático; en el onboarding se carga DEP-01.
+insert into public.warehouses (company_id, code, name)
+  select id, 'DEP-01', 'Depósito principal' from public.companies c
+  where not exists (select 1 from public.warehouses w where w.company_id = c.id);
 
 insert into users (id, company_id, name, email, role)
 values
@@ -124,7 +128,10 @@ select pg_temp.assert_true(
 -- de usuario para este insert de fixture y se vuelve a warehouse_operator
 -- después, que es quien necesita invocar validate_order_pallet /
 -- confirm_dispatch_order.
+-- Como en la app (TRZ-99), el pallet se reserva antes de asociarlo.
 select set_config('request.jwt.claim.sub', '11000000-0000-0000-0000-000000000002', true);
+update pallets set status = 'assigned'
+where id = '61000000-0000-0000-0000-000000000003' and status = 'in_warehouse';
 insert into order_pallets (order_id, pallet_id, expected)
 values ('71000000-0000-0000-0000-000000000001', '61000000-0000-0000-0000-000000000003', true);
 select set_config('request.jwt.claim.sub', '11000000-0000-0000-0000-000000000001', true);

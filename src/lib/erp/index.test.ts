@@ -23,7 +23,7 @@ function rejectsConfig(env: Record<string, string | undefined>, pattern: RegExp)
 }
 
 test("sin ERP_PROVIDER se usa el mock", () => {
-  assert.deepEqual(readErpConfig({}), { provider: "mock", mockScenario: "ok" });
+  assert.deepEqual(readErpConfig({}), { provider: "mock", mockScenario: "ok", mockDispatchStatus: "confirmed" });
   assert.ok(getErpClient("company-1", {}) instanceof MockErpClient);
 });
 
@@ -31,6 +31,16 @@ test("el mock se reutiliza por escenario para detectar duplicados entre requests
   assert.equal(getErpClient(undefined, {}), getErpClient(undefined, {}));
   const failing = getErpClient(undefined, { ERP_MOCK_SCENARIO: "timeout" });
   assert.notEqual(failing, getErpClient(undefined, {}));
+  const draft = getErpClient(undefined, { ERP_MOCK_DISPATCH_STATUS: "draft" });
+  assert.notEqual(draft, getErpClient(undefined, {}), "el estado del remito simulado también separa instancias");
+});
+
+test("ERP_MOCK_DISPATCH_STATUS elige qué responde getDispatchStatus en el mock", async () => {
+  assert.equal(readErpConfig({ ERP_MOCK_DISPATCH_STATUS: " draft " }).provider, "mock");
+  assert.deepEqual(readErpConfig({ ERP_MOCK_DISPATCH_STATUS: "draft" }), { provider: "mock", mockScenario: "ok", mockDispatchStatus: "draft" });
+  rejectsConfig({ ERP_MOCK_DISPATCH_STATUS: "submitted" }, /ERP_MOCK_DISPATCH_STATUS/);
+  const status = await getErpClient(undefined, { ERP_MOCK_DISPATCH_STATUS: "draft" }).getDispatchStatus("dispatch:SAL-ORD-2026-00099");
+  assert.deepEqual(status, { status: "draft", erpReference: null });
 });
 
 test("con erpnext se exigen URL y credenciales", () => {

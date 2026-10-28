@@ -44,6 +44,10 @@ insert into auth.users (id, email) values
 insert into companies (id, name) values
   ('e5200000-0000-0000-0000-000000000001', 'ERP05 Company A'),
   ('e5200000-0000-0000-0000-000000000002', 'ERP05 Company B');
+-- TRZ-101: las empresas nuevas no reciben un depósito automático; en el onboarding se carga DEP-01.
+insert into public.warehouses (company_id, code, name)
+  select id, 'DEP-01', 'Depósito principal' from public.companies c
+  where not exists (select 1 from public.warehouses w where w.company_id = c.id);
 insert into users (id, company_id, name, email, role) values
   ('e5100000-0000-0000-0000-000000000001', 'e5200000-0000-0000-0000-000000000001', 'Logística A', 'erp05-manager-a@test.local', 'logistics_manager'),
   ('e5100000-0000-0000-0000-000000000002', 'e5200000-0000-0000-0000-000000000001', 'Operador A', 'erp05-warehouse-a@test.local', 'warehouse_operator'),
@@ -57,6 +61,11 @@ insert into products (id, company_id, sku, name, unit_of_measure, external_uom, 
   ('e5400000-0000-0000-0000-000000000001', 'e5200000-0000-0000-0000-000000000001', 'ACE-500', 'Aceite', 'cajas', 'Caja', 'ACE-500', 'erp');
 insert into batches (id, product_id, batch_number, quantity, external_id, source_system) values
   ('e5500000-0000-0000-0000-000000000001', 'e5400000-0000-0000-0000-000000000001', 'L-0915', 0, 'L-0915', 'erp');
+-- TRZ-100: todo pallet de un lote del ERP necesita saldo en el depósito (tope por saldo).
+insert into erp_warehouse_mappings (company_id, external_warehouse_id, warehouse_code, created_by) values
+  ('e5200000-0000-0000-0000-000000000001', 'Central', 'DEP-01', 'e5100000-0000-0000-0000-000000000001');
+insert into erp_stock_balances (company_id, batch_id, external_warehouse_id, warehouse_code, quantity) values
+  ('e5200000-0000-0000-0000-000000000001', 'e5500000-0000-0000-0000-000000000001', 'Central', 'DEP-01', 120);
 insert into pallets (id, company_id, batch_id, qr_code, status, quantity, external_id, source_system) values
   ('e5600000-0000-0000-0000-000000000001', 'e5200000-0000-0000-0000-000000000001', 'e5500000-0000-0000-0000-000000000001', 'PAL-ERP05-1', 'in_transit', 45, 'stock:L-0915@Central', 'erp');
 
@@ -249,6 +258,23 @@ begin
     and detail::text not like '%idempotency%' and detail::text not like '%dispatch:SO-2%', 'el detalle no expone operador ni clave');
   perform pg_temp.assert_true(sync_detail->>'status' = 'partial' and jsonb_array_length(sync_detail->'errors') = 1, 'detalle de la sincronización');
   perform pg_temp.assert_true(public.erp_integration_event_detail('sync', 'e5800000-0000-0000-0000-000000000002') is null, 'tipo y id deben coincidir');
+  -- TRZ-100: estado del remito y línea de la orden.
+  perform pg_temp.assert_true(detail ? 'erpDocumentStatus' and detail->'lines'->0 ? 'orderLineExternalId', 'el detalle trae el estado del remito y la línea de la orden');
+end;
+$$;
+
+-- TRZ-100: la lista de reportes muestra el estado del remito (null = sin consultar; null también en las syncs).
+do $$
+begin
+  perform pg_temp.assert_true(
+    (select erp_document_status from public.erp_integration_activity(p_kind => 'dispatch_confirmed') where id = 'e5800000-0000-0000-0000-000000000001') is null
+    and (select bool_and(erp_document_status is null) from public.erp_integration_activity(p_kind => 'sync')),
+    'reporte enviado sin consultar y sincronizaciones sin estado de remito');
+  perform pg_temp.assert_true(public.erp_outbox_record_dispatch_document('e5800000-0000-0000-0000-000000000001', 'draft', 'MAT-DN-0001'), 'logística registra el remito');
+  perform pg_temp.assert_true(
+    (select erp_document_status from public.erp_integration_activity(p_kind => 'dispatch_confirmed') where id = 'e5800000-0000-0000-0000-000000000001') = 'draft'
+    and (select erp_reference from public.erp_integration_activity(p_kind => 'dispatch_confirmed') where id = 'e5800000-0000-0000-0000-000000000001') = 'MAT-DN-0001',
+    'la lista muestra el remito en borrador con su referencia');
 end;
 $$;
 select pg_temp.assert_raises($q$select public.erp_integration_event_detail('otro', gen_random_uuid())$q$, '22023', 'detalle con tipo inválido');

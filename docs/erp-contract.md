@@ -1,6 +1,11 @@
 # Contrato ERP — TrazFlow ↔ ERP (US-ERP-02 / TRZ-92)
 
-> Versión del contrato: **1** (`ERP_CONTRACT_VERSION` en `src/lib/erp/types.ts`).
+> Versión del contrato: **1** (`ERP_CONTRACT_VERSION` en `src/lib/erp/types.ts`). TRZ-100 le sumó la operación
+> `getDispatchStatus` (§5.2) como **extensión aditiva**: no cambia ningún payload existente, así que la versión
+> sigue en 1. `contractVersion` versiona la forma de los payloads, y esta operación no agrega campos a ninguno.
+> TRZ-101 le sumó `warehouses` a `pullMasterData` (§4.1). Es un campo nuevo, obligatorio en la respuesta; quedó
+> en la versión 1 porque los dos proveedores (mock y ERPNext) son de TrazFlow y se actualizaron juntos: no hay un
+> ERP externo que mande payloads v1 sin el campo.
 > Implementación: `src/lib/erp/`. Proveedores: `mock` (por defecto) y `erpnext` (ERPNext/Frappe v15).
 >
 > Reemplaza a la propuesta anterior de US-C1 (Odoo + Edge Function), que se eliminó; queda en el historial de git.
@@ -24,6 +29,7 @@
 |---|---|---|---|
 | `ERP_PROVIDER` | No | `mock` (defecto) \| `erpnext` | Proveedor. El deploy en Vercel usa `mock`: un ERPNext local no es alcanzable desde ahí. |
 | `ERP_MOCK_SCENARIO` | No | `ok` (defecto) \| `timeout` \| `unauthorized` \| `validation` \| `server_error` | Falla permanente que simula el mock (§6). |
+| `ERP_MOCK_DISPATCH_STATUS` | No | `confirmed` (defecto) \| `draft` | Solo mock: qué responde `getDispatchStatus` (§7). |
 | `ERP_BASE_URL` | Con `erpnext` | URL http(s) | Raíz de la instancia, p. ej. `http://localhost:8080`. |
 | `ERP_API_KEY` | Con `erpnext` | texto | API key del usuario técnico. |
 | `ERP_API_SECRET` | Con `erpnext` | texto | API secret del usuario técnico. ERPNext autentica con `Authorization: token <key>:<secret>`. |
@@ -41,6 +47,9 @@ interface ErpClient {
   pullMasterData(options?: { updatedSince?: string }): Promise<ErpMasterData>;
   pullDispatchOrders(options?: { updatedSince?: string }): Promise<ErpDispatchOrder[]>;
   reportDispatch(report: DispatchReport): Promise<DispatchReportResult>;
+  getDispatchStatus(idempotencyKey: string): Promise<DispatchDocumentStatus>; // TRZ-100, §5.2
+  reportDelivery(report: DeliveryReport): Promise<DeliveryReportResult>; // TRZ-103, §5.3
+  attachDeliveryReceipt(receipt: DeliveryReceipt, content: Uint8Array): Promise<DeliveryReportResult>; // TRZ-103, §5.3
 }
 ```
 
@@ -58,15 +67,20 @@ Todas las fechas-hora son ISO 8601 en UTC; las fechas sin hora (`manufacturingDa
 
 ## 4. ERP → TrazFlow
 
-### 4.1 `pullMasterData` — productos, lotes y stock
+### 4.1 `pullMasterData` — depósitos, productos, lotes y stock
 
-`updatedSince` filtra productos y lotes modificados desde ese instante. El stock se devuelve siempre completo (es
-una foto, no un cambio). Un registro que deja de venir **no** se borra en TrazFlow (regla de US-ERP-03).
+`updatedSince` filtra productos y lotes modificados desde ese instante. Depósitos y stock se devuelven siempre
+completos (un depósito que no viene se marca inactivo; un saldo que no viene pasa a 0). Un registro que deja de
+venir **no** se borra en TrazFlow (regla de US-ERP-03).
 
 ```json
 {
   "contractVersion": 1,
   "fetchedAt": "2026-10-15T15:00:00.000Z",
+  "warehouses": [
+    { "externalId": "Depósito Central - SRV", "name": "Depósito Central", "active": true,
+      "updatedAt": "2026-10-01T12:00:00.000Z" }
+  ],
   "products": [
     { "externalId": "ACE-500", "sku": "ACE-500", "name": "Aceite de girasol 500 ml", "uom": "Caja",
       "batchTracked": true, "active": true, "updatedAt": "2026-10-01T12:00:00.000Z" }
@@ -85,6 +99,10 @@ una foto, no un cambio). Un registro que deja de venir **no** se borra en TrazFl
 
 | Campo | Obligatorio | Notas |
 |---|---|---|
+| `warehouses[]` | Sí (TRZ-101) | Lista completa, sin grupos de depósitos. Forma validada por `assertValidErpWarehouses` (`invalid_response` si no es una lista de `{ externalId, name, active, updatedAt }`). |
+| `warehouses[].externalId` | Sí | Id estable: el mismo valor que `stock[].warehouseExternalId` y `lines[].warehouseExternalId`. Clave de upsert junto con `company_id`. |
+| `warehouses[].name` | Sí | Nombre visible. Se usa para generar el código del depósito en TrazFlow al importarlo. |
+| `warehouses[].active` | Sí | `false` = deshabilitado en el ERP. Queda inactivo en TrazFlow. |
 | `products[].externalId` | Sí | Clave de upsert junto con `company_id`. |
 | `products[].uom` | Sí | Unidad de stock **como la nombra el ERP**. Traducirla a `products.unit_of_measure` es tarea de la sincronización (US-ERP-03). |
 | `products[].active` | Sí | `false` = deshabilitado en el ERP. No se borra. |
@@ -146,6 +164,13 @@ Validaciones previas al envío (`dispatchReportProblems`, fallan con `validation
 al menos una línea; `palletCode` no vacío y sin repetir; `productExternalId`, `lotExternalId` y `uom` no vacíos;
 `quantity` > 0. `orderLineExternalId` es opcional (`null` si no se conoce).
 
+**Cómo lo arma TrazFlow (`erp_outbox_dispatch_payload`, TRZ-100):** una línea por pallet asociado a la orden con
+`expected = true`, con la cantidad real del pallet (los pallets se arman en TrazFlow contra el saldo del lote, así
+que se informa lo que salió, no el saldo). `orderLineExternalId` es la línea de la orden (`dispatch_order_lines`)
+que pide ese producto **si hay exactamente una**. Con dos o más líneas del mismo producto va `null` (TrazFlow no
+reparte un pallet entre líneas) y el adaptador de ERPNext usa la primera línea de ese producto. Las órdenes
+importadas antes de TRZ-100 no tienen líneas y siguen informando `null`.
+
 ### 5.1 Idempotencia
 
 - La clave es `dispatch:{orderExternalId}` (`buildDispatchIdempotencyKey`). Depende solo de la orden: confirmar dos
@@ -158,6 +183,54 @@ al menos una línea; `palletCode` no vacío y sin repetir; `productExternalId`, 
 - El mock compara el payload completo con claves ordenadas, porque el payload guardado en `jsonb` vuelve con otro
   orden. ERPNext compara lo que conserva el remito: fecha y hora, operador y, por pallet, producto, lote, cantidad y
   unidad.
+
+### 5.2 `getDispatchStatus` — estado del remito (TRZ-100)
+
+Pregunta en qué estado está en el ERP el documento que generó el reporte con esa clave. TrazFlow lo usa para
+saber cuándo el ERP ya descontó el stock despachado (en ERPNext el remito queda en borrador y el stock recién baja
+al confirmarlo).
+
+```ts
+getDispatchStatus(idempotencyKey: string): Promise<DispatchDocumentStatus>
+type DispatchDocumentStatus = {
+  status: "draft" | "confirmed" | "cancelled" | "not_found";
+  erpReference: string | null; // p. ej. "MAT-DN-2026-00001"; null si no se conoce
+};
+```
+
+| `status` | Significado |
+|---|---|
+| `draft` | El remito existe y nadie lo confirmó: el stock del ERP todavía no bajó. |
+| `confirmed` | Confirmado: el ERP ya descontó el stock. |
+| `cancelled` | Anulado: el stock nunca salió del ERP. |
+| `not_found` | No hay remito con esa clave (p. ej. se borró el borrador). |
+
+- Si hay varios documentos con la misma clave (uno anulado y su corrección), gana `confirmed`, después `draft` y por
+  último `cancelled`.
+- Clave vacía → `validation` sin llamar al ERP. Una respuesta que no respeta esta forma → `invalid_response`
+  (`assertValidDispatchDocumentStatus`). Los errores son los de §6.
+- Quién la llama y dónde se guarda: [`erp-sync.md`](erp-sync.md), "Estado del remito".
+
+### 5.3 Entrega y remito firmado (TRZ-103)
+
+Dos operaciones aditivas que van al **mismo documento que generó el despacho** (`dispatchIdempotencyKey`):
+
+- `reportDelivery(report)`: cómo cerró la entrega. Clave `delivery:{orderExternalId}`. Lleva el chofer, la fecha, el
+  resultado de cada pallet esperado (`delivered` / `missing` / `damaged`), todas las diferencias (también
+  `surplus` y `wrong_order`) y `needsReview`, que es `true` si hubo alguna diferencia.
+- `attachDeliveryReceipt(receipt, content)`: el remito firmado (foto o PDF, hasta 10 MB). Clave
+  `delivery-receipt:{orderExternalId}:{id}`, una por archivo. El contenido no se guarda en el outbox: el procesador
+  lo baja del bucket privado `delivery-receipts` al enviarlo.
+
+Las dos son idempotentes por clave y **nunca confirman** el documento. Si el documento del despacho todavía no existe
+(el despacho sigue en el outbox), fallan con `not_ready`, que se reintenta.
+
+Los eventos los encola la base: `delivery_confirmed` con un trigger cuando la orden pasa a `delivered` /
+`delivered_with_discrepancy`, y `delivery_receipt_attached` en `register_delivery_receipt`, después de que el chofer
+sube el archivo (`20261028130000_trz103_delivery_receipts.sql`). Solo para órdenes que vinieron del ERP. Se envían
+enseguida, en un `after()` de la acción del chofer, con RPC propias del chofer que solo le dejan tomar los eventos de
+entrega de sus órdenes (`erp_outbox_driver_claim` / `_mark_sent` / `_mark_failed`, `20261028130100`). Si el ERP falla,
+quedan con el backoff de siempre para el próximo procesamiento ("Enviar pendientes ahora", despachos o el cron).
 
 ## 6. Errores
 
@@ -177,13 +250,23 @@ panel de integración.
 | `conflict` | 409 | No | Clave de idempotencia usada con otro contenido. | Requiere atención. |
 | `invalid_response` | — | No | La respuesta no respeta el contrato. | Requiere atención. |
 | `config` | — | No | Falta o es inválida la configuración. | Requiere atención. |
+| `not_ready` | — | Sí | Falta algo previo en el ERP (la entrega llegó antes que el remito del despacho). | Reintento con backoff. |
 
 ## 7. Mock (`ERP_PROVIDER=mock`)
 
-- Fixtures deterministas en `src/lib/erp/fixtures.ts`: 4 productos (uno inactivo), 5 lotes, stock por lote y
-  5 órdenes (4 abiertas, 1 entregada). Los ids imitan los de ERPNext.
+- Fixtures deterministas en `src/lib/erp/fixtures.ts`: 2 depósitos ("Depósito Central - SRV" y "Depósito Norte -
+  SRV", con 30 cajas del lote L-2026-0921 y sin órdenes), 4 productos (uno inactivo), 5 lotes, stock por lote y
+  depósito y 5 órdenes (4 abiertas, 1 entregada). Los ids imitan los de ERPNext.
 - Estado en memoria por proceso: reportar un despacho marca la orden como entregada y guarda la clave. Reiniciar
   el servidor vuelve a los fixtures.
+- **No descuenta stock:** reportar un despacho no cambia el saldo de los fixtures (120/80/200/150/356,5 en Central
+  y 30 en Norte).
+- `getDispatchStatus`: si la clave está en memoria responde `confirmed` con la referencia del reporte, simulando que
+  administración confirma enseguida. Si no está (el proceso se reinició, o es otra instancia en Vercel) responde
+  `confirmed` igual, con `erpReference: null`: el mock no guarda estado confiable entre procesos y no queremos
+  pallets trabados en local. Con `ERP_MOCK_DISPATCH_STATUS=draft` responde `draft`, para probar en local que los
+  pallets despachados siguen contando contra el saldo (no vuelven al disponible de "Armar pallet") hasta que el
+  remito se confirma.
 - Fallas permanentes con `ERP_MOCK_SCENARIO` (`validation` solo afecta a `reportDispatch`).
 - En tests: `new MockErpClient({ failures: ["timeout", "server_error"] })` falla una vez por cada elemento y después
   responde bien, para probar reintentos; `fixtures` y `now` se pueden inyectar.
@@ -197,16 +280,24 @@ API REST de Frappe (`/api/resource/<Doctype>` y `/api/method/<ruta>`), autentica
 | Operación | Llamadas | Mapeo |
 |---|---|---|
 | `healthcheck` | `GET /api/method/frappe.auth.get_logged_user` | `Guest` o error → `unauthorized`. |
+| Depósitos | `GET /api/resource/Warehouse` (`is_group = 0`, sin `updatedSince`; incluye deshabilitados) | `name` → `externalId`, `warehouse_name` (o `name` si viene vacío) → `name`, `disabled` → `active`, `modified`. |
 | Productos | `GET /api/resource/Item` (`is_stock_item = 1`) | `name` → `externalId`, `item_code` → `sku`, `item_name`, `stock_uom` → `uom`, `has_batch_no`, `disabled`. |
 | Lotes | `GET /api/resource/Batch` | `name` (= `batch_id`) → `externalId` y `lotNumber`, `item`, `manufacturing_date`, `expiry_date`, `disabled`. |
 | Stock | `GET /api/method/erpnext.stock.doctype.batch.batch.get_batch_qty?item_code=…` por ítem con lote y activo | `{ batch_no, warehouse, qty }`, solo `qty > 0`. |
 | Órdenes | `GET /api/resource/Sales Order` (`docstatus = 1`, `status in ["To Deliver and Bill", "To Deliver"]`) + `GET /api/resource/Sales Order/<name>` | Líneas en unidad de stock (`stock_qty`, `stock_uom`). Estado por `status`/`per_delivered`. |
+| Estado del remito | `GET /api/resource/Delivery Note` con `fields = ["name", "docstatus"]` y filtro `trazflow_idempotency_key = <clave>`, **incluyendo los anulados** (a diferencia del lookup del reporte, que filtra `docstatus != 2`) | `docstatus` 0 → `draft`, 1 → `confirmed`, 2 → `cancelled`; ninguno → `not_found`. Con varios, prioridad 1 > 0 > 2. `name` → `erpReference`. |
 | Reporte | `GET /api/resource/Delivery Note` filtrando por la clave; si existe, `GET` del remito para comparar el contenido (duplicado o `conflict`); si no, `GET` de la Sales Order y `POST /api/resource/Delivery Note` | Remito **en borrador** (docstatus 0) contra la orden (`against_sales_order`, `so_detail`), con `batch_no` y `use_serial_batch_fields` por línea. La orden tiene que estar confirmada y en `To Deliver and Bill` / `To Deliver`, y cada `orderLineExternalId` informado tiene que ser de la orden; si no, `validation`. |
+
+| Entrega (TRZ-103) | Busca el Delivery Note del despacho (`trazflow_idempotency_key = dispatch:…`, sin anulados); `GET /api/resource/Comment` filtrando por el remito y la marca `[trazflow:delivery:…]`; si no está, `POST /api/method/frappe.desk.doctype.tag.tag.add_tag` (solo con diferencias) y `POST /api/resource/Comment` | Comentario HTML con chofer, fecha y resultado por pallet. Con diferencias, además la etiqueta **"TrazFlow: revisar entrega"** en el remito. |
+| Remito firmado (TRZ-103) | Mismo Delivery Note; `GET /api/resource/File` por `attached_to_name` y `file_name`; si no está, `POST /api/method/upload_file` (multipart, `is_private = 1`) | Archivo privado adjunto al remito, con nombre fijo por clave (`trazflow-delivery-receipt-….jpg`). |
 
 Decisiones y requisitos de la instancia:
 
 - **Remito en borrador.** TrazFlow no submitea el Delivery Note: el submit es lo que mueve stock en ERPNext y queda
-  del lado del ERP. TrazFlow solo informa qué lote y pallet salieron.
+  del lado del ERP. TrazFlow solo informa qué lote y pallet salieron, y después pregunta si ya se confirmó (§5.2).
+- **No verificado contra una instancia real** (no hay una publicada): el filtro de `Delivery Note` por un campo
+  personalizado sin filtrar `docstatus` y la lectura de `docstatus` en el listado se probaron solo con respuestas
+  simuladas en `erpnext-client.test.ts`. Con el usuario de API hay que poder leer remitos anulados.
 - **Campos personalizados** (Customize Form), necesarios para idempotencia y trazabilidad:
   - `Delivery Note.trazflow_idempotency_key` — Data, **Unique**. ERPNext no tiene idempotency key nativa: el
     adaptador busca por este campo antes de crear, y si dos envíos simultáneos chocan, el índice único rechaza el
@@ -224,12 +315,16 @@ Decisiones y requisitos de la instancia:
 
 `npm test` corre, entre otros, `src/lib/erp/*.test.ts`:
 
-- `mock-client.test.ts`: contrato de los fixtures, filtros, duplicados (incluido payload reordenado por `jsonb`),
-  conflicto, 422, timeout/401/500 y fallas de una sola vez.
-- `erpnext-client.test.ts`: contract tests con respuestas de ERPNext falsas (forma real de Item, Batch,
+- `mock-client.test.ts`: contrato de los fixtures (incluidos los depósitos: cada saldo y línea nombra uno), filtros, duplicados (incluido payload reordenado por `jsonb`),
+  conflicto, 422, timeout/401/500, fallas de una sola vez, `getDispatchStatus` (en memoria, sin memoria, `draft`,
+  fallas) y que el reporte no descuenta stock.
+- `erpnext-client.test.ts`: contract tests con respuestas de ERPNext falsas (forma real de Warehouse, Item, Batch,
   get_batch_qty, Sales Order), cuerpo exacto del Delivery Note, idempotencia y carrera 409, traducción de errores
-  HTTP, timeout/red y sanitización de mensajes.
-- `index.test.ts`: factory y validación de entorno.
+  HTTP, timeout/red, sanitización de mensajes y `getDispatchStatus` (borrador, confirmado, anulado, no encontrado,
+  varios remitos, errores HTTP y respuesta inválida).
+- `erpnext-delivery.test.ts` (TRZ-103): comentario y etiqueta de la entrega, adjunto del remito, duplicados,
+  `not_ready` sin remito del despacho y que nunca se modifica ni confirma el Delivery Note.
+- `index.test.ts`: factory y validación de entorno (incluido `ERP_MOCK_DISPATCH_STATUS`).
 - `types.test.ts`: clave de idempotencia y clasificación de errores.
 - `server-boundary.test.ts`: los módulos con entorno o red importan `server-only`, ninguna variable ERP usa
   `NEXT_PUBLIC_` y ningún componente `"use client"` importa algo más que tipos del ERP.

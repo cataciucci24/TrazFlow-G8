@@ -42,6 +42,18 @@ test("pullMasterData devuelve los fixtures con la versión del contrato", async 
   assert.deepEqual(data.products, MOCK_ERP_FIXTURES.products);
   assert.deepEqual(data.lots, MOCK_ERP_FIXTURES.lots);
   assert.deepEqual(data.stock, MOCK_ERP_FIXTURES.stock);
+  assert.deepEqual(data.warehouses, MOCK_ERP_FIXTURES.warehouses);
+});
+
+test("TRZ-101: dos depósitos con externalId estable, y cada saldo y línea nombra uno de ellos", async () => {
+  const data = await client().pullMasterData();
+  assert.deepEqual(data.warehouses.map((warehouse) => warehouse.externalId), ["Depósito Central - SRV", "Depósito Norte - SRV"]);
+  const ids = new Set(data.warehouses.map((warehouse) => warehouse.externalId));
+  for (const row of data.stock) assert.ok(ids.has(row.warehouseExternalId), row.warehouseExternalId);
+  for (const order of await client().pullDispatchOrders()) {
+    for (const line of order.lines) if (line.warehouseExternalId) assert.ok(ids.has(line.warehouseExternalId), line.externalId);
+  }
+  assert.ok(data.stock.some((row) => row.warehouseExternalId === "Depósito Norte - SRV"), "Norte tiene algo de stock para probar varios depósitos");
 });
 
 test("cada lote y cada stock apuntan a un producto existente por externalId", async () => {
@@ -60,6 +72,7 @@ test("updatedSince filtra productos y lotes pero no el stock", async () => {
   assert.deepEqual(data.products.map((product) => product.externalId), ["QSO-HORMA", "SAL-FINA"]);
   assert.deepEqual(data.lots.map((lot) => lot.externalId), ["QSO-2026-1003"]);
   assert.equal(data.stock.length, MOCK_ERP_FIXTURES.stock.length);
+  assert.equal(data.warehouses.length, MOCK_ERP_FIXTURES.warehouses.length, "los depósitos vienen siempre completos");
 });
 
 test("pullDispatchOrders solo trae órdenes abiertas", async () => {
@@ -136,4 +149,35 @@ test("fallas de una sola vez permiten probar reintentos", async () => {
   await assert.rejects(erp.reportDispatch(report()), (error: ErpError) => error.retryable);
   const result = await erp.reportDispatch(report());
   assert.equal(result.duplicate, false);
+});
+
+test("getDispatchStatus: un reporte recibido figura confirmado, con su referencia", async () => {
+  const erp = client();
+  const result = await erp.reportDispatch(report());
+  assert.deepEqual(await erp.getDispatchStatus(report().idempotencyKey), { status: "confirmed", erpReference: result.erpReference });
+});
+
+test("getDispatchStatus: una clave que el mock no tiene en memoria responde confirmado sin referencia", async () => {
+  // El proceso se reinició u otra instancia (Vercel) recibió el reporte: no se dejan pallets trabados.
+  assert.deepEqual(await client().getDispatchStatus("dispatch:SAL-ORD-2026-00099"), { status: "confirmed", erpReference: null });
+});
+
+test("getDispatchStatus: con dispatchStatus draft simula el remito sin confirmar", async () => {
+  const erp = client({ dispatchStatus: "draft" });
+  const result = await erp.reportDispatch(report());
+  assert.deepEqual(await erp.getDispatchStatus(report().idempotencyKey), { status: "draft", erpReference: result.erpReference });
+});
+
+test("getDispatchStatus: clave vacía y escenarios de falla", async () => {
+  await rejectsWith(client().getDispatchStatus(" "), "validation");
+  await rejectsWith(client({ scenario: "timeout" }).getDispatchStatus("dispatch:X"), "timeout");
+  await rejectsWith(client({ scenario: "server_error" }).getDispatchStatus("dispatch:X"), "unavailable", 500);
+  // El escenario validation solo afecta a reportDispatch.
+  assert.equal((await client({ scenario: "validation" }).getDispatchStatus("dispatch:X")).status, "confirmed");
+});
+
+test("reportar un despacho no descuenta stock en el mock", async () => {
+  const erp = client();
+  await erp.reportDispatch(report());
+  assert.deepEqual((await erp.pullMasterData()).stock, MOCK_ERP_FIXTURES.stock);
 });

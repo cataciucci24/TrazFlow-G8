@@ -1,8 +1,14 @@
 import "server-only";
 
 import type { ErpClient } from "../erp/client.ts";
-import { ErpError, isErpError, type DispatchReport, type DispatchReportResult } from "../erp/types.ts";
-import { dispatchReportProblems } from "../erp/validation.ts";
+import {
+  ErpError,
+  isErpError,
+  type DeliveryReceipt,
+  type DeliveryReport,
+  type DispatchReport,
+} from "../erp/types.ts";
+import { deliveryReceiptProblems, deliveryReportProblems, dispatchReportProblems } from "../erp/validation.ts";
 import { emptyErpOutboxRunSummary, type ErpOutboxRunSummary } from "./types.ts";
 
 /**
@@ -12,14 +18,31 @@ import { emptyErpOutboxRunSummary, type ErpOutboxRunSummary } from "./types.ts";
  * payload guardado, fuera de cualquier transacción → erp_outbox_mark_sent | erp_outbox_mark_failed. El
  * backoff, el máximo de intentos y el lease los decide la base (20261019140000_erp_dispatch_outbox.sql):
  * acá solo se clasifica el error. El payload y la clave nunca se rearman: se reenvían tal cual.
+ *
+ * TRZ-103 sumó dos tipos de evento al mismo outbox. La operación del contrato sale del prefijo de la clave
+ * (erp_outbox_claim no devuelve el event_type):
+ *   dispatch:…          → reportDispatch
+ *   delivery:…          → reportDelivery
+ *   delivery-receipt:…  → attachDeliveryReceipt, con el archivo descargado del bucket delivery-receipts
  */
 
-/** Lo único que el procesador necesita de Supabase: llamar RPC. */
+/** Bucket privado de los remitos firmados (20261028130000_trz103_delivery_receipts.sql). */
+export const DELIVERY_RECEIPTS_BUCKET = "delivery-receipts";
+
+/**
+ * Lo que el procesador necesita de Supabase: llamar RPC y, para los remitos firmados (TRZ-103), descargar el
+ * archivo. Un cliente de Supabase cumple las dos cosas.
+ */
 export type ErpOutboxDb = {
   rpc(fn: string, args: Record<string, unknown>): PromiseLike<{
     data: unknown;
     error: { message: string; code?: string } | null;
   }>;
+  storage?: {
+    from(bucket: string): {
+      download(path: string): PromiseLike<{ data: Blob | null; error: { message: string } | null }>;
+    };
+  };
 };
 
 /**
@@ -79,6 +102,11 @@ export type ProcessErpOutboxParams = {
   aggregateId?: string | null;
   timeoutMs?: number;
   logger?: ErpOutboxLogger;
+  /**
+   * TRZ-103: procesar como el chofer, solo los eventos de entrega y remito de esta orden suya, con las RPC
+   * erp_outbox_driver_* (20261028130100). Sin valor, las RPC de siempre (logística, depósito o service_role).
+   */
+  driverOrderId?: string;
 };
 
 /** No se pudieron tomar eventos (permisos, base caída). No se tocó nada. */
@@ -91,6 +119,13 @@ export class ErpOutboxClaimError extends Error {
     this.code = code;
   }
 }
+
+type OutboxOperation =
+  | { kind: "dispatch"; report: DispatchReport }
+  | { kind: "delivery"; report: DeliveryReport }
+  | { kind: "receipt"; receipt: DeliveryReceipt; storagePath: string };
+
+type SendResult = { erpReference: string; duplicate: boolean };
 
 type ClaimedEvent = {
   id: string;
@@ -107,10 +142,16 @@ export async function processErpOutbox(params: ProcessErpOutboxParams): Promise<
   const timeoutMs = params.timeoutMs ?? DEFAULT_REPORT_TIMEOUT_MS;
   const summary = emptyErpOutboxRunSummary();
 
-  const claimed = await db.rpc("erp_outbox_claim", {
-    p_limit: params.limit ?? 10,
-    p_aggregate_id: params.aggregateId ?? null,
-  });
+  const driver = typeof params.driverOrderId === "string";
+  const rpcs = driver
+    ? { claim: "erp_outbox_driver_claim", markSent: "erp_outbox_driver_mark_sent", markFailed: "erp_outbox_driver_mark_failed" }
+    : { claim: "erp_outbox_claim", markSent: "erp_outbox_mark_sent", markFailed: "erp_outbox_mark_failed" };
+  const claimed = await db.rpc(
+    rpcs.claim,
+    driver
+      ? { p_order_id: params.driverOrderId }
+      : { p_limit: params.limit ?? 10, p_aggregate_id: params.aggregateId ?? null },
+  );
   if (claimed.error) {
     logger.error("claim_failed", { code: claimed.error.code });
     throw new ErpOutboxClaimError(
@@ -137,15 +178,14 @@ export async function processErpOutbox(params: ProcessErpOutboxParams): Promise<
   for (const event of events) {
     const startedAt = Date.now();
     const base = { eventId: event.id, attempt: event.attempts, provider: client?.provider };
-    let result: DispatchReportResult | null = null;
+    let result: SendResult | null = null;
     let failure: Failure | null = clientFailure;
 
     if (!failure && client) {
       try {
-        const report = toDispatchReport(event);
-        result = await withTimeout(client.reportDispatch(report), timeoutMs);
+        result = await withTimeout(send(client, toOperation(event), db), timeoutMs);
         if (typeof result?.erpReference !== "string" || !result.erpReference.trim()) {
-          throw new ErpError("invalid_response", "El ERP no devolvió la referencia del despacho.");
+          throw new ErpError("invalid_response", "El ERP no devolvió la referencia del documento.");
         }
       } catch (error) {
         result = null;
@@ -155,7 +195,7 @@ export async function processErpOutbox(params: ProcessErpOutboxParams): Promise<
     const durationMs = Date.now() - startedAt;
 
     if (result) {
-      const { data, error } = await db.rpc("erp_outbox_mark_sent", {
+      const { data, error } = await db.rpc(rpcs.markSent, {
         p_event_id: event.id,
         p_attempt: event.attempts,
         p_erp_reference: result.erpReference,
@@ -173,7 +213,7 @@ export async function processErpOutbox(params: ProcessErpOutboxParams): Promise<
     }
 
     const { code, message, retryable } = failure ?? classify(null);
-    const { data, error } = await db.rpc("erp_outbox_mark_failed", {
+    const { data, error } = await db.rpc(rpcs.markFailed, {
       p_event_id: event.id,
       p_attempt: event.attempts,
       p_error_code: code,
@@ -207,25 +247,87 @@ function parseClaimedEvents(data: unknown): ClaimedEvent[] {
   });
 }
 
-/** El payload guardado tiene que ser un DispatchReport válido y con la clave del evento. */
-function toDispatchReport(event: ClaimedEvent): DispatchReport {
+/** Qué operación del contrato corresponde al evento, con su payload ya validado. */
+function toOperation(event: ClaimedEvent): OutboxOperation {
   if (!event.payload || typeof event.payload !== "object" || Array.isArray(event.payload)) {
     throw new ErpError("validation", "El reporte guardado no tiene el formato del contrato.");
   }
-  const report = event.payload as DispatchReport;
-  if (report.idempotencyKey !== event.idempotencyKey) {
+  const payload = event.payload as Record<string, unknown>;
+  if (payload.idempotencyKey !== event.idempotencyKey) {
     throw new ErpError("validation", "La clave de idempotencia del reporte no coincide con la del evento.");
   }
-  let problems: string[];
+
+  if (event.idempotencyKey.startsWith("delivery-receipt:")) {
+    const storagePath = payload.storagePath;
+    const receipt: DeliveryReceipt = {
+      contractVersion: payload.contractVersion as DeliveryReceipt["contractVersion"],
+      idempotencyKey: payload.idempotencyKey as string,
+      orderExternalId: payload.orderExternalId as string,
+      dispatchIdempotencyKey: payload.dispatchIdempotencyKey as string,
+      fileName: payload.fileName as string,
+      contentType: payload.contentType as string,
+      sizeBytes: payload.sizeBytes as number,
+      uploadedAt: payload.uploadedAt as string,
+    };
+    const problems = safeProblems(() => deliveryReceiptProblems(receipt));
+    if (typeof storagePath !== "string" || !storagePath.trim()) problems.push("storagePath es obligatorio");
+    assertNoProblems("Remito de entrega inválido", problems);
+    return { kind: "receipt", receipt, storagePath: storagePath as string };
+  }
+
+  if (event.idempotencyKey.startsWith("delivery:")) {
+    const report = payload as unknown as DeliveryReport;
+    assertNoProblems("Reporte de entrega inválido", safeProblems(() => deliveryReportProblems(report)));
+    return { kind: "delivery", report };
+  }
+
+  const report = payload as unknown as DispatchReport;
+  assertNoProblems("Reporte de despacho inválido", safeProblems(() => dispatchReportProblems(report)));
+  return { kind: "dispatch", report };
+}
+
+function safeProblems(check: () => string[]): string[] {
   try {
-    problems = dispatchReportProblems(report);
+    return check();
   } catch {
-    problems = ["el reporte guardado no tiene el formato del contrato"];
+    return ["el reporte guardado no tiene el formato del contrato"];
   }
-  if (problems.length) {
-    throw new ErpError("validation", `Reporte de despacho inválido: ${problems.join("; ")}`.slice(0, 480));
+}
+
+function assertNoProblems(title: string, problems: string[]): void {
+  if (problems.length) throw new ErpError("validation", `${title}: ${problems.join("; ")}`.slice(0, 480));
+}
+
+async function send(client: ErpClient, operation: OutboxOperation, db: ErpOutboxDb): Promise<SendResult> {
+  switch (operation.kind) {
+    case "dispatch":
+      return client.reportDispatch(operation.report);
+    case "delivery":
+      return client.reportDelivery(operation.report);
+    case "receipt": {
+      const content = await downloadReceipt(db, operation.storagePath);
+      return client.attachDeliveryReceipt(operation.receipt, content);
+    }
   }
-  return report;
+}
+
+/**
+ * Baja el remito del bucket con la misma sesión que procesa (logística, depósito o service_role pueden leerlo).
+ * Si no se puede, se reintenta: puede ser una falla pasajera de Storage.
+ */
+async function downloadReceipt(db: ErpOutboxDb, storagePath: string): Promise<Uint8Array> {
+  if (!db.storage) {
+    throw new ErpError("not_ready", "No hay acceso a los archivos para adjuntar el remito; se reintenta.");
+  }
+  let blob: Blob | null = null;
+  try {
+    const { data, error } = await db.storage.from(DELIVERY_RECEIPTS_BUCKET).download(storagePath);
+    blob = error ? null : data;
+  } catch {
+    blob = null;
+  }
+  if (!blob) throw new ErpError("unavailable", "No se pudo leer el remito firmado guardado en TrazFlow.");
+  return new Uint8Array(await blob.arrayBuffer());
 }
 
 /**

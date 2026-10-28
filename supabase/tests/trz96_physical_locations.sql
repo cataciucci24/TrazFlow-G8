@@ -26,6 +26,10 @@ insert into auth.users(id,email) values
 insert into public.companies(id,name) values
  ('96000000-0000-0000-0000-000000000011','TRZ96 A'),
  ('96000000-0000-0000-0000-000000000012','TRZ96 B');
+ -- TRZ-101: las empresas nuevas no reciben un depósito automático; en el onboarding se carga DEP-01.
+ insert into public.warehouses (company_id, code, name)
+   select id, 'DEP-01', 'Depósito principal' from public.companies c
+   where not exists (select 1 from public.warehouses w where w.company_id = c.id);
 insert into public.users(id,company_id,name,email,role,revoked_at) values
  ('96000000-0000-0000-0000-000000000001','96000000-0000-0000-0000-000000000011','Operator','trz96-op@test.local','warehouse_operator',null),
  ('96000000-0000-0000-0000-000000000002','96000000-0000-0000-0000-000000000011','Manager','trz96-manager@test.local','logistics_manager',null),

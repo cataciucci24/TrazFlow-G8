@@ -30,7 +30,9 @@ export function LoginForm() {
       });
 
       if (signInError) {
-        setError(signInError.code === "email_not_confirmed"
+        setError(signInError.status === 0
+          ? "No se pudo ingresar. Revisá tu conexión e intentá nuevamente."
+          : signInError.code === "email_not_confirmed"
           ? "Confirmá tu email desde el correo recibido antes de iniciar sesión."
           : "El email o la contraseña no son correctos.");
         submitLocked.current = false;

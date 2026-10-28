@@ -11,10 +11,14 @@ import {
 } from "@/lib/orders/actions";
 import { PALLET_STATUS_LABELS } from "@/lib/pallets/labels";
 import type { Pallet } from "@/lib/types";
+import type { BatchPickingPolicy } from "@/lib/erp/types";
+import { BATCH_PICKING_POLICY_LABELS, suggestedPalletIds } from "@/lib/pallets/picking";
 
 type AssociatePalletsFormProps = {
   orderId: string;
   pallets: Pallet[];
+  /** TRZ-65: regla de salida del ERP. Con valor, los pallets ya vienen ordenados y se marca el sugerido. */
+  pickingPolicy?: BatchPickingPolicy | null;
 };
 
 const INITIAL_STATE: AssociatePalletsState = { error: null, success: null };
@@ -22,7 +26,9 @@ const INITIAL_STATE: AssociatePalletsState = { error: null, success: null };
 export function AssociatePalletsForm({
   orderId,
   pallets,
+  pickingPolicy = null,
 }: AssociatePalletsFormProps) {
+  const suggested = pickingPolicy ? suggestedPalletIds(pallets) : new Set<string>();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const associatePalletsForOrder = associatePallets.bind(null, orderId);
   const [state, formAction, isPending] = useActionState(
@@ -38,6 +44,12 @@ export function AssociatePalletsForm({
 
       {state.success && (
         <InlineAlert variant="success">{state.success}</InlineAlert>
+      )}
+
+      {pickingPolicy && (
+        <p className="text-sm text-stone-600">
+          Según tu ERP: {BATCH_PICKING_POLICY_LABELS[pickingPolicy]}. Te marcamos el pallet sugerido de cada producto; podés elegir otro.
+        </p>
       )}
 
       <ul className="divide-y divide-stone-200 rounded-xl border border-stone-200 px-4">
@@ -58,7 +70,11 @@ export function AssociatePalletsForm({
               <span className="text-stone-500">
                 — {pallet.productName} ({pallet.productSku}), lote{" "}
                 {pallet.batchNumber}
+                {pallet.batchExpirationDate ? ` · vence ${pallet.batchExpirationDate.slice(8, 10)}/${pallet.batchExpirationDate.slice(5, 7)}/${pallet.batchExpirationDate.slice(0, 4)}` : ""}
               </span>
+              {suggested.has(pallet.id) && (
+                <span className="ml-2 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">Sugerido</span>
+              )}
             </label>
             <span className="text-xs text-stone-500">
               {PALLET_STATUS_LABELS[pallet.status]}

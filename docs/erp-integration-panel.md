@@ -13,11 +13,31 @@ Objetivo: que logística detecte fallas de sincronización o de reporte al ERP s
 |---|---|
 | **Estado de la integración**: badge general, motivos, conexión, última sincronización exitosa, conteo de reportes. | `erp_integration_summary()` + `ErpClient.healthcheck()` |
 | **Detalle de un evento** (`?event=tipo:id`): código y mensaje sanitizado, explicación del código, pallets informados, historial de reintentos y botón **Reintentar envío** si está fallido. | `erp_integration_event_detail()` |
-| **Sincronización**: el mismo panel de Pallets y Órdenes, con **Sincronizar con ERP** (`syncErpNow`). | `erp_sync_runs` |
+| **Sincronización**: el mismo panel de Pallets y Órdenes, con **Sincronizar con ERP** (`syncErpNow`), los avisos de la última corrida y los depósitos de la empresa (TRZ-101). | `erp_sync_runs`, `warehouses` |
 | **Despachadas sin reportar**: órdenes del ERP con despacho físico confirmado (`confirmed_at`) cuyo reporte no está `sent`, o que no tienen reporte ("Sin reporte generado"). | `erp_dispatched_unreported()` |
 | **Actividad**: sincronizaciones y reportes, más recientes primero, con filtros y paginación (20 por página). | `erp_integration_activity()` |
 
 Si `ERP_PROVIDER` no está definido, la página muestra un estado vacío ("no configurada").
+
+### Estado del remito (TRZ-100)
+
+En cada reporte **enviado**, la lista de Actividad muestra "Remito en el ERP: …" y el detalle agrega el campo
+*Remito en el ERP* (con la hora de la última consulta) y la línea de la orden de cada pallet
+(`orderLineExternalId`, o "sin línea"):
+
+| `erp_document_status` | Se muestra |
+|---|---|
+| `null` | Sin consultar |
+| `draft` | Borrador |
+| `confirmed` | Confirmado |
+| `cancelled` | Anulado |
+| `not_found` | No encontrado |
+| `not_tracked` | Sin seguimiento (reportes anteriores a TRZ-100, que no se consultan) |
+
+El estado lo actualiza cada sincronización (ver [`erp-sync.md`](erp-sync.md), "Estado del remito"); desde el panel
+no se consulta. `erp_integration_activity()` devuelve la columna `erp_document_status` y
+`erp_integration_event_detail()` los campos `erpDocumentStatus`, `erpDocumentCheckedAt` y
+`erpDocumentConfirmedSeenAt` (20261028100300).
 
 ### Filtros (todos en la URL, se pueden compartir)
 
@@ -126,7 +146,8 @@ empresa (US-ERP-04).
 
 ## Checklist manual (navegador)
 
-Preparación: `ERP_PROVIDER=mock`, usuario de logística, Pallets → vincular `Depósito Central - SRV` y sincronizar.
+Preparación: `ERP_PROVIDER=mock`, usuario de logística, sincronizar (desde TRZ-101 los depósitos se importan solos;
+ya no se vinculan a mano).
 
 1. **Navegación**
    - Logística ve "Integración ERP" en el menú.

@@ -6,6 +6,7 @@ import {
   frappeDatetimeToIso,
   frappeErrorMessage,
   isoToFrappeDatetime,
+  mapDeliveryNoteStatus,
   mapSalesOrderStatus,
   type ErpNextDeliveryNote,
   type ErpNextSalesOrder,
@@ -24,6 +25,12 @@ const ITEMS = [
 const BATCHES = [
   { name: "L-2026-0915", item: "ACE-500", manufacturing_date: "2026-09-15", expiry_date: "2027-03-31", disabled: 0, modified: "2026-10-01 09:05:00.000000" },
   { name: "L-2026-0921", item: "ACE-500", manufacturing_date: null, expiry_date: null, disabled: 1, modified: "2026-10-01 09:06:00.000000" },
+];
+
+// Depósitos de ERPNext. Los grupos ("All Warehouses - SRV") se filtran en la consulta (is_group = 0).
+const WAREHOUSES = [
+  { name: "Depósito Central - SRV", warehouse_name: "Depósito Central", is_group: 0, disabled: 0, modified: "2026-10-01 08:00:00.000000" },
+  { name: "Depósito Norte - SRV", warehouse_name: "Depósito Norte", is_group: 0, disabled: 1, modified: "2026-10-02 08:00:00.000000" },
 ];
 
 const BATCH_QTY = [
@@ -140,8 +147,9 @@ test("healthcheck como Guest es credencial inválida", async () => {
   await rejectsWith(client.healthcheck(), "unauthorized");
 });
 
-test("pullMasterData traduce Item, Batch y get_batch_qty al contrato", async () => {
+test("pullMasterData traduce Warehouse, Item, Batch y get_batch_qty al contrato", async () => {
   const { client, calls } = fakeErp(
+    on("GET", "/api/resource/Warehouse", { body: { data: WAREHOUSES } }),
     on("GET", "/api/resource/Item", { body: { data: ITEMS } }),
     on("GET", "/api/resource/Batch", { body: { data: BATCHES } }),
     on("GET", "/api/method/erpnext.stock.doctype.batch.batch.get_batch_qty", { body: { message: BATCH_QTY } }),
@@ -149,6 +157,14 @@ test("pullMasterData traduce Item, Batch y get_batch_qty al contrato", async () 
   const data = await client.pullMasterData();
 
   assert.equal(data.contractVersion, ERP_CONTRACT_VERSION);
+  // TRZ-101: sin grupos, incluidos los deshabilitados (quedan inactivos en TrazFlow). externalId = name.
+  const warehouseCall = calls.find((call) => call.url.pathname === "/api/resource/Warehouse")!;
+  assert.deepEqual(filtersOf(warehouseCall), [["is_group", "=", 0]]);
+  assert.deepEqual(JSON.parse(warehouseCall.url.searchParams.get("fields") ?? "[]"), ["name", "warehouse_name", "is_group", "disabled", "modified"]);
+  assert.deepEqual(data.warehouses, [
+    { externalId: "Depósito Central - SRV", name: "Depósito Central", active: true, updatedAt: "2026-10-01T11:00:00.000Z" },
+    { externalId: "Depósito Norte - SRV", name: "Depósito Norte", active: false, updatedAt: "2026-10-02T11:00:00.000Z" },
+  ]);
   assert.deepEqual(data.products[0], {
     externalId: "ACE-500", sku: "ACE-500", name: "Aceite de girasol 500 ml", uom: "Caja",
     batchTracked: true, active: true, updatedAt: "2026-10-01T12:00:00.000Z",
@@ -165,13 +181,28 @@ test("pullMasterData traduce Item, Batch y get_batch_qty al contrato", async () 
   assert.deepEqual(stockCalls.map((call) => call.url.searchParams.get("item_code")), ["ACE-500"]);
 });
 
-test("updatedSince se envía como filtro de modified en hora del servidor", async () => {
+test("updatedSince se envía como filtro de modified en hora del servidor (los depósitos vienen siempre completos)", async () => {
   const { client, calls } = fakeErp(
+    on("GET", "/api/resource/Warehouse", { body: { data: [] } }),
     on("GET", "/api/resource/Item", { body: { data: [] } }),
     on("GET", "/api/resource/Batch", { body: { data: [] } }),
   );
   await client.pullMasterData({ updatedSince: "2026-10-05T03:00:00Z" });
-  assert.deepEqual(filtersOf(calls[0]), [["is_stock_item", "=", 1], ["modified", ">=", "2026-10-05 00:00:00"]]);
+  const call = (path: string) => calls.find((candidate) => candidate.url.pathname === path)!;
+  assert.deepEqual(filtersOf(call("/api/resource/Warehouse")), [["is_group", "=", 0]]);
+  assert.deepEqual(filtersOf(call("/api/resource/Item")), [["is_stock_item", "=", 1], ["modified", ">=", "2026-10-05 00:00:00"]]);
+});
+
+test("un Warehouse sin nombre visible usa su id; uno con fecha inválida es invalid_response", async () => {
+  const unnamed = fakeErp(
+    on("GET", "/api/resource/Warehouse", { body: { data: [{ ...WAREHOUSES[0], warehouse_name: "" }] } }),
+    on("GET", "/api/resource/Item", { body: { data: [] } }),
+    on("GET", "/api/resource/Batch", { body: { data: [] } }),
+  );
+  assert.equal((await unnamed.client.pullMasterData()).warehouses[0].name, "Depósito Central - SRV");
+
+  const broken = fakeErp(on("GET", "/api/resource/Warehouse", { body: { data: [{ ...WAREHOUSES[0], modified: "ayer" }] } }));
+  await assert.rejects(broken.client.pullMasterData(), (error: unknown) => error instanceof ErpError && error.code === "invalid_response");
 });
 
 test("los listados se paginan hasta recibir una página incompleta", async () => {
@@ -380,4 +411,48 @@ test("conversión de fechas de Frappe", () => {
   assert.equal(frappeDatetimeToIso("2026-10-10 09:00:00.123456"), "2026-10-10T12:00:00.123Z");
   assert.equal(frappeDatetimeToIso("2026-10-10"), "2026-10-10T03:00:00.000Z");
   assert.equal(isoToFrappeDatetime("2026-10-10T12:00:00.123Z"), "2026-10-10 09:00:00");
+});
+
+/* ---------- getDispatchStatus (TRZ-100) ---------- */
+
+const notesFor = (...notes: { name: string; docstatus: number }[]) =>
+  on("GET", "/api/resource/Delivery Note", { body: { data: notes } });
+
+test("getDispatchStatus busca el remito por la clave, incluyendo los anulados", async () => {
+  const { client, calls } = fakeErp(notesFor({ name: "MAT-DN-2026-00001", docstatus: 0 }));
+  assert.deepEqual(await client.getDispatchStatus("dispatch:SAL-ORD-2026-00012"), { status: "draft", erpReference: "MAT-DN-2026-00001" });
+  assert.equal(calls.length, 1);
+  assert.deepEqual(filtersOf(calls[0]), [["trazflow_idempotency_key", "=", "dispatch:SAL-ORD-2026-00012"]]);
+  assert.deepEqual(JSON.parse(calls[0].url.searchParams.get("fields") ?? "[]"), ["name", "docstatus"]);
+  assert.equal(calls[0].method, "GET");
+});
+
+test("getDispatchStatus: borrador, confirmado, anulado y no encontrado", async () => {
+  const status = async (...notes: { name: string; docstatus: number }[]) =>
+    fakeErp(notesFor(...notes)).client.getDispatchStatus("dispatch:X");
+  assert.deepEqual(await status({ name: "DN-1", docstatus: 0 }), { status: "draft", erpReference: "DN-1" });
+  assert.deepEqual(await status({ name: "DN-1", docstatus: 1 }), { status: "confirmed", erpReference: "DN-1" });
+  assert.deepEqual(await status({ name: "DN-1", docstatus: 2 }), { status: "cancelled", erpReference: "DN-1" });
+  assert.deepEqual(await status(), { status: "not_found", erpReference: null });
+});
+
+test("getDispatchStatus con varios remitos: gana el confirmado, después el borrador, después el anulado", async () => {
+  assert.deepEqual(mapDeliveryNoteStatus([{ name: "DN-1", docstatus: 2 }, { name: "DN-1-1", docstatus: 1 }]), { status: "confirmed", erpReference: "DN-1-1" });
+  assert.deepEqual(mapDeliveryNoteStatus([{ name: "DN-1", docstatus: 2 }, { name: "DN-1-1", docstatus: 0 }]), { status: "draft", erpReference: "DN-1-1" });
+  assert.deepEqual(mapDeliveryNoteStatus([{ name: "DN-1", docstatus: 2 }, { name: "DN-2", docstatus: 2 }]), { status: "cancelled", erpReference: "DN-1" });
+  const { client } = fakeErp(notesFor({ name: "DN-1", docstatus: 2 }, { name: "DN-1-1", docstatus: 1 }));
+  assert.deepEqual(await client.getDispatchStatus("dispatch:X"), { status: "confirmed", erpReference: "DN-1-1" });
+});
+
+test("getDispatchStatus: errores HTTP, respuesta inválida y clave vacía", async () => {
+  const replying = (status: number) => fakeErp(on("GET", "/api/resource/Delivery Note", { status, body: {} })).client;
+  await rejectsWith(replying(403).getDispatchStatus("dispatch:X"), "unauthorized", 403);
+  await rejectsWith(replying(500).getDispatchStatus("dispatch:X"), "unavailable", 500);
+  await rejectsWith(replying(429).getDispatchStatus("dispatch:X"), "rate_limited", 429);
+  await rejectsWith(fakeErp(() => new TypeError("fetch failed")).client.getDispatchStatus("dispatch:X"), "network");
+  await rejectsWith(fakeErp(on("GET", "/api/resource/Delivery Note", { body: {} })).client.getDispatchStatus("dispatch:X"), "invalid_response");
+  await rejectsWith(fakeErp(notesFor({ name: "DN-1", docstatus: 7 })).client.getDispatchStatus("dispatch:X"), "invalid_response");
+  const { client, calls } = fakeErp();
+  await rejectsWith(client.getDispatchStatus(""), "validation");
+  assert.equal(calls.length, 0, "sin clave no se llama al ERP");
 });

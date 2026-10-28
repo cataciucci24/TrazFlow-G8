@@ -54,11 +54,13 @@ function harness() {
     if (name.endsWith("design-system")) return { InlineAlert: "alert", SectionHeader: "heading", TableShell: "table-shell" };
     if (name.endsWith("location-qr")) return { LocationQr: "qr" };
     if (name.endsWith("qr-scanner")) return { QrScanner: "scanner" };
+    if (name.endsWith("warehouse-field")) return { WarehouseField: "warehouse-field" };
+    if (name === "@/lib/warehouses/types") return require("../../lib/warehouses/types.ts");
     return require(name);
   }, compiled, compiled.exports);
   const props: Parameters<typeof LocationsPanel>[0] = {
     locations: ["a", "b"].map((id) => ({ id, company_id: "company", warehouse_code: "DEP-01", code: id.toUpperCase(), aisle: "1", rack: "1", level: "1", position: id })),
-    pallets: [{ id: "pallet", qrCode: "PAL-1", status: "in_warehouse", currentLocation: null, productName: "Producto", productSku: "SKU", batchNumber: "L", quantity: 1, unitOfMeasure: "unidades" }],
+    pallets: [{ id: "pallet", qrCode: "PAL-1", status: "in_warehouse", currentLocation: null, warehouseCode: "DEP-01", productName: "Producto", productSku: "SKU", batchNumber: "L", quantity: 1, unitOfMeasure: "unidades" }],
     locationIds: { pallet: null }, canMove: true, initialPalletId: "pallet",
   };
   const render = () => { cursor = 0; return nodes(compiled.exports.LocationsPanel(props)); };
@@ -116,4 +118,22 @@ test("un error de movimiento conserva la selección y se limpia al corregirla", 
   h.change(tree, "locationId", "b");
   tree = h.render();
   assert.ok(!tree.some((n) => n.type === "alert" && text(n.props.children).includes("La ubicación cambió")));
+});
+
+test("TRZ-101: solo se ofrecen ubicaciones del depósito del pallet", () => {
+  const h = harness();
+  h.props.locations.push({ id: "n", company_id: "company", warehouse_code: "DEPOSITO-NORTE", code: "N1", aisle: "1", rack: "1", level: "1", position: "n" });
+  const options = (tree: Element[]) => nodes(h.select(tree, "locationId").props.children)
+    .filter((n) => n.type === "option" && n.props.value).map((n) => n.props.value);
+  assert.deepEqual(options(h.render()), ["a", "b"]);
+  h.props.pallets[0] = { ...h.props.pallets[0], warehouseCode: "DEPOSITO-NORTE" };
+  assert.deepEqual(options(h.render()), ["n"]);
+});
+
+test("TRZ-101: con un solo depósito, el alta de ubicación lo nombra e incluye el selector (que se oculta solo)", () => {
+  const h = harness();
+  h.props.warehouses = [{ code: "DEP-01", name: "Depósito Central", externalId: null, sourceSystem: "trazflow", active: true, syncedAt: null }];
+  const tree = h.render();
+  assert.ok(tree.some((n) => n.type === "heading" && String(n.props.description).startsWith("Depósito DEP-01 · Depósito Central")));
+  assert.ok(tree.some((n) => n.type === "warehouse-field"));
 });

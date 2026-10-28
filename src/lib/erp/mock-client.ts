@@ -2,10 +2,15 @@ import "server-only";
 
 import type { ErpClient } from "./client.ts";
 import { MOCK_ERP_FIXTURES, type MockErpFixtures } from "./fixtures.ts";
-import type { MockScenario } from "./mock-scenarios.ts";
+import type { MockDispatchStatus, MockScenario } from "./mock-scenarios.ts";
 import {
   ERP_CONTRACT_VERSION,
   ErpError,
+  type BatchPickingPolicy,
+  type DeliveryReceipt,
+  type DeliveryReport,
+  type DeliveryReportResult,
+  type DispatchDocumentStatus,
   type DispatchReport,
   type DispatchReportResult,
   type ErpDispatchOrder,
@@ -13,24 +18,45 @@ import {
   type ErpMasterData,
   type ErpPullOptions,
 } from "./types.ts";
-import { assertValidDispatchReport } from "./validation.ts";
+import {
+  assertValidDeliveryReceipt,
+  assertValidDeliveryReport,
+  assertValidDispatchReport,
+  assertValidErpWarehouses,
+  assertValidIdempotencyKey,
+} from "./validation.ts";
 
 export type MockErpClientOptions = {
-  /** Falla permanente de todas las llamadas. `validation` solo afecta a reportDispatch. */
+  /** Falla permanente de todas las llamadas. `validation` solo afecta a las que escriben (reportes y remitos). */
   scenario?: MockScenario;
   /** Fallas de una sola vez, consumidas en orden por las próximas llamadas (para probar reintentos). */
   failures?: MockScenario[];
   fixtures?: MockErpFixtures;
   now?: () => Date;
+  /** Qué responde getDispatchStatus (ERP_MOCK_DISPATCH_STATUS). Por defecto `confirmed`. */
+  dispatchStatus?: MockDispatchStatus;
+  /** Qué responde getBatchPickingPolicy (TRZ-65). Por defecto `expiry`. */
+  batchPickingPolicy?: BatchPickingPolicy;
 };
 
-type Operation = "healthcheck" | "pullMasterData" | "pullDispatchOrders" | "reportDispatch";
+type Operation =
+  | "healthcheck"
+  | "pullMasterData"
+  | "pullDispatchOrders"
+  | "reportDispatch"
+  | "getDispatchStatus"
+  | "reportDelivery"
+  | "attachDeliveryReceipt"
+  | "getBatchPickingPolicy";
+
+const WRITE_OPERATIONS: ReadonlySet<Operation> = new Set(["reportDispatch", "reportDelivery", "attachDeliveryReceipt"]);
 
 type StoredReport = { fingerprint: string; result: DispatchReportResult };
 
 /**
  * ERP en memoria con fixtures deterministas. Simula respuestas válidas, timeout (sin respuesta), 401, 422, 500 y
- * duplicados por idempotencyKey. Reportar un despacho marca la orden como entregada en la memoria del mock.
+ * duplicados por idempotencyKey. Reportar un despacho marca la orden como entregada en la memoria del mock, pero
+ * NO descuenta stock: el saldo del mock es siempre el de los fixtures.
  */
 export class MockErpClient implements ErpClient {
   readonly provider = "mock" as const;
@@ -40,12 +66,18 @@ export class MockErpClient implements ErpClient {
   readonly #data: MockErpFixtures;
   readonly #now: () => Date;
   readonly #reports = new Map<string, StoredReport>();
+  /** Entregas y remitos informados (TRZ-103), por clave. */
+  readonly #deliveries = new Map<string, StoredReport>();
+  readonly #dispatchStatus: MockDispatchStatus;
+  readonly #batchPickingPolicy: BatchPickingPolicy;
 
   constructor(options: MockErpClientOptions = {}) {
     this.#scenario = options.scenario ?? "ok";
     this.#failures = [...(options.failures ?? [])];
     this.#data = structuredClone(options.fixtures ?? MOCK_ERP_FIXTURES);
     this.#now = options.now ?? (() => new Date());
+    this.#dispatchStatus = options.dispatchStatus ?? "confirmed";
+    this.#batchPickingPolicy = options.batchPickingPolicy ?? "expiry";
   }
 
   async healthcheck(): Promise<ErpHealth> {
@@ -56,9 +88,12 @@ export class MockErpClient implements ErpClient {
   async pullMasterData(options: ErpPullOptions = {}): Promise<ErpMasterData> {
     this.#simulate("pullMasterData");
     const changed = updatedSinceFilter(options);
+    // Depósitos y stock van siempre completos: el que no viene se marca inactivo / en 0.
+    assertValidErpWarehouses(this.#data.warehouses);
     return structuredClone({
       contractVersion: ERP_CONTRACT_VERSION,
       fetchedAt: this.#now().toISOString(),
+      warehouses: this.#data.warehouses,
       products: this.#data.products.filter(changed),
       lots: this.#data.lots.filter(changed),
       stock: this.#data.stock,
@@ -115,9 +150,60 @@ export class MockErpClient implements ErpClient {
     return { ...result };
   }
 
+  /**
+   * Simula que administración confirma el remito enseguida (`confirmed`), salvo con ERP_MOCK_DISPATCH_STATUS=draft.
+   * Si la clave no está en memoria (el proceso se reinició, o es otra instancia en Vercel) responde igual, con
+   * erpReference null: el mock no guarda estado confiable entre procesos y no queremos pallets trabados en local.
+   */
+  async getDispatchStatus(idempotencyKey: string): Promise<DispatchDocumentStatus> {
+    this.#simulate("getDispatchStatus");
+    assertValidIdempotencyKey(idempotencyKey);
+    const stored = this.#reports.get(idempotencyKey);
+    return { status: this.#dispatchStatus, erpReference: stored?.result.erpReference ?? null };
+  }
+
+  /**
+   * Registra la entrega en memoria (TRZ-103). Como getDispatchStatus, no exige que el despacho esté en esta
+   * instancia: el mock no guarda estado entre procesos y no queremos entregas trabadas en local.
+   */
+  async reportDelivery(report: DeliveryReport): Promise<DeliveryReportResult> {
+    this.#simulate("reportDelivery");
+    assertValidDeliveryReport(report);
+    return this.#storeDelivery(report.idempotencyKey, report.dispatchIdempotencyKey, stableStringify(report));
+  }
+
+  async attachDeliveryReceipt(receipt: DeliveryReceipt, content: Uint8Array): Promise<DeliveryReportResult> {
+    this.#simulate("attachDeliveryReceipt");
+    assertValidDeliveryReceipt(receipt, content);
+    const fingerprint = `${stableStringify(receipt)}:${content.byteLength}`;
+    return this.#storeDelivery(receipt.idempotencyKey, receipt.dispatchIdempotencyKey, fingerprint);
+  }
+
+  async getBatchPickingPolicy(): Promise<BatchPickingPolicy> {
+    this.#simulate("getBatchPickingPolicy");
+    return this.#batchPickingPolicy;
+  }
+
+  #storeDelivery(key: string, dispatchKey: string, fingerprint: string): DeliveryReportResult {
+    const previous = this.#deliveries.get(key);
+    if (previous) {
+      if (previous.fingerprint !== fingerprint) {
+        throw new ErpError("conflict", `La clave ${key} ya se usó con otro contenido.`, { status: 409 });
+      }
+      return { ...previous.result, duplicate: true };
+    }
+    const result: DeliveryReportResult = {
+      erpReference: this.#reports.get(dispatchKey)?.result.erpReference ?? `MOCK-DN-${dispatchKey.replace(/^dispatch:/, "")}`,
+      duplicate: false,
+      acceptedAt: this.#now().toISOString(),
+    };
+    this.#deliveries.set(key, { fingerprint, result });
+    return { ...result };
+  }
+
   #simulate(operation: Operation): void {
     const scenario = this.#failures.shift() ?? this.#scenario;
-    if (scenario === "validation" && operation !== "reportDispatch") return;
+    if (scenario === "validation" && !WRITE_OPERATIONS.has(operation)) return;
     switch (scenario) {
       case "ok":
         return;

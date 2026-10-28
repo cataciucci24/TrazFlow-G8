@@ -7,6 +7,10 @@ import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { hasRole, requireUserProfile } from "@/lib/auth/session";
 import { processCompanyErpOutbox } from "@/lib/erp-outbox/run";
+import { isErpEnabled } from "@/lib/erp-sync/enabled";
+import { canCreateManualOrders, ERP_MANAGED_ORDERS_ERROR } from "@/lib/orders/erp-policy";
+import { mismatchSummary } from "@/lib/orders/lines";
+import { getOrderLinesComparison } from "@/lib/orders/queries";
 
 export type CreateDispatchOrderState = {
   errors: {
@@ -59,6 +63,9 @@ export async function createDispatchOrder(
       ...EMPTY_STATE,
       errors: { form: "No tenés permisos para crear órdenes de despacho." },
     };
+  }
+  if (!canCreateManualOrders(await isErpEnabled(profile.companyId))) {
+    return { ...EMPTY_STATE, errors: { form: ERP_MANAGED_ORDERS_ERROR } };
   }
 
   const distributorId = String(formData.get("distributorId") ?? "").trim();
@@ -259,6 +266,7 @@ export type ConfirmDispatchOutcome =
   | "invalid_status"
   | "no_pallets"
   | "missing_pallets"
+  | "quantity_mismatch"
   | "forbidden"
   | "error";
 
@@ -281,6 +289,7 @@ const CONFIRM_MESSAGES: Record<ConfirmDispatchOutcome, string> = {
   invalid_status: "La orden ya fue confirmada (o no admite confirmarse en su estado actual).",
   no_pallets: "La orden no tiene pallets asociados.",
   missing_pallets: "Todavía hay pallets esperados sin validar.",
+  quantity_mismatch: "Lo armado no coincide con lo pedido. No se puede confirmar el despacho hasta que coincida.",
   forbidden: "No tenés permisos para confirmar despachos.",
   error: "No se pudo confirmar el despacho. Intentá nuevamente.",
 };
@@ -325,10 +334,14 @@ export async function confirmDispatchOrder(
     revalidatePath("/dashboard");
     after(() =>
       processCompanyErpOutbox({
-        db: { rpc: (fn, args) => supabase.rpc(fn, args) },
+        db: { rpc: (fn, args) => supabase.rpc(fn, args), storage: supabase.storage },
         companyId: profile.companyId,
       }),
     );
+  }
+
+  if (row.outcome === "quantity_mismatch") {
+    return { outcome: row.outcome, message: await quantityMismatchMessage(orderId) };
   }
 
   return {
@@ -337,11 +350,27 @@ export async function confirmDispatchOrder(
   };
 }
 
+/**
+ * TRZ-100: la base rechazó la confirmación porque el armado no coincide con lo pedido. El detalle por producto
+ * se arma con la misma comparación que muestra la tabla "Pedido vs. armado". Si no se puede leer, queda el
+ * mensaje genérico: el rechazo ya ocurrió igual.
+ */
+async function quantityMismatchMessage(orderId: string): Promise<string> {
+  try {
+    const summary = mismatchSummary((await getOrderLinesComparison(orderId)).rows);
+    if (summary) return `${summary} No se puede confirmar el despacho hasta que coincida.`;
+  } catch {
+    // Mensaje genérico.
+  }
+  return CONFIRM_MESSAGES.quantity_mismatch;
+}
+
 export type DissociatePalletOutcome =
   | "dissociated"
   | "order_not_found"
   | "not_removable"
   | "pallet_not_in_order"
+  | "invalid_pallet_state"
   | "forbidden"
   | "error";
 
@@ -362,6 +391,8 @@ const DISSOCIATE_MESSAGES: Record<DissociatePalletOutcome, string> = {
   not_removable:
     "El pallet ya no se puede quitar (la orden ya no está en borrador, o el pallet ya fue validado).",
   pallet_not_in_order: "El pallet no está asociado a esta orden.",
+  invalid_pallet_state:
+    "El pallet no está reservado para esta orden (ya fue despachado, entregado o cambió de estado), así que no se puede quitar.",
   forbidden: "No tenés permisos para desasociar pallets de esta orden.",
   error: "No se pudo desasociar el pallet. Intentá nuevamente.",
 };

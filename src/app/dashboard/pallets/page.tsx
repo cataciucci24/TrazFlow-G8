@@ -6,9 +6,13 @@ import { NewPalletForm } from "@/components/pallets/new-pallet-form";
 import { PalletTrackingPanel } from "@/components/traceability/pallet-tracking-panel";
 import { hasRole, requireUserProfile } from "@/lib/auth/session";
 import { isErpEnabled } from "@/lib/erp-sync/enabled";
-import { getErpWarehouseMappings, getLatestErpSyncRun } from "@/lib/erp-sync/queries";
+import { getErpStockOverview } from "@/lib/erp-stock/queries";
+import { ErpStockTable } from "@/components/erp/erp-stock-table";
+import { getExpirationThresholds } from "@/lib/expiration/queries";
+import { getLatestErpSyncRun } from "@/lib/erp-sync/queries";
 import { getCompanyLots, getCompanyPallets, getCompanyProducts } from "@/lib/pallets/queries";
 import type { ProductBatch } from "@/lib/types";
+import { getWarehouses } from "@/lib/warehouses/queries";
 import { InlineAlert, PageHeader } from "@/components/ui/design-system";
 
 export const metadata: Metadata = { title: "Pallets | TrazFlow" };
@@ -17,26 +21,29 @@ export default async function PalletsPage() {
   const profile = await requireUserProfile();
   if (!hasRole(profile, "logistics_manager")) redirect("/dashboard");
   const erpEnabled = await isErpEnabled(profile.companyId);
-  const [pallets, lots, products, lastRun, mappings] = await Promise.all([
+  const [pallets, lots, products, lastRun, warehouses, erpLots, thresholds] = await Promise.all([
     getCompanyPallets(profile.companyId),
     getCompanyLots(),
     getCompanyProducts(profile.companyId),
     erpEnabled ? getLatestErpSyncRun(profile.companyId) : null,
-    erpEnabled ? getErpWarehouseMappings(profile.companyId) : [],
+    getWarehouses(profile.companyId),
+    erpEnabled ? getErpStockOverview() : undefined,
+    erpEnabled ? getExpirationThresholds() : null,
   ]);
   const existingBatches: ProductBatch[] = lots.map((lot) => ({ productSku: lot.productSku, batchNumber: lot.batchNumber }));
 
-  // Con ERP, el alta manual (NewPalletForm) se reemplaza por la sincronización; sin ERP, todo sigue como antes.
+  // Con ERP (TRZ-100), los pallets físicos se arman contra el saldo de un lote del ERP; sin ERP, todo sigue como antes.
   return <div className="app-page">
     <PageHeader title="Pallets"
-      description={erpEnabled ? "Consultá y seguí los pallets. Los saldos de stock llegan desde el ERP." : "Consultá, registrá y realizá el seguimiento de tus pallets."}
-      action={erpEnabled ? undefined : <NewPalletForm existingBatches={existingBatches} existingProducts={products} />} />
+      description={erpEnabled ? "Armá los pallets físicos contra los lotes del ERP y seguí su estado." : "Consultá, registrá y realizá el seguimiento de tus pallets."}
+      action={<NewPalletForm existingBatches={existingBatches} existingProducts={products} erpLots={erpLots} warehouses={warehouses} />} />
     {erpEnabled ? <>
-      <ErpSyncPanel lastRun={lastRun} warehouseMappings={mappings.map((mapping) => mapping.externalWarehouseId)} />
+      <ErpSyncPanel lastRun={lastRun} warehouses={warehouses} />
       <InlineAlert variant="info" announce={false}>
-        Un pallet importado del ERP representa un saldo de stock (lote × depósito), no un pallet físico verificado. Imprimí su etiqueta QR cuando se prepare físicamente.
+        El ERP informa cuánto hay de cada lote; los pallets los armás acá con su cantidad real, sin superar ese saldo. Los marcados &quot;Heredado de saldo ERP&quot; son de antes y no se editan.
       </InlineAlert>
     </> : null}
+    {erpEnabled && erpLots ? <ErpStockTable rows={erpLots} expiringDays={thresholds?.criticalDays ?? 30} /> : null}
     <PalletTrackingPanel pallets={pallets} existingBatches={existingBatches} existingProducts={products} erpManaged={erpEnabled} />
   </div>;
 }

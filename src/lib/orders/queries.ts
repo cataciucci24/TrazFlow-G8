@@ -1,3 +1,5 @@
+import { compareOrderLines, type OrderProductComparison } from "@/lib/orders/lines";
+import type { ProductUnit } from "@/lib/pallets/units";
 import { createClient } from "@/lib/supabase/server";
 import type { DispatchOrder } from "@/lib/types";
 
@@ -40,4 +42,52 @@ export async function getDispatchOrderDetail(
     driverName: driver?.name ?? null,
     origin: { sourceSystem: data.source_system, externalId: data.external_id, syncedAt: data.synced_at },
   };
+}
+
+type RawLineProduct = { id: string; name: string; sku: string; unit_of_measure: ProductUnit };
+type RawLine = { quantity: number; products: RawLineProduct | RawLineProduct[] | null };
+type RawOrderPallet = {
+  pallets: {
+    quantity: number | null;
+    batches: { products: RawLineProduct | RawLineProduct[] | null } | { products: RawLineProduct | RawLineProduct[] | null }[] | null;
+  } | null;
+};
+
+function one<T>(value: T | T[] | null): T | null {
+  return Array.isArray(value) ? value[0] ?? null : value;
+}
+
+/**
+ * Pedido (líneas del ERP) vs. armado (pallets con expected = true) de una orden, por producto (TRZ-100).
+ * `hasLines` = false: la orden del ERP se importó sin líneas (todas las anteriores a TRZ-100).
+ */
+export async function getOrderLinesComparison(orderId: string): Promise<{ hasLines: boolean; rows: OrderProductComparison[] }> {
+  const supabase = await createClient();
+  const [lines, pallets] = await Promise.all([
+    supabase.from("dispatch_order_lines").select("quantity, products ( id, name, sku, unit_of_measure )").eq("order_id", orderId),
+    supabase.from("order_pallets")
+      .select("pallets ( quantity, batches ( products ( id, name, sku, unit_of_measure ) ) )")
+      .eq("order_id", orderId)
+      .eq("expected", true),
+  ]);
+  if (lines.error) throw new Error(`No se pudieron leer las líneas de la orden (${lines.error.code}).`, { cause: lines.error });
+  if (pallets.error) throw new Error(`No se pudieron leer los pallets de la orden (${pallets.error.code}).`, { cause: pallets.error });
+
+  const toInput = (product: RawLineProduct, quantity: number | null) => ({
+    productId: product.id,
+    productName: product.name,
+    productSku: product.sku,
+    unitOfMeasure: product.unit_of_measure,
+    quantity,
+  });
+  const lineInputs = ((lines.data ?? []) as unknown as RawLine[]).flatMap((line) => {
+    const product = one(line.products);
+    return product ? [{ ...toInput(product, line.quantity), quantity: Number(line.quantity) }] : [];
+  });
+  const palletInputs = ((pallets.data ?? []) as unknown as RawOrderPallet[]).flatMap((row) => {
+    const pallet = Array.isArray(row.pallets) ? row.pallets[0] : row.pallets;
+    const product = pallet ? one(one(pallet.batches)?.products ?? null) : null;
+    return pallet && product ? [toInput(product, pallet.quantity === null ? null : Number(pallet.quantity))] : [];
+  });
+  return { hasLines: lineInputs.length > 0, rows: compareOrderLines(lineInputs, palletInputs) };
 }

@@ -4,7 +4,7 @@ import { formatSyncedAt } from "@/components/erp/erp-origin";
 import { RetryEventButton } from "@/components/erp/integration/integration-buttons";
 import { IntegrationBadgeView } from "@/components/erp/integration/integration-badge";
 import { activityBadge } from "@/lib/erp-integration/status";
-import { ACTIVITY_STATUS_LABELS, type IntegrationEventDetail } from "@/lib/erp-integration/types";
+import { ACTIVITY_STATUS_LABELS, ERP_DOCUMENT_STATUS_LABELS, type IntegrationEventDetail } from "@/lib/erp-integration/types";
 import { ERP_SYNC_ENTITY_LABELS, type ErpSyncEntity } from "@/lib/erp-sync/types";
 
 /** Explicación para logística de cada código de error del contrato (docs/erp-contract.md §6). */
@@ -84,6 +84,12 @@ function OutboxDetail({ detail }: { detail: Extract<IntegrationEventDetail, { ki
             : detail.status === "pending" && detail.nextAttemptAt ? formatSyncedAt(detail.nextAttemptAt) : "—"}
         </Field>
         {detail.erpReference ? <Field label="Referencia en el ERP">{detail.erpReference}{detail.erpDuplicate ? " (ya registrado)" : ""}</Field> : null}
+        {detail.status === "sent" ? (
+          <Field label="Remito en el ERP">
+            {detail.erpDocumentStatus ? ERP_DOCUMENT_STATUS_LABELS[detail.erpDocumentStatus] : "Sin consultar"}
+            {detail.erpDocumentCheckedAt ? ` (consultado ${formatSyncedAt(detail.erpDocumentCheckedAt)})` : ""}
+          </Field>
+        ) : null}
         {detail.lastAttemptAt ? <Field label="Último intento">{formatSyncedAt(detail.lastAttemptAt)}</Field> : null}
       </dl>
 
@@ -103,6 +109,7 @@ function OutboxDetail({ detail }: { detail: Extract<IntegrationEventDetail, { ki
             <li key={`${line.palletCode}-${index}`} className="break-words">
               <span className="font-mono">{line.palletCode ?? "—"}</span> · lote <span className="font-mono">{line.lotExternalId ?? "sin lote del ERP"}</span>
               {" · "}{line.quantity ?? "—"} {line.uom ?? ""}
+              {" · "}línea <span className="font-mono">{line.orderLineExternalId ?? "sin línea"}</span>
             </li>
           ))}
         </ul>

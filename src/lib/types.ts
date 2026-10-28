@@ -136,14 +136,25 @@ export type Pallet = {
   status: PalletStatus;
   currentLocation: string | null;
   currentLocationId?: string | null;
+  /** Depósito de TrazFlow donde está (o del que salió) el pallet (TRZ-101). */
+  warehouseCode?: string | null;
   productName: string;
   productSku: string;
   batchNumber: string;
   quantity: number | null;
   /** Unidad de su producto. */
   unitOfMeasure: ProductUnit;
-  /** De dónde vino: alta en TrazFlow o saldo de stock importado del ERP (US-ERP-03). */
+  /**
+   * De dónde vino: alta en TrazFlow o, antes de TRZ-100, un saldo de stock importado del ERP como pallet
+   * ("heredado": external_id 'stock:{lote}@{depósito}').
+   */
   origin?: ErpOrigin;
+  /** Origen del lote: los pallets de lotes del ERP se arman contra su saldo (TRZ-100). */
+  lotSourceSystem?: "trazflow" | "erp";
+  /** Vencimiento del lote (YYYY-MM-DD), para sugerir el orden de salida (TRZ-65). */
+  batchExpirationDate?: string | null;
+  /** Alta del pallet en TrazFlow, para FIFO/LIFO (TRZ-65). */
+  palletCreatedAt?: string;
 };
 
 /** Pallet con la marca de si ya tiene eventos de trazabilidad (la base impide eliminarlo). */

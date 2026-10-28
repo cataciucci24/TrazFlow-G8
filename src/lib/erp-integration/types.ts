@@ -19,6 +19,19 @@ export const ACTIVITY_KIND_LABELS: Record<ActivityKind, string> = {
   dispatch_confirmed: "Reporte de despacho",
 };
 
+/**
+ * Nombre de cualquier evento del outbox, también los de entrega de TRZ-103 (que todavía no tienen filtro propio
+ * en el panel: aparecen en la actividad sin filtrar).
+ */
+const OUTBOX_EVENT_LABELS: Record<string, string> = {
+  delivery_confirmed: "Informe de entrega",
+  delivery_receipt_attached: "Remito firmado",
+};
+
+export function activityKindLabel(kind: string): string {
+  return (ACTIVITY_KIND_LABELS as Record<string, string>)[kind] ?? OUTBOX_EVENT_LABELS[kind] ?? kind;
+}
+
 export const ACTIVITY_STATUS_LABELS: Record<ActivityStatus, string> = {
   running: "En curso",
   success: "Completa",
@@ -39,6 +52,20 @@ export const INTEGRATION_BADGE_LABELS: Record<IntegrationBadge, string> = {
   pending: "Pendiente",
   failed: "Fallido",
   stale: "Desactualizado",
+};
+
+/**
+ * Estado del remito en el ERP de un reporte enviado (TRZ-100). null = todavía sin consultar; not_tracked =
+ * reporte anterior a TRZ-100 (no se consulta).
+ */
+export type ErpDocumentStatus = "draft" | "confirmed" | "cancelled" | "not_found" | "not_tracked";
+
+export const ERP_DOCUMENT_STATUS_LABELS: Record<ErpDocumentStatus, string> = {
+  draft: "Borrador",
+  confirmed: "Confirmado",
+  cancelled: "Anulado",
+  not_found: "No encontrado",
+  not_tracked: "Sin seguimiento",
 };
 
 export type IntegrationFilters = {
@@ -73,6 +100,8 @@ export type ActivityRow = {
   palletCount: number | null;
   erpReference: string | null;
   provider: string | null;
+  /** Solo en reportes enviados; null = sin consultar (o una sincronización). */
+  erpDocumentStatus: ErpDocumentStatus | null;
 };
 
 export type UnreportedOrder = {
@@ -128,8 +157,18 @@ export type OutboxEventDetail = {
   errorMessage: string | null;
   erpReference: string | null;
   erpDuplicate: boolean | null;
+  erpDocumentStatus: ErpDocumentStatus | null;
+  erpDocumentCheckedAt: string | null;
+  erpDocumentConfirmedSeenAt: string | null;
   order: { id: string; externalId: string | null; status: string | null };
-  lines: { palletCode: string | null; productExternalId: string | null; lotExternalId: string | null; quantity: number | null; uom: string | null }[];
+  lines: {
+    palletCode: string | null;
+    orderLineExternalId: string | null;
+    productExternalId: string | null;
+    lotExternalId: string | null;
+    quantity: number | null;
+    uom: string | null;
+  }[];
   retries: { requestedAt: string; requestedByName: string | null; previousAttempts: number; previousErrorCode: string | null; previousError: string | null }[];
 };
 

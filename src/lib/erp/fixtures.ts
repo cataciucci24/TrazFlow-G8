@@ -1,10 +1,18 @@
-import { ERP_CONTRACT_VERSION, type ErpDispatchOrder, type ErpLot, type ErpProduct, type ErpStockBalance } from "./types.ts";
+import {
+  ERP_CONTRACT_VERSION,
+  type ErpDispatchOrder,
+  type ErpLot,
+  type ErpProduct,
+  type ErpStockBalance,
+  type ErpWarehouse,
+} from "./types.ts";
 
 /**
  * Datos deterministas del mock ERP. Los ids imitan los de ERPNext (item_code, batch_id, nombre de Sales Order)
  * para que la demo con mock y con ERPNext se vea igual.
  */
 export type MockErpFixtures = {
+  warehouses: ErpWarehouse[];
   products: ErpProduct[];
   lots: ErpLot[];
   stock: ErpStockBalance[];
@@ -14,8 +22,19 @@ export type MockErpFixtures = {
 const T0 = "2026-10-01T12:00:00.000Z";
 const T1 = "2026-10-10T12:00:00.000Z";
 const WAREHOUSE = "Depósito Central - SRV";
+/**
+ * Segundo depósito (TRZ-101), con poco stock y sin órdenes, para probar varios depósitos. En la nube y en el seed
+ * local, Central ya está vinculado a DEP-01: Central queda como DEP-01 y Norte entra como DEPOSITO-NORTE.
+ */
+const NORTH_WAREHOUSE = "Depósito Norte - SRV";
 
 export const MOCK_ERP_FIXTURES: MockErpFixtures = {
+  // Como en ERPNext: `externalId` es el `name` del Warehouse (con la abreviatura de la empresa) y `name` es su
+  // warehouse_name.
+  warehouses: [
+    { externalId: WAREHOUSE, name: "Depósito Central", active: true, updatedAt: T0 },
+    { externalId: NORTH_WAREHOUSE, name: "Depósito Norte", active: true, updatedAt: T1 },
+  ],
   products: [
     { externalId: "ACE-500", sku: "ACE-500", name: "Aceite de girasol 500 ml", uom: "Caja", batchTracked: true, active: true, updatedAt: T0 },
     { externalId: "ARR-1KG", sku: "ARR-1KG", name: "Arroz largo fino 1 kg", uom: "Caja", batchTracked: true, active: true, updatedAt: T0 },
@@ -35,6 +54,7 @@ export const MOCK_ERP_FIXTURES: MockErpFixtures = {
     { productExternalId: "ARR-1KG", lotExternalId: "ARR-2026-08", warehouseExternalId: WAREHOUSE, quantity: 200, uom: "Caja" },
     { productExternalId: "ARR-1KG", lotExternalId: "ARR-2026-10", warehouseExternalId: WAREHOUSE, quantity: 150, uom: "Caja" },
     { productExternalId: "QSO-HORMA", lotExternalId: "QSO-2026-1003", warehouseExternalId: WAREHOUSE, quantity: 356.5, uom: "Kg" },
+    { productExternalId: "ACE-500", lotExternalId: "L-2026-0921", warehouseExternalId: NORTH_WAREHOUSE, quantity: 30, uom: "Caja" },
   ],
   orders: [
     {
@@ -61,7 +81,8 @@ export const MOCK_ERP_FIXTURES: MockErpFixtures = {
       updatedAt: T1,
     },
     {
-      // Orden para practicar la demo: pide exactamente el saldo del lote ARR-2026-08 (un solo pallet de 200 cajas).
+      // Orden para practicar la demo: pide exactamente el saldo del lote ARR-2026-08 (200 cajas), que se arma en
+      // uno o varios pallets físicos (TRZ-100).
       contractVersion: ERP_CONTRACT_VERSION,
       externalId: "SAL-ORD-2026-00014",
       status: "pending",
@@ -73,7 +94,8 @@ export const MOCK_ERP_FIXTURES: MockErpFixtures = {
       updatedAt: T1,
     },
     {
-      // Orden para la demo: pide exactamente el saldo del lote ARR-2026-10 (un solo pallet de 150 cajas).
+      // Orden para la demo: pide exactamente el saldo del lote ARR-2026-10 (150 cajas), que se arma en uno o
+      // varios pallets físicos (TRZ-100).
       contractVersion: ERP_CONTRACT_VERSION,
       externalId: "SAL-ORD-2026-00015",
       status: "pending",

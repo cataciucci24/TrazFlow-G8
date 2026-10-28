@@ -6,6 +6,13 @@ import {
   ErpError,
   erpErrorCodeFromStatus,
   isErpError,
+  type BatchPickingPolicy,
+  type DeliveryDiscrepancyKind,
+  type DeliveryPalletOutcome,
+  type DeliveryReceipt,
+  type DeliveryReport,
+  type DeliveryReportResult,
+  type DispatchDocumentStatus,
   type DispatchReport,
   type DispatchReportResult,
   type ErpDispatchOrder,
@@ -16,8 +23,15 @@ import {
   type ErpProduct,
   type ErpPullOptions,
   type ErpStockBalance,
+  type ErpWarehouse,
 } from "./types.ts";
-import { assertValidDispatchReport } from "./validation.ts";
+import {
+  assertValidDeliveryReceipt,
+  assertValidDeliveryReport,
+  assertValidDispatchReport,
+  assertValidErpWarehouses,
+  assertValidIdempotencyKey,
+} from "./validation.ts";
 
 /**
  * Adaptador REST de ERPNext / Frappe (v15). Ver la sección "ERPNext" de docs/erp-contract.md para el mapeo de
@@ -37,6 +51,9 @@ export const ERPNEXT_CUSTOM_FIELDS = {
   operator: "trazflow_operator", // Delivery Note, Data
   palletCode: "trazflow_pallet_code", // Delivery Note Item, Data
 } as const;
+
+/** Etiqueta (tag de Frappe) que deja TrazFlow en un remito cuya entrega cerró con diferencias (TRZ-103). */
+export const ERPNEXT_REVIEW_TAG = "TrazFlow: revisar entrega";
 
 const OPEN_SALES_ORDER_STATUSES = ["To Deliver and Bill", "To Deliver"];
 
@@ -72,6 +89,15 @@ export type ErpNextBatch = {
 
 export type ErpNextBatchQty = { batch_no: string; warehouse: string; qty: number };
 
+/** Depósito. `name` es el id ("Stores - SRV", con la abreviatura de la empresa); los grupos no tienen stock. */
+export type ErpNextWarehouse = {
+  name: string;
+  warehouse_name: string;
+  is_group: 0 | 1;
+  disabled: 0 | 1;
+  modified: string;
+};
+
 export type ErpNextSalesOrderItem = {
   name: string;
   item_code: string;
@@ -94,6 +120,9 @@ export type ErpNextSalesOrder = {
 
 type ErpNextDeliveryNoteRef = { name: string; creation: string };
 
+/** Remito con su estado: 0 borrador, 1 confirmado (submitted), 2 anulado. */
+export type ErpNextDeliveryNoteState = { name: string; docstatus: 0 | 1 | 2 };
+
 export type ErpNextDeliveryNote = ErpNextDeliveryNoteRef & {
   posting_date: string;
   /** Frappe lo devuelve como timedelta: "9:30:00" o "11:30:00.000000". */
@@ -110,7 +139,75 @@ export type ErpNextDeliveryNote = ErpNextDeliveryNoteRef & {
 
 type Filter = [string, string, unknown];
 
+/* ---------- Entrega (TRZ-103) → ERPNext ---------- */
+
+const OUTCOME_LABELS: Record<DeliveryPalletOutcome, string> = {
+  delivered: "Entregado",
+  missing: "Faltante",
+  damaged: "Dañado",
+};
+
+const DISCREPANCY_LABELS: Record<DeliveryDiscrepancyKind, string> = {
+  missing: "Faltante",
+  surplus: "Sobrante",
+  damaged: "Dañado",
+  wrong_order: "No corresponde a la orden",
+};
+
+/** Marca que identifica el comentario de una entrega: con ella se detecta un reintento (idempotencia). */
+export function deliveryCommentMarker(idempotencyKey: string): string {
+  return `[trazflow:${idempotencyKey}]`;
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+/** Comentario del Delivery Note con el resultado por pallet. HTML simple, que es lo que muestra Frappe. */
+export function buildDeliveryComment(report: DeliveryReport): string {
+  const parts = [
+    `<p><b>Entrega informada por TrazFlow</b> ${escapeHtml(deliveryCommentMarker(report.idempotencyKey))}</p>`,
+  ];
+  if (report.needsReview) {
+    parts.push("<p><b>⚠ La entrega cerró con diferencias: revisar antes de confirmar el remito.</b></p>");
+  }
+  parts.push(
+    `<p>Chofer: ${escapeHtml(report.driver.name || report.driver.id)} · Fecha: ${escapeHtml(isoToFrappeDatetime(report.deliveredAt))}</p>`,
+    `<p>Pallets:</p><ul>${report.lines
+      .map((line) => `<li>${escapeHtml(line.palletCode)}: ${OUTCOME_LABELS[line.outcome]}</li>`)
+      .join("")}</ul>`,
+  );
+  if (report.discrepancies.length) {
+    parts.push(`<p>Diferencias:</p><ul>${report.discrepancies
+      .map((difference) => `<li>${escapeHtml(difference.palletCode ?? "sin código")}: ${DISCREPANCY_LABELS[difference.type]}</li>`)
+      .join("")}</ul>`);
+  }
+  return parts.join("");
+}
+
+const RECEIPT_EXTENSIONS: Record<string, string> = {
+  "image/jpeg": ".jpg",
+  "image/png": ".png",
+  "image/webp": ".webp",
+  "image/heic": ".heic",
+  "image/heif": ".heif",
+  "application/pdf": ".pdf",
+};
+
+/** Nombre fijo por clave: es lo que permite reconocer un remito ya adjuntado. */
+export function deliveryReceiptFileName(receipt: Pick<DeliveryReceipt, "idempotencyKey" | "contentType">): string {
+  const slug = receipt.idempotencyKey.replace(/[^A-Za-z0-9-]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+  return `trazflow-${slug}${RECEIPT_EXTENSIONS[receipt.contentType] ?? ""}`;
+}
+
 /* ---------- Mapeo ERPNext → contrato ---------- */
+
+export function mapBatchPickingPolicy(value: unknown): BatchPickingPolicy {
+  const text = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (text === "lifo") return "lifo";
+  if (text === "expiry" || text === "expiry date") return "expiry";
+  return "fifo";
+}
 
 export function mapItem(item: ErpNextItem): ErpProduct {
   return {
@@ -133,6 +230,15 @@ export function mapBatch(batch: ErpNextBatch): ErpLot {
     expirationDate: batch.expiry_date || null,
     active: batch.disabled === 0,
     updatedAt: frappeDatetimeToIso(batch.modified),
+  };
+}
+
+export function mapWarehouse(warehouse: ErpNextWarehouse): ErpWarehouse {
+  return {
+    externalId: warehouse.name,
+    name: warehouse.warehouse_name || warehouse.name,
+    active: warehouse.disabled === 0,
+    updatedAt: frappeDatetimeToIso(warehouse.modified),
   };
 }
 
@@ -241,6 +347,19 @@ function linesFingerprint(items: ErpNextDeliveryNote["items"]): string {
     .join("\n");
 }
 
+/**
+ * Estado del remito de un despacho a partir de los Delivery Notes con su clave de idempotencia. Si hay varios
+ * (uno anulado y su corrección), gana el confirmado, después el borrador y por último el anulado. Ninguno:
+ * not_found (en ERPNext se puede borrar un borrador).
+ */
+export function mapDeliveryNoteStatus(notes: ErpNextDeliveryNoteState[]): DispatchDocumentStatus {
+  for (const [docstatus, status] of [[1, "confirmed"], [0, "draft"], [2, "cancelled"]] as const) {
+    const note = notes.find((candidate) => candidate.docstatus === docstatus);
+    if (note) return { status, erpReference: note.name };
+  }
+  return { status: "not_found", erpReference: null };
+}
+
 /* ---------- Cliente ---------- */
 
 export class ErpNextClient implements ErpClient {
@@ -273,6 +392,15 @@ export class ErpNextClient implements ErpClient {
     const since = modifiedSinceFilter(options);
     const itemFields = ["name", "item_code", "item_name", "stock_uom", "has_batch_no", "disabled", "modified"];
 
+    // Depósitos: siempre la lista completa (sin updatedSince), sin grupos e incluidos los deshabilitados, para
+    // que TrazFlow marque inactivos los que el ERP deshabilitó o dejó de informar.
+    const warehouses = (await this.#list<ErpNextWarehouse>(
+      "Warehouse",
+      ["name", "warehouse_name", "is_group", "disabled", "modified"],
+      [["is_group", "=", 0]],
+    )).map(mapWarehouse);
+    assertValidErpWarehouses(warehouses);
+
     const items = await this.#list<ErpNextItem>("Item", itemFields, [["is_stock_item", "=", 1], ...since]);
     const batches = await this.#list<ErpNextBatch>(
       "Batch",
@@ -300,6 +428,7 @@ export class ErpNextClient implements ErpClient {
     return {
       contractVersion: ERP_CONTRACT_VERSION,
       fetchedAt: this.#now().toISOString(),
+      warehouses,
       products: items.map(mapItem),
       lots: batches.map(mapBatch),
       stock,
@@ -351,6 +480,117 @@ export class ErpNextClient implements ErpClient {
       }
       throw error;
     }
+  }
+
+  async getDispatchStatus(idempotencyKey: string): Promise<DispatchDocumentStatus> {
+    assertValidIdempotencyKey(idempotencyKey);
+    // A diferencia de #findDeliveryNote, incluye los anulados (docstatus 2).
+    const notes = await this.#list<ErpNextDeliveryNoteState>(
+      "Delivery Note",
+      ["name", "docstatus"],
+      [[ERPNEXT_CUSTOM_FIELDS.idempotencyKey, "=", idempotencyKey]],
+      20,
+    );
+    const valid = notes.every((note) => typeof note?.name === "string" && note.name && [0, 1, 2].includes(note.docstatus));
+    if (!valid) throw invalidResponse("Delivery Note sin nombre o con docstatus desconocido");
+    return mapDeliveryNoteStatus(notes);
+  }
+
+  /**
+   * TRZ-103: comentario en el Delivery Note del despacho con el resultado por pallet y, si hubo diferencias, la
+   * etiqueta ERPNEXT_REVIEW_TAG. El remito no se confirma. Primero la etiqueta y después el comentario: si algo
+   * falla en el medio, el reintento vuelve a poner la etiqueta (no se duplica) y recién ahí crea el comentario,
+   * que es lo que marca la entrega como informada.
+   */
+  async reportDelivery(report: DeliveryReport): Promise<DeliveryReportResult> {
+    assertValidDeliveryReport(report);
+    const note = await this.#requireDispatchNote(report.dispatchIdempotencyKey);
+
+    const existing = await this.#list<{ name: string; creation: string }>(
+      "Comment",
+      ["name", "creation"],
+      [
+        ["reference_doctype", "=", "Delivery Note"],
+        ["reference_name", "=", note.name],
+        ["content", "like", `%${deliveryCommentMarker(report.idempotencyKey)}%`],
+      ],
+      1,
+    );
+    if (existing[0]) return duplicateResult({ name: note.name, creation: existing[0].creation });
+
+    if (report.needsReview) {
+      await this.#request("POST", "/api/method/frappe.desk.doctype.tag.tag.add_tag", {
+        tag: ERPNEXT_REVIEW_TAG,
+        dt: "Delivery Note",
+        dn: note.name,
+      });
+    }
+    await this.#request("POST", resourcePath("Comment"), {
+      comment_type: "Comment",
+      reference_doctype: "Delivery Note",
+      reference_name: note.name,
+      content: buildDeliveryComment(report),
+    });
+    return { erpReference: note.name, duplicate: false, acceptedAt: this.#now().toISOString() };
+  }
+
+  /** TRZ-103: adjunta el remito firmado al Delivery Note del despacho, como archivo privado. */
+  async attachDeliveryReceipt(receipt: DeliveryReceipt, content: Uint8Array): Promise<DeliveryReportResult> {
+    assertValidDeliveryReceipt(receipt, content);
+    const note = await this.#requireDispatchNote(receipt.dispatchIdempotencyKey);
+    const fileName = deliveryReceiptFileName(receipt);
+
+    const existing = await this.#list<{ name: string; creation: string }>(
+      "File",
+      ["name", "creation"],
+      [
+        ["attached_to_doctype", "=", "Delivery Note"],
+        ["attached_to_name", "=", note.name],
+        ["file_name", "=", fileName],
+      ],
+      1,
+    );
+    if (existing[0]) return duplicateResult({ name: note.name, creation: existing[0].creation });
+
+    const form = new FormData();
+    form.append("file", new Blob([content as Uint8Array<ArrayBuffer>], { type: receipt.contentType }), fileName);
+    form.append("is_private", "1");
+    form.append("doctype", "Delivery Note");
+    form.append("docname", note.name);
+    const body = await this.#request<{ message?: { name?: unknown } }>("POST", "/api/method/upload_file", form);
+    if (typeof body.message?.name !== "string" || !body.message.name) throw invalidResponse("upload_file sin el archivo creado");
+    return { erpReference: note.name, duplicate: false, acceptedAt: this.#now().toISOString() };
+  }
+
+  /**
+   * TRZ-65: Stock Settings → "Pick Serial / Batch Based On" (pick_serial_and_batch_based_on: FIFO, LIFO o Expiry).
+   * Sin valor (o en una versión que no tiene el campo) responde fifo, que es el comportamiento por defecto de ERPNext.
+   */
+  async getBatchPickingPolicy(): Promise<BatchPickingPolicy> {
+    let value: unknown = null;
+    try {
+      value = await this.#method<unknown>("frappe.client.get_single_value", {
+        doctype: "Stock Settings",
+        field: "pick_serial_and_batch_based_on",
+      });
+    } catch (error) {
+      // El campo no existe en esta versión: se usa el valor por defecto. Credenciales o red caídas sí se propagan.
+      if (isErpError(error) && (error.code === "validation" || error.code === "not_found")) return "fifo";
+      throw error;
+    }
+    return mapBatchPickingPolicy(value);
+  }
+
+  /** El Delivery Note que generó el despacho. Si todavía no existe, la entrega llegó antes: se reintenta. */
+  async #requireDispatchNote(dispatchIdempotencyKey: string): Promise<ErpNextDeliveryNoteRef> {
+    const note = await this.#findDeliveryNote(dispatchIdempotencyKey);
+    if (!note) {
+      throw new ErpError(
+        "not_ready",
+        `Todavía no hay remito en ERPNext para ${dispatchIdempotencyKey}: se reintenta cuando se informe el despacho.`,
+      );
+    }
+    return note;
   }
 
   /** Misma clave y mismo contenido → duplicado; misma clave con otro contenido → conflict, como en el mock. */
@@ -410,7 +650,9 @@ export class ErpNextClient implements ErpClient {
     return body.message as T;
   }
 
+  /** JSON por defecto; un FormData se manda como multipart (upload_file) y fetch arma el Content-Type. */
   async #request<T>(method: "GET" | "POST", path: string, payload?: unknown): Promise<T> {
+    const multipart = payload instanceof FormData;
     let response: Response;
     try {
       response = await this.#fetch(`${this.#baseUrl}${path}`, {
@@ -418,9 +660,9 @@ export class ErpNextClient implements ErpClient {
         headers: {
           Authorization: this.#authorization,
           Accept: "application/json",
-          ...(payload === undefined ? {} : { "Content-Type": "application/json" }),
+          ...(payload === undefined || multipart ? {} : { "Content-Type": "application/json" }),
         },
-        body: payload === undefined ? undefined : JSON.stringify(payload),
+        body: payload === undefined ? undefined : multipart ? payload : JSON.stringify(payload),
         signal: AbortSignal.timeout(this.#timeoutMs),
         cache: "no-store",
       });
