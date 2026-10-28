@@ -14,6 +14,7 @@ import type {
   OutboxStatus,
   Page,
   SyncRunStatus,
+  SyncTriggerSource,
   UnreportedOrder,
 } from "@/lib/erp-integration/types";
 
@@ -39,6 +40,7 @@ type ActivityRpcRow = {
   erp_reference: string | null;
   provider: string | null;
   erp_document_status: ErpDocumentStatus | null;
+  trigger_source: SyncTriggerSource | null;
   total_count: number;
 };
 
@@ -92,6 +94,7 @@ export async function getIntegrationActivity(filters: IntegrationFilters, pageSi
     erpReference: row.erp_reference,
     provider: row.provider,
     erpDocumentStatus: row.erp_document_status ?? null,
+    triggerSource: row.kind === "sync" ? (row.trigger_source === "automatic" ? "automatic" : "manual") : null,
   }));
   return toPage(rows, Number(raw[0]?.total_count ?? 0), filters.page, pageSize);
 }
@@ -143,6 +146,7 @@ export function sanitizeDetail(detail: IntegrationEventDetail): IntegrationEvent
   if (detail.kind === "sync") {
     return {
       ...detail,
+      triggerSource: detail.triggerSource === "automatic" ? "automatic" : "manual",
       errorMessage: sanitizeErpErrorText(detail.errorMessage),
       errors: (detail.errors ?? []).map((error) => ({
         entity: error.entity,

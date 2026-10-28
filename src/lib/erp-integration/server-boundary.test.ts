@@ -62,3 +62,9 @@ test("la página del panel redirige a quien no es logística", () => {
   const page = readFileSync(join(SRC, "app", "dashboard", "integrations", "page.tsx"), "utf8");
   assert.match(page, /requireUserProfile\(\);\s*\n\s*if \(!hasRole\(profile, "logistics_manager"\)\) redirect\("\/dashboard"\);/);
 });
+
+test("TRZ-104: el panel lee con la sesión del usuario, nunca con service_role", () => {
+  for (const path of sourceFiles(DIR)) {
+    assert.doesNotMatch(readFileSync(path, "utf8"), /supabase\/service|SUPABASE_SERVICE_ROLE_KEY/, relative(DIR, path));
+  }
+});

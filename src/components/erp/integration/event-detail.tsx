@@ -5,7 +5,7 @@ import { InlineAlert } from "@/components/ui/design-system";
 import { RetryEventButton } from "@/components/erp/integration/integration-buttons";
 import { IntegrationBadgeView } from "@/components/erp/integration/integration-badge";
 import { activityBadge } from "@/lib/erp-integration/status";
-import { ACTIVITY_STATUS_LABELS, ERP_DOCUMENT_STATUS_LABELS, type IntegrationEventDetail } from "@/lib/erp-integration/types";
+import { ACTIVITY_STATUS_LABELS, ERP_DOCUMENT_STATUS_LABELS, SYNC_TRIGGER_LABELS, type IntegrationEventDetail } from "@/lib/erp-integration/types";
 import { ERP_SYNC_ENTITY_LABELS, type ErpSyncEntity } from "@/lib/erp-sync/types";
 
 /** Explicación para logística de cada código de error del contrato (docs/erp-contract.md §6). */
@@ -50,7 +50,9 @@ function SyncDetail({ detail }: { detail: Extract<IntegrationEventDetail, { kind
         <Field label="Inicio">{formatSyncedAt(detail.startedAt)}</Field>
         <Field label="Fin">{detail.finishedAt ? formatSyncedAt(detail.finishedAt) : "En curso"}</Field>
         <Field label="Proveedor">{detail.provider}</Field>
-        <Field label="Iniciada por">{detail.triggeredByName ?? "—"}</Field>
+        <Field label="Iniciada por">
+          {detail.triggerSource === "automatic" ? SYNC_TRIGGER_LABELS.automatic : detail.triggeredByName ?? "—"}
+        </Field>
       </dl>
       {detail.errorMessage ? <InlineAlert variant="danger" announce={false}>{detail.errorMessage}</InlineAlert> : null}
       {detail.errors.length > 0 ? (

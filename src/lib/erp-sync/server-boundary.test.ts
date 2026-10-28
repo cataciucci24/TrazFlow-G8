@@ -47,3 +47,25 @@ test("los componentes cliente solo importan tipos, unidades o acciones de la sin
     }
   }
 });
+
+test("TRZ-104: ningún componente cliente importa el cliente service_role ni los cron", () => {
+  const forbidden = /from\s+["'](?:@\/lib\/(?:supabase\/service|cron(?:\/[\w-]+)?)|(?:\.\.?\/)+(?:lib\/)?(?:supabase\/service|cron(?:\/[\w-]+)?))(?:\.ts)?["']/;
+  for (const path of sourceFiles(SRC)) {
+    const code = readFileSync(path, "utf8");
+    if (!/^\s*["']use client["']/.test(code)) continue;
+    assert.doesNotMatch(code, forbidden, relative(SRC, path));
+  }
+});
+
+test("TRZ-104: los módulos de los cron importan server-only y solo los usan los Route Handlers de /api/cron", () => {
+  const cronDir = join(SRC, "lib", "cron");
+  for (const path of sourceFiles(cronDir)) {
+    assert.match(readFileSync(path, "utf8"), /^import "server-only";$/m, `${relative(SRC, path)} debe importar server-only`);
+  }
+  const users = /from\s+["'](?:@\/lib\/supabase\/service|@\/lib\/cron\/[\w-]+)["']/;
+  for (const path of sourceFiles(SRC)) {
+    const name = relative(SRC, path);
+    if (!users.test(readFileSync(path, "utf8"))) continue;
+    assert.match(name, /^app\/api\/cron\/[\w-]+\/route\.ts$/, `${name} usa service_role o un cron fuera de /api/cron`);
+  }
+});
