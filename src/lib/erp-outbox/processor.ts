@@ -7,8 +7,16 @@ import {
   type DeliveryReceipt,
   type DeliveryReport,
   type DispatchReport,
+  type PalletScanReport,
+  type StockEntryReport,
 } from "../erp/types.ts";
-import { deliveryReceiptProblems, deliveryReportProblems, dispatchReportProblems } from "../erp/validation.ts";
+import {
+  deliveryReceiptProblems,
+  deliveryReportProblems,
+  dispatchReportProblems,
+  palletScanReportProblems,
+  stockEntryReportProblems,
+} from "../erp/validation.ts";
 import { emptyErpOutboxRunSummary, type ErpOutboxRunSummary } from "./types.ts";
 
 /**
@@ -24,6 +32,10 @@ import { emptyErpOutboxRunSummary, type ErpOutboxRunSummary } from "./types.ts";
  *   dispatch:…          → reportDispatch
  *   delivery:…          → reportDelivery
  *   delivery-receipt:…  → attachDeliveryReceipt, con el archivo descargado del bucket delivery-receipts
+ *
+ * TRZ-62 y TRZ-63 sumaron:
+ *   stock-entry:…                    → reportStockEntry (alta o baja en borrador)
+ *   pallet-scan:… / pallet-unscan:…  → reportPalletScan (línea del Pick List de la orden)
  */
 
 /** Bucket privado de los remitos firmados (20261028130000_trz103_delivery_receipts.sql). */
@@ -123,7 +135,9 @@ export class ErpOutboxClaimError extends Error {
 type OutboxOperation =
   | { kind: "dispatch"; report: DispatchReport }
   | { kind: "delivery"; report: DeliveryReport }
-  | { kind: "receipt"; receipt: DeliveryReceipt; storagePath: string };
+  | { kind: "receipt"; receipt: DeliveryReceipt; storagePath: string }
+  | { kind: "stockEntry"; entry: StockEntryReport }
+  | { kind: "palletScan"; scan: PalletScanReport };
 
 type SendResult = { erpReference: string; duplicate: boolean };
 
@@ -275,6 +289,18 @@ function toOperation(event: ClaimedEvent): OutboxOperation {
     return { kind: "receipt", receipt, storagePath: storagePath as string };
   }
 
+  if (event.idempotencyKey.startsWith("stock-entry:")) {
+    const entry = payload as unknown as StockEntryReport;
+    assertNoProblems("Movimiento de stock inválido", safeProblems(() => stockEntryReportProblems(entry)));
+    return { kind: "stockEntry", entry };
+  }
+
+  if (event.idempotencyKey.startsWith("pallet-scan:") || event.idempotencyKey.startsWith("pallet-unscan:")) {
+    const scan = payload as unknown as PalletScanReport;
+    assertNoProblems("Escaneo de despacho inválido", safeProblems(() => palletScanReportProblems(scan)));
+    return { kind: "palletScan", scan };
+  }
+
   if (event.idempotencyKey.startsWith("delivery:")) {
     const report = payload as unknown as DeliveryReport;
     assertNoProblems("Reporte de entrega inválido", safeProblems(() => deliveryReportProblems(report)));
@@ -308,6 +334,10 @@ async function send(client: ErpClient, operation: OutboxOperation, db: ErpOutbox
       const content = await downloadReceipt(db, operation.storagePath);
       return client.attachDeliveryReceipt(operation.receipt, content);
     }
+    case "stockEntry":
+      return client.reportStockEntry(operation.entry);
+    case "palletScan":
+      return client.reportPalletScan(operation.scan);
   }
 }
 

@@ -66,8 +66,9 @@ Un valor inválido se ignora y se avisa arriba de la página.
 El estado general toma el más grave en ese orden y lista todos los motivos.
 
 **Umbral de desactualizado:** variable de servidor `ERP_SYNC_STALE_AFTER_HOURS`, en horas (24 por defecto, admite
-decimales, máximo 8760). Un valor inválido usa el defecto. Desde TRZ-104 la sincronización automática corre cada
-15 minutos: si el panel marca "Desactualizado", el cron no está corriendo o el ERP viene fallando.
+decimales, máximo 8760). Un valor inválido usa el defecto. Desde TRZ-104 la sincronización automática corre una
+vez por día (06:02 de Argentina): si el panel marca "Desactualizado" y nadie sincronizó a mano, el cron no está
+corriendo o el ERP viene fallando.
 
 ## Acciones
 
@@ -99,7 +100,7 @@ Sin que nadie use la app, dos tareas programadas llaman a la app desplegada en V
 | Route Handler | Frecuencia | Qué hace |
 |---|---|---|
 | `GET /api/cron/erp-outbox` | cada 5 min | Envía al ERP los reportes `pending` cuyo próximo intento venció, de **todas** las empresas (`processErpOutbox` con `service_role`). |
-| `GET /api/cron/erp-sync` | cada 15 min (minutos 2, 17, 32, 47) | Sincronización completa de cada empresa con ERP (`syncCompanyFromErp` sin usuario). Ver [`erp-sync.md`](erp-sync.md), "Sincronización automática". |
+| `GET /api/cron/erp-sync` | una vez por día, 06:02 de Argentina (09:02 UTC) | Sincronización completa de cada empresa con ERP (`syncCompanyFromErp` sin usuario). Ver [`erp-sync.md`](erp-sync.md), "Sincronización automática". |
 
 **Quién las llama: `pg_cron` + `pg_net` en Supabase.** Se descartó Vercel Cron porque el plan Hobby solo permite
 un cron por día, con hasta 59 minutos de desvío. Otras opciones evaluadas: crontab en la VM de ERPNext, GitHub
@@ -152,7 +153,9 @@ En la actividad y en el detalle de una sincronización, esta página muestra **A
 4. **Migraciones:** `npx supabase db push`. Las extensiones (`pg_cron`, `pg_net`), la función
    `trazflow_cron_request` y los dos jobs los crea la migración `20261030110000_trz104_pg_cron_jobs.sql`:
    - `trazflow-erp-outbox`: `*/5 * * * *` → `/api/cron/erp-outbox`.
-   - `trazflow-erp-sync`: `2,17,32,47 * * * *` → `/api/cron/erp-sync` (no coincide con el outbox).
+   - `trazflow-erp-sync`: `2 9 * * *` (UTC) → `/api/cron/erp-sync`, una vez por día a las 06:02 de Argentina
+     (migración `20261030130000_trz104_erp_sync_daily.sql`; antes corría cada 15 minutos). Durante el día,
+     logística sincroniza a mano con "Sincronizar".
 
    Cada ejecución lee la URL y el secreto de Vault y encola un `GET` con `Authorization: Bearer …` y timeout de
    290 s (casi todo el `maxDuration`). **Si falta alguno de los dos secretos, el job no hace nada**: por eso en la

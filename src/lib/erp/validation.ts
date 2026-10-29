@@ -11,6 +11,9 @@ import {
   type DeliveryReceipt,
   type DeliveryReport,
   type ErpWarehouse,
+  type PalletScanReport,
+  type StockEntryReport,
+  STOCK_ENTRY_TYPES,
 } from "./types.ts";
 
 /** Problemas de forma del reporte, antes de enviarlo a cualquier proveedor. Vacío = válido. */
@@ -151,4 +154,49 @@ export function deliveryReceiptProblems(receipt: DeliveryReceipt, content?: Uint
 export function assertValidDeliveryReceipt(receipt: DeliveryReceipt, content: Uint8Array): void {
   const problems = deliveryReceiptProblems(receipt, content);
   if (problems.length) throw new ErpError("validation", `Remito de entrega inválido: ${problems.join("; ")}`);
+}
+
+/* ---------- Movimientos de stock (TRZ-62) y escaneos (TRZ-63) ---------- */
+
+function text(value: unknown): boolean {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+export function stockEntryReportProblems(entry: StockEntryReport): string[] {
+  const problems: string[] = [];
+  if (entry.contractVersion !== ERP_CONTRACT_VERSION) problems.push(`contractVersion ${String(entry.contractVersion)} no soportada`);
+  if (!text(entry.idempotencyKey) || !entry.idempotencyKey.startsWith("stock-entry:")) problems.push("idempotencyKey inválida");
+  if (!STOCK_ENTRY_TYPES.some((type) => type === entry.entryType)) problems.push("entryType inválido");
+  for (const field of ["productExternalId", "lotExternalId", "warehouseExternalId", "uom", "reason"] as const) {
+    if (!text(entry[field])) problems.push(`${field} es obligatorio`);
+  }
+  if (typeof entry.quantity !== "number" || !Number.isFinite(entry.quantity) || entry.quantity <= 0) problems.push("quantity debe ser mayor a 0");
+  if (typeof entry.requestedAt !== "string" || Number.isNaN(Date.parse(entry.requestedAt))) problems.push("requestedAt no es una fecha ISO 8601");
+  return problems;
+}
+
+export function assertValidStockEntryReport(entry: StockEntryReport): void {
+  const problems = stockEntryReportProblems(entry);
+  if (problems.length) throw new ErpError("validation", `Movimiento de stock inválido: ${problems.join("; ")}`);
+}
+
+export function palletScanReportProblems(scan: PalletScanReport): string[] {
+  const problems: string[] = [];
+  if (scan.contractVersion !== ERP_CONTRACT_VERSION) problems.push(`contractVersion ${String(scan.contractVersion)} no soportada`);
+  if (scan.action !== "scan" && scan.action !== "unscan") problems.push("action inválida");
+  const prefix = scan.action === "unscan" ? "pallet-unscan:" : "pallet-scan:";
+  if (!text(scan.idempotencyKey) || !scan.idempotencyKey.startsWith(prefix)) problems.push("idempotencyKey inválida");
+  if (!text(scan.scanIdempotencyKey) || !scan.scanIdempotencyKey.startsWith("pallet-scan:")) problems.push("scanIdempotencyKey inválida");
+  if (scan.action === "scan" && scan.scanIdempotencyKey !== scan.idempotencyKey) problems.push("un escaneo se refiere a sí mismo");
+  for (const field of ["orderExternalId", "palletCode", "productExternalId", "lotExternalId", "uom"] as const) {
+    if (!text(scan[field])) problems.push(`${field} es obligatorio`);
+  }
+  if (typeof scan.quantity !== "number" || !Number.isFinite(scan.quantity) || scan.quantity <= 0) problems.push("quantity debe ser mayor a 0");
+  if (typeof scan.at !== "string" || Number.isNaN(Date.parse(scan.at))) problems.push("at no es una fecha ISO 8601");
+  return problems;
+}
+
+export function assertValidPalletScanReport(scan: PalletScanReport): void {
+  const problems = palletScanReportProblems(scan);
+  if (problems.length) throw new ErpError("validation", `Escaneo de despacho inválido: ${problems.join("; ")}`);
 }

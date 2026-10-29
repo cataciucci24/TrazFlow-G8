@@ -24,6 +24,8 @@ import {
   type ErpPullOptions,
   type ErpStockBalance,
   type ErpWarehouse,
+  type PalletScanReport,
+  type StockEntryReport,
 } from "./types.ts";
 import {
   assertValidDeliveryReceipt,
@@ -31,6 +33,8 @@ import {
   assertValidDispatchReport,
   assertValidErpWarehouses,
   assertValidIdempotencyKey,
+  assertValidPalletScanReport,
+  assertValidStockEntryReport,
 } from "./validation.ts";
 
 /**
@@ -47,9 +51,9 @@ const MAX_ERROR_MESSAGE = 300;
 
 /** Campos personalizados que la instancia de ERPNext debe tener (Customize Form). */
 export const ERPNEXT_CUSTOM_FIELDS = {
-  idempotencyKey: "trazflow_idempotency_key", // Delivery Note, Data, único
+  idempotencyKey: "trazflow_idempotency_key", // Delivery Note, Stock Entry y Pick List (Data, único) y Pick List Item (Data)
   operator: "trazflow_operator", // Delivery Note, Data
-  palletCode: "trazflow_pallet_code", // Delivery Note Item, Data
+  palletCode: "trazflow_pallet_code", // Delivery Note Item y Pick List Item, Data
 } as const;
 
 /** Etiqueta (tag de Frappe) que deja TrazFlow en un remito cuya entrega cerró con diferencias (TRZ-103). */
@@ -108,6 +112,7 @@ export type ErpNextSalesOrderItem = {
 
 export type ErpNextSalesOrder = {
   name: string;
+  company?: string;
   customer: string;
   customer_name: string;
   delivery_date: string | null;
@@ -316,6 +321,26 @@ export function buildDeliveryNote(report: DispatchReport, order: ErpNextSalesOrd
         [ERPNEXT_CUSTOM_FIELDS.palletCode]: line.palletCode,
       };
     }),
+  };
+}
+
+/** Línea del Pick List (TRZ-63): el depósito es el de la línea de la orden, igual que en el Delivery Note. */
+export function buildPickListLine(scan: PalletScanReport, order: ErpNextSalesOrder): Record<string, unknown> {
+  const item = order.items.find((orderItem) => orderItem.item_code === scan.productExternalId);
+  if (!item) throw validation(`El producto ${scan.productExternalId} no figura en la orden ${order.name}.`);
+  return {
+    item_code: scan.productExternalId,
+    qty: scan.quantity,
+    stock_qty: scan.quantity,
+    uom: scan.uom,
+    conversion_factor: 1,
+    warehouse: item.warehouse,
+    batch_no: scan.lotExternalId,
+    use_serial_batch_fields: 1,
+    sales_order: order.name,
+    sales_order_item: item.name,
+    [ERPNEXT_CUSTOM_FIELDS.palletCode]: scan.palletCode,
+    [ERPNEXT_CUSTOM_FIELDS.idempotencyKey]: scan.idempotencyKey,
   };
 }
 
@@ -581,6 +606,157 @@ export class ErpNextClient implements ErpClient {
     return mapBatchPickingPolicy(value);
   }
 
+  /**
+   * TRZ-62: Stock Entry en borrador (Material Receipt para altas, Material Issue para bajas) con la clave en
+   * trazflow_idempotency_key. Nunca se submitea: lo confirma el ERP. La empresa sale del depósito.
+   */
+  async reportStockEntry(entry: StockEntryReport): Promise<DeliveryReportResult> {
+    assertValidStockEntryReport(entry);
+    const find = async () => (await this.#list<ErpNextDeliveryNoteRef>(
+      "Stock Entry",
+      ["name", "creation"],
+      [[ERPNEXT_CUSTOM_FIELDS.idempotencyKey, "=", entry.idempotencyKey], ["docstatus", "!=", 2]],
+      1,
+    ))[0];
+    const existing = await find();
+    if (existing) return duplicateResult(existing);
+
+    const company = await this.#warehouseCompany(entry.warehouseExternalId);
+    const receipt = entry.entryType === "receipt";
+    const type = receipt ? "Material Receipt" : "Material Issue";
+    const stockEntry = {
+      stock_entry_type: type,
+      purpose: type,
+      company,
+      remarks: `TrazFlow: ${entry.reason} (${entry.requestedBy.name || entry.requestedBy.id})`.slice(0, 500),
+      [ERPNEXT_CUSTOM_FIELDS.idempotencyKey]: entry.idempotencyKey,
+      items: [{
+        item_code: entry.productExternalId,
+        qty: entry.quantity,
+        uom: entry.uom,
+        conversion_factor: 1,
+        batch_no: entry.lotExternalId,
+        use_serial_batch_fields: 1,
+        ...(receipt
+          ? { t_warehouse: entry.warehouseExternalId, allow_zero_valuation_rate: 1 }
+          : { s_warehouse: entry.warehouseExternalId }),
+      }],
+    };
+    try {
+      const body = await this.#request<{ data?: { name?: unknown } }>("POST", resourcePath("Stock Entry"), stockEntry);
+      if (typeof body.data?.name !== "string") throw invalidResponse("ERPNext no devolvió el nombre del Stock Entry");
+      return { erpReference: body.data.name, duplicate: false, acceptedAt: this.#now().toISOString() };
+    } catch (error) {
+      if (isErpError(error) && (error.code === "conflict" || error.code === "validation")) {
+        const winner = await find();
+        if (winner) return duplicateResult(winner);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * TRZ-63: un Pick List en borrador por orden (clave pick-list:{orden}), con una línea por pallet escaneado. El
+   * scan agrega la línea; el unscan la saca y deja un comentario con su clave, que es lo que lo marca como hecho.
+   * El ERP aplica su regla de lotes al confirmar; TrazFlow no decide nada. El Delivery Note sigue saliendo del
+   * despacho (reportDispatch).
+   */
+  async reportPalletScan(scan: PalletScanReport): Promise<DeliveryReportResult> {
+    assertValidPalletScanReport(scan);
+    const pickKey = `pick-list:${scan.orderExternalId}`;
+    const ref = (await this.#list<ErpNextDeliveryNoteRef>(
+      "Pick List",
+      ["name", "creation"],
+      [[ERPNEXT_CUSTOM_FIELDS.idempotencyKey, "=", pickKey], ["docstatus", "!=", 2]],
+      1,
+    ))[0];
+    const key = ERPNEXT_CUSTOM_FIELDS.idempotencyKey;
+
+    if (scan.action === "scan" && !ref) {
+      const order = await this.#salesOrderFor(scan.orderExternalId);
+      const pickList = {
+        company: order.company,
+        purpose: "Delivery",
+        customer: order.customer,
+        pick_manually: 1,
+        [key]: pickKey,
+        locations: [buildPickListLine(scan, order)],
+      };
+      try {
+        const body = await this.#request<{ data?: { name?: unknown } }>("POST", resourcePath("Pick List"), pickList);
+        if (typeof body.data?.name !== "string") throw invalidResponse("ERPNext no devolvió el nombre del Pick List");
+        return { erpReference: body.data.name, duplicate: false, acceptedAt: this.#now().toISOString() };
+      } catch (error) {
+        // Otro escaneo de la misma orden creó el Pick List al mismo tiempo: se reintenta y se agrega la línea.
+        if (isErpError(error) && error.code === "conflict") {
+          throw new ErpError("not_ready", `El Pick List de ${scan.orderExternalId} se está creando: se reintenta.`);
+        }
+        throw error;
+      }
+    }
+    if (!ref) {
+      throw new ErpError("not_ready", `Todavía no llegó el escaneo ${scan.scanIdempotencyKey}: se reintenta.`);
+    }
+
+    const path = `${resourcePath("Pick List")}/${encodeURIComponent(ref.name)}`;
+    const doc = (await this.#request<{ data?: { name: string; docstatus: number; locations?: Array<Record<string, unknown>> } }>("GET", path)).data;
+    if (!doc || !Array.isArray(doc.locations)) throw invalidResponse(`Pick List ${ref.name} sin líneas`);
+    const index = doc.locations.findIndex((line) => line[key] === scan.scanIdempotencyKey);
+
+    if (scan.action === "scan") {
+      if (index >= 0) return duplicateResult(ref);
+      if (doc.docstatus !== 0) throw validation(`El Pick List ${ref.name} ya está confirmado: no admite más pallets.`);
+      const order = await this.#salesOrderFor(scan.orderExternalId);
+      await this.#request("PUT", path, { locations: [...doc.locations, buildPickListLine(scan, order)] });
+      return { erpReference: ref.name, duplicate: false, acceptedAt: this.#now().toISOString() };
+    }
+
+    const marker = `[trazflow:${scan.idempotencyKey}]`;
+    const marked = (await this.#list<{ name: string }>(
+      "Comment",
+      ["name"],
+      [["reference_doctype", "=", "Pick List"], ["reference_name", "=", ref.name], ["content", "like", `%${marker}%`]],
+      1,
+    )).length > 0;
+    if (index < 0) {
+      if (marked) return duplicateResult(ref);
+      throw new ErpError("not_ready", `Todavía no llegó el escaneo ${scan.scanIdempotencyKey}: se reintenta.`);
+    }
+    if (doc.docstatus !== 0) throw validation(`El Pick List ${ref.name} ya está confirmado: no se puede sacar el pallet ${scan.palletCode}.`);
+    // Primero el comentario y después sacar la línea: si algo falla en el medio, el reintento termina el trabajo.
+    if (!marked) {
+      await this.#request("POST", resourcePath("Comment"), {
+        comment_type: "Comment",
+        reference_doctype: "Pick List",
+        reference_name: ref.name,
+        content: `<p>TrazFlow sacó el pallet ${escapeHtml(scan.palletCode)} (lote ${escapeHtml(scan.lotExternalId)}, ${scan.quantity} ${escapeHtml(scan.uom)}) ${escapeHtml(marker)}</p>`,
+      });
+    }
+    await this.#request("PUT", path, { locations: doc.locations.filter((_, position) => position !== index) });
+    return { erpReference: ref.name, duplicate: false, acceptedAt: this.#now().toISOString() };
+  }
+
+  async #salesOrderFor(name: string): Promise<ErpNextSalesOrder> {
+    try {
+      return await this.#getSalesOrder(name);
+    } catch (error) {
+      if (isErpError(error) && error.code === "not_found") throw validation(`La orden ${name} no existe en ERPNext.`);
+      throw error;
+    }
+  }
+
+  async #warehouseCompany(warehouse: string): Promise<string> {
+    let company: unknown;
+    try {
+      company = (await this.#request<{ data?: { company?: unknown } }>("GET", `${resourcePath("Warehouse")}/${encodeURIComponent(warehouse)}`)).data?.company;
+    } catch (error) {
+      if (isErpError(error) && error.code === "not_found") throw validation(`El depósito ${warehouse} no existe en ERPNext.`);
+      throw error;
+    }
+    if (typeof company !== "string" || !company) throw invalidResponse(`Warehouse ${warehouse} sin empresa`);
+    return company;
+  }
+
   /** El Delivery Note que generó el despacho. Si todavía no existe, la entrega llegó antes: se reintenta. */
   async #requireDispatchNote(dispatchIdempotencyKey: string): Promise<ErpNextDeliveryNoteRef> {
     const note = await this.#findDeliveryNote(dispatchIdempotencyKey);
@@ -651,7 +827,7 @@ export class ErpNextClient implements ErpClient {
   }
 
   /** JSON por defecto; un FormData se manda como multipart (upload_file) y fetch arma el Content-Type. */
-  async #request<T>(method: "GET" | "POST", path: string, payload?: unknown): Promise<T> {
+  async #request<T>(method: "GET" | "POST" | "PUT", path: string, payload?: unknown): Promise<T> {
     const multipart = payload instanceof FormData;
     let response: Response;
     try {
