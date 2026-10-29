@@ -86,24 +86,47 @@ parámetros repetidos o el plan actual. No se confía en precios enviados por el
 navegador. Si el catálogo deja de contener un código, se muestra un aviso sin
 selección activa; si falla la consulta, no se ofrece una selección utilizable.
 
-### Integración futura con US35
+## US35 — Revisión antes de contratar
 
-La ruta de revisión todavía no existe. Por eso no hay botón «Continuar», enlace
-roto, resumen ni confirmación ficticia. La pantalla informa que la revisión aún
-no está disponible y permite cambiar o quitar la elección.
+Cuando hay una selección válida, «Ver resumen del plan» abre
+`/dashboard/account/review?selectedPlan=<code>`. Solo se transporta el código;
+no se envían precios ni identificadores de empresa. El enlace no precarga la
+revisión: esta consulta el catálogo al ingresar.
 
-US35 podrá leer `PLAN_SELECTION_PARAM` (`selectedPlan`) desde sus parámetros de
-navegación y reutilizar `getProvisionalPlan`. Antes de utilizarlo, deberá exigir
-sesión y rol en el servidor, consultar nuevamente el catálogo y el plan actual
-de la empresa del perfil y validar el código (rechazando también parámetros
-repetidos). El resumen deberá tomar precios y condiciones del catálogo vigente,
-nunca de la URL. El futuro enlace de continuación deberá transportar solo ese
-código validado a la ruta real de revisión.
+La página es un Server Component. Exige `requireUserProfile` y el rol
+`logistics_manager` antes de consultar el catálogo y la asignación de la empresa
+obtenida del perfil. Reutiliza `getPlanCatalog`, `getCompanyPlan` y
+`getProvisionalPlan`; `React.cache` comparte la lectura de la asignación con el
+layout dentro de cada request. Los parámetros repetidos, ausentes, vacíos,
+inexistentes y el plan ya asignado no habilitan un resumen. Si falla la lectura
+del catálogo o del plan actual se muestra un aviso y se bloquea la revisión.
 
-US34 no agrega Server Actions ni escrituras en `company_plans`, no activa
-suscripciones y no implementa cobros ni confirmación de US35.
+El resumen muestra el precio y moneda vigentes, límites, equipamiento y aviso de
+propuesta preliminar cuando corresponde. Reutiliza los formatos y
+`PlanEquipment` de US33. Los valores nulos y cero mantienen su significado. No
+se agregan impuestos, descuentos ni costos adicionales que el modelo no define.
+
+«Volver a comparar planes» conserva `selectedPlan` cuando es válido y lleva a
+`#planes`. Se puede elegir otro plan y volver a revisar. Los estados inválidos o
+de error ofrecen volver sin una selección confirmada. Recargar la revisión
+consulta otra vez los datos actuales: una selección que deja de existir o pasa
+a ser el plan actual queda bloqueada.
+
+### Confirmación pendiente de definición comercial
+
+No existe una regla documentada de confirmación o contratación. El resumen
+informa que el plan todavía no fue contratado y que activarlo requiere un paso
+posterior aún no disponible. No hay botón de confirmación, activación ficticia,
+Server Actions, escrituras en `company_plans`, suscripciones, facturas ni pagos.
+Una historia posterior deberá definir las reglas comerciales y permisos de
+confirmación antes de incorporar cualquier operación persistente.
 
 Las pruebas de US34 amplían las de US33: teclado, selección única, reemplazo,
 recarga, historial, plan actual no seleccionable, parámetros inválidos, acceso de
 chofer/depósito/sin sesión, fallos de asignación y ausencia de mutaciones de planes
 en el servidor local de fixtures. El test SQL de RLS conserva su rollback.
+
+Las pruebas de US35 verifican navegación al resumen y regreso con selección,
+cambio de plan, datos vigentes tras modificar el catálogo de fixtures, códigos
+inválidos/repetidos/ausentes, plan eliminado, errores de ambas consultas, acceso
+por roles y sin sesión, ausencia de escrituras y revisión a 390/768/1280 px.
