@@ -38,7 +38,7 @@ export function PlanComparison({ plans, currentCode }: { plans: SubscriptionPlan
         </div>
         <div className="plan-card-price">
           <p className="plan-price">{formatPlanPrice(plan.monthlyPriceCents, plan.currency)}{plan.monthlyPriceCents !== null ? <span className="plan-period"> / mes</span> : null}</p>
-          <p className="mt-1 text-sm text-stone-500">{plan.monthlyPriceCents === null ? "Precio según tu operación" : "Suscripción mensual en dólares"}</p>
+          <p className="mt-1 text-sm text-stone-500">{plan.monthlyPriceCents === null ? "Precio según tu operación" : `Suscripción mensual en ${plan.currency}`}</p>
         </div>
         <dl className="plan-limits">
           <div><dt>Operadores</dt><dd>{operatorLimitLabel(plan.maxOperators)}</dd></div>
@@ -60,7 +60,7 @@ export function PlanEquipment({ plans }: { plans: SubscriptionPlan[] }) {
         </tr></thead>
         <tbody role="rowgroup">{plans.map((plan) => <tr role="row" key={plan.code}>
           <td role="cell" data-label="Plan" className="mobile-primary font-bold">{plan.name}</td>
-          <td role="cell" data-label="Impresoras incluidas">{plan.printerCount === null ? "Según operadores simultáneos" : `${plan.printerCount} ${plan.printerCount === 1 ? "unidad" : "unidades"}`}</td>
+          <td role="cell" data-label="Impresoras incluidas">{plan.printerCount === null ? "No especificado" : `${plan.printerCount} ${plan.printerCount === 1 ? "unidad" : "unidades"}`}</td>
           <td role="cell" data-label="Modelo">{plan.printerModel}</td>
           <td role="cell" data-label="Precio de equipamiento" className="mobile-priority font-semibold">{formatPlanPrice(plan.equipmentPriceCents, plan.currency)}</td>
         </tr>)}</tbody>
