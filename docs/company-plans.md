@@ -17,6 +17,11 @@ y chofer conservan su navegación y no acceden al catálogo comercial.
   La ausencia de fila significa «Sin plan asignado». No se asigna un plan al
   crear empresas o usuarios.
 - `NULL` en límites significa ilimitado; en precios, cotización a medida.
+  La cantidad de impresoras nula se muestra como «No especificado»; cero en
+  precios se conserva como cero. La moneda se toma del catálogo (actualmente USD).
+- El esquema no tiene un indicador de activo: todos los registros del catálogo
+  están publicados. No existe un costo adicional de equipamiento separado del
+  precio de equipamiento; no se infiere ni se agrega una condición comercial.
 - Se cargó la propuesta proporcionada: Starter US$69/mes, 3 operadores y 500
   pallets/mes; Growth US$269/mes, 10 operadores y 3.000 pallets/mes; Enterprise
   a medida, sin límites. Los tres están marcados como preliminares.
@@ -48,3 +53,7 @@ La consulta del plan se comparte entre layout y página mediante `React.cache`.
 - `npm run test:e2e -- tests/e2e/company-plans.spec.ts`: acceso desde el menú,
   comparación en celular y escritorio, plan asignado, catálogo no disponible y
   rechazo del rol chofer. Las asignaciones de esta prueba son solo fixtures locales.
+
+La cobertura E2E incluye 390, 768 y 1280 px, un catálogo variable, precios cero,
+impresoras no especificadas, catálogo vacío y ausencia de acciones de contratación.
+La carga utiliza el `loading.tsx` compartido del dashboard.

@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 test.setTimeout(180_000);
 
-for (const width of [390, 1280]) {
+for (const width of [390, 768, 1280]) {
   test(`Cuenta y plan muestra catálogo y asignación real a ${width}px`, async ({ page, request }, testInfo) => {
     await page.setViewportSize({ width, height: 900 });
     await request.post("http://127.0.0.1:54329/test/reset");
@@ -31,6 +31,10 @@ for (const width of [390, 1280]) {
     await expect(equipment.getByText(/US\$\s*1\.350/)).toBeVisible();
     await expect(page.getByText("Consumibles según uso", { exact: true })).toBeVisible();
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await expect(equipment.getByText("No especificado", { exact: true })).toBeVisible();
+    await expect(starter.getByText("Suscripción mensual en USD", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: /seleccionar|contratar|activar|pagar/i })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: /seleccionar|contratar|activar|pagar/i })).toHaveCount(0);
     await page.screenshot({ path: testInfo.outputPath(`account-${width}.png`), fullPage: true });
 
     await request.post("http://127.0.0.1:54329/test/plan", { data: { code: "growth" } });
@@ -39,6 +43,31 @@ for (const width of [390, 1280]) {
     await expect(growth.getByText("Tu plan actual", { exact: true })).toBeVisible();
     await expect(starter.getByText("Tu plan actual", { exact: true })).toHaveCount(0);
     await page.screenshot({ path: testInfo.outputPath(`account-growth-${width}.png`), fullPage: true });
+
+    // Un catálogo distinto verifica que la UI no dependa de nombres o precios fijos.
+    await request.post("http://127.0.0.1:54329/test/plan", { data: { code: "custom", plans: [
+      { code: "custom", name: "Plan de prueba", monthly_price_cents: 0, currency: "USD",
+        max_operators: 2, max_pallets_per_month: null, printer_count: null,
+        printer_model: "Modelo de prueba", equipment_price_cents: 0, preliminary: false },
+    ] } });
+    await page.reload();
+    const custom = page.getByRole("article", { name: "Plan de prueba", exact: true });
+    await expect(page.getByRole("article")).toHaveCount(1);
+    await expect(custom.getByText(/US\$\s*0/)).toBeVisible();
+    await expect(custom.getByText("Hasta 2 operadores", { exact: true })).toBeVisible();
+    await expect(custom.getByText("Pallets sin límite mensual", { exact: true })).toBeVisible();
+    await expect(custom.getByText("Tu plan actual", { exact: true })).toBeVisible();
+    await expect(equipment.getByText("No especificado", { exact: true })).toBeVisible();
+    await expect(equipment.getByText(/US\$\s*0/)).toBeVisible();
+    await expect(page.getByText("Propuesta comercial preliminar", { exact: true })).toHaveCount(0);
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+
+    await request.post("http://127.0.0.1:54329/test/plan", { data: { plans: [] } });
+    await page.reload();
+    await expect(page.getByText("Todavía no hay planes publicados", { exact: true })).toBeVisible();
+    await expect(current.getByText("Sin plan asignado", { exact: true })).toBeVisible();
+    await expect(page.getByRole("article")).toHaveCount(0);
+    await expect(equipment).toHaveCount(0);
 
     await request.post("http://127.0.0.1:54329/test/plan", { data: { unavailable: true } });
     await page.reload();
