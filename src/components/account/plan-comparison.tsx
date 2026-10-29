@@ -85,7 +85,9 @@ export function PlanComparison({ plans, currentCode, selectionEnabled = false }:
     <div role="status" aria-label="Selección de plan" aria-live="polite" aria-atomic="true" className="surface p-5 text-sm">
       {selected ? <>
         <p className="font-semibold">Selección provisional: {selected.name}</p>
-        <p className="mt-2 text-stone-600">La revisión y confirmación de contratación todavía no están disponibles. Podés cambiar o quitar esta selección.</p>
+        <p className="mt-2 text-stone-600">Revisá el precio y las características del plan antes de continuar. Podés cambiar o quitar esta selección.</p>
+        <Link href={{ pathname: "/dashboard/account/review", query: { [PLAN_SELECTION_PARAM]: selected.code } }}
+          prefetch={false} className="button-primary mt-3">Ver resumen del plan</Link>
         <button type="button" className="button-ghost mt-3" onClick={() => selectPlan(null)}>Quitar selección</button>
       </> : <p className="text-stone-600">Todavía no elegiste un plan provisional.</p>}
     </div>

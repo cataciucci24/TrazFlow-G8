@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
 
 test.setTimeout(180_000);
+// Fixtures change between requests; bypass Next's development fetch cache.
+test.use({ extraHTTPHeaders: { "Cache-Control": "no-cache" } });
 
 for (const width of [390, 768, 1280]) {
   test(`Cuenta y plan muestra catálogo y asignación real a ${width}px`, async ({ page, request }, testInfo) => {
@@ -75,6 +77,37 @@ for (const width of [390, 768, 1280]) {
     expect(await (await request.get("http://127.0.0.1:54329/test/plan-state")).json()).toMatchObject({ companyPlanCode: "growth", planMutations: 0 });
     await page.screenshot({ path: testInfo.outputPath(`account-growth-${width}.png`), fullPage: true });
 
+    await page.getByRole("link", { name: "Ver resumen del plan", exact: true }).click();
+    await expect(page).toHaveURL(/\/dashboard\/account\/review\?selectedPlan=starter/);
+    await expect(page.getByRole("heading", { name: "Resumen del plan", exact: true })).toBeVisible();
+    const summary = page.getByRole("region", { name: "Starter", exact: true });
+    await expect(summary.getByText(/US\$\s*69/)).toBeVisible();
+    await expect(summary.getByText("Moneda: USD", { exact: true })).toBeVisible();
+    await expect(summary.getByText("Hasta 3 operadores", { exact: true })).toBeVisible();
+    await expect(summary.getByText("Hasta 500 pallets por mes", { exact: true })).toBeVisible();
+    await expect(summary.getByText("Plan actual de tu empresa: Growth.", { exact: true })).toBeVisible();
+    await expect(equipment.getByText("1 unidad", { exact: true })).toBeVisible();
+    await expect(equipment.getByText("Zebra ZQ320", { exact: true })).toBeVisible();
+    await expect(equipment.getByText(/US\$\s*450/)).toBeVisible();
+    await expect(page.getByText("Este plan todavía no fue contratado", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: /confirmar|contratar|activar|pagar/i })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: /confirmar|contratar|activar|pagar/i })).toHaveCount(0);
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath(`review-${width}.png`), fullPage: true });
+    await page.getByRole("link", { name: "Volver a comparar planes", exact: true }).click();
+    await expect(selectStarter).toHaveAttribute("aria-pressed", "true");
+    await selectEnterprise.click();
+    await page.getByRole("link", { name: "Ver resumen del plan", exact: true }).click();
+    const enterpriseSummary = page.getByRole("region", { name: "Enterprise", exact: true });
+    await expect(enterpriseSummary.getByText("A medida", { exact: true })).toBeVisible();
+    await expect(enterpriseSummary.getByText("Operadores ilimitados", { exact: true })).toBeVisible();
+    await expect(equipment.getByText("No especificado", { exact: true })).toBeVisible();
+    await page.getByRole("link", { name: "Volver a comparar planes", exact: true }).click();
+    await expect(selectEnterprise).toHaveAttribute("aria-pressed", "true");
+    await expect(current.getByRole("heading", { name: "Growth", exact: true })).toBeVisible();
+    expect(await (await request.get("http://127.0.0.1:54329/test/plan-state")).json()).toMatchObject({ companyPlanCode: "growth", planMutations: 0 });
+
+
     // Un catálogo distinto verifica que la UI no dependa de nombres o precios fijos.
     await request.post("http://127.0.0.1:54329/test/plan", { data: { code: "custom", plans: [
       { code: "custom", name: "Plan de prueba", monthly_price_cents: 0, currency: "USD",
@@ -126,6 +159,9 @@ test("el chofer no accede al catálogo comercial", async ({ page, request }) => 
   await page.goto("/dashboard/account?selectedPlan=starter");
   await expect(page).toHaveURL(/\/dashboard\/deliveries$/);
   await expect(page.getByRole("link", { name: "Tu cuenta: ver plan de la empresa", exact: true })).toHaveCount(0);
+  await page.goto("/dashboard/account/review?selectedPlan=starter");
+  await expect(page).toHaveURL(/\/dashboard\/deliveries$/);
+
 });
 
 
@@ -142,7 +178,12 @@ test("los identificadores inválidos no seleccionan planes ni habilitan confirma
     await expect(page.getByText("La selección indicada no está disponible", { exact: false })).toBeVisible();
     await expect(page.locator('button[aria-pressed="true"]')).toHaveCount(0);
     await expect(page.getByRole("region", { name: "Plan actual", exact: true }).getByRole("heading", { name: "Growth", exact: true })).toBeVisible();
+    await page.goto(`/dashboard/account/review?${query}`);
+    await expect(page.getByRole("heading", { name: "Selección no disponible", exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Volver a comparar planes", exact: true })).toHaveAttribute("href", "/dashboard/account#planes");
+
   }
+  await page.goto("/dashboard/account");
   const starter = page.getByRole("button", { name: "Seleccionar plan Starter", exact: true });
   await starter.click();
   await expect(starter).toHaveAttribute("aria-pressed", "true");
@@ -160,11 +201,59 @@ test("depósito no inicia la selección provisional", async ({ page, request }) 
   await expect(page.getByRole("heading", { name: "Confirmar despacho", exact: true })).toBeVisible({ timeout: 60_000 });
   await page.goto("/dashboard/account?selectedPlan=starter");
   await expect(page).toHaveURL(/\/dashboard$/);
+  await page.goto("/dashboard/account/review?selectedPlan=starter");
+  await expect(page).toHaveURL(/\/dashboard$/);
   await expect(page.getByRole("button", { name: /^Seleccionar plan/ })).toHaveCount(0);
 });
 
 test("sin sesión no se puede acceder a una selección por URL", async ({ page }) => {
   await page.goto("/dashboard/account?selectedPlan=starter");
   await expect(page).toHaveURL(/\/login/);
+  await page.goto("/dashboard/account/review?selectedPlan=starter");
+  await expect(page).toHaveURL(/\/login/);
   await expect(page.getByRole("button", { name: /^Seleccionar plan/ })).toHaveCount(0);
+});
+
+
+test("el resumen revalida el catálogo vigente y bloquea consultas fallidas", async ({ page, request }) => {
+  await request.post("http://127.0.0.1:54329/test/reset");
+  const plan = { code: "review-test", name: "Plan de prueba", monthly_price_cents: 9900, currency: "USD",
+    max_operators: 2, max_pallets_per_month: 200, printer_count: 1,
+    printer_model: "Modelo de prueba", equipment_price_cents: 0, preliminary: false };
+  await request.post("http://127.0.0.1:54329/test/plan", { data: { plans: [plan] } });
+  await page.goto("/login");
+  await page.getByLabel("Email").fill("logistica@trazflow.test");
+  await page.getByLabel("Contraseña").fill("test1234");
+  await page.getByRole("button", { name: "Ingresar", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Centro de control" })).toBeVisible({ timeout: 60_000 });
+  await page.goto("/dashboard/account?selectedPlan=review-test");
+  await expect(page.getByRole("article", { name: "Plan de prueba", exact: true }).getByText(/US\$\s*99/)).toBeVisible();
+  await request.post("http://127.0.0.1:54329/test/plan", { data: { plans: [
+    { ...plan, monthly_price_cents: 12345, max_operators: 7, max_pallets_per_month: 987 },
+  ] } });
+  await page.getByRole("link", { name: "Ver resumen del plan", exact: true }).click();
+  const summary = page.getByRole("region", { name: "Plan de prueba", exact: true });
+  await expect(summary.getByText(/US\$\s*123,45/)).toBeVisible();
+  await expect(summary.getByText("Hasta 7 operadores", { exact: true })).toBeVisible();
+  await expect(summary.getByText("Hasta 987 pallets por mes", { exact: true })).toBeVisible();
+  await expect(summary.getByText("Tu empresa no tiene un plan asignado.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("table", { name: "Equipamiento por plan", exact: true }).getByText(/US\$\s*0/)).toBeVisible();
+  await expect(page.getByText("Propuesta comercial preliminar", { exact: true })).toHaveCount(0);
+
+  await request.post("http://127.0.0.1:54329/test/plan", { data: { plans: [] } });
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Selección no disponible", exact: true })).toBeVisible();
+  await page.goto("/dashboard/account/review");
+  await expect(page.getByRole("heading", { name: "Selección no disponible", exact: true })).toBeVisible();
+
+  await request.post("http://127.0.0.1:54329/test/plan", { data: { companyPlanUnavailable: true } });
+  await page.goto("/dashboard/account/review?selectedPlan=starter");
+  await expect(page.getByText("No pudimos consultar el plan actual de tu empresa.", { exact: false })).toBeVisible();
+  await expect(page.getByText("Este plan todavía no fue contratado", { exact: true })).toHaveCount(0);
+  await request.post("http://127.0.0.1:54329/test/plan", { data: { catalogUnavailable: true } });
+  await page.reload();
+  await expect(page.getByText("No pudimos cargar el catálogo de planes.", { exact: false })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Starter", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Volver a comparar planes", exact: true })).toBeVisible();
+  expect(await (await request.get("http://127.0.0.1:54329/test/plan-state")).json()).toMatchObject({ companyPlanCode: null, planMutations: 0 });
 });
