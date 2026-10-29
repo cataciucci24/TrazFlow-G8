@@ -27,7 +27,7 @@ export default async function AccountPage() {
     <CurrentCompanyPlan current={current} />
     <section id="planes" className="section-stack" aria-labelledby="plans-title">
       <SectionHeader id="plans-title" title="Compará los planes" description="La suscripción mensual se define por la cantidad de operadores y pallets por mes." />
-      {catalog.available ? <PlanComparison plans={catalog.plans} currentCode={current.plan?.code ?? null} />
+      {catalog.available ? <PlanComparison plans={catalog.plans} currentCode={current.plan?.code ?? null} selectionEnabled={current.available} />
         : <InlineAlert variant="warning">No pudimos cargar el catálogo de planes. <Link href="/dashboard/account" className="underline">Volvé a intentarlo</Link>.</InlineAlert>}
     </section>
     {catalog.available ? <PlanEquipment plans={catalog.plans} /> : null}

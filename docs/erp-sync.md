@@ -82,9 +82,10 @@ empresa. La automática (TRZ-104) recibe `actorId: null` y un cliente con `servi
 
 ## Sincronización automática (TRZ-104)
 
-El cron `GET /api/cron/erp-sync` (cada 15 minutos, llamado por `pg_cron` desde Supabase; configuración y
-verificación en [`erp-integration-panel.md`](erp-integration-panel.md), "Procesamiento automático") corre el mismo
-flujo de arriba para cada empresa con ERP, sin usuario.
+El cron `GET /api/cron/erp-sync` (una vez por día a las 06:02 de Argentina, llamado por `pg_cron` desde Supabase;
+configuración y verificación en [`erp-integration-panel.md`](erp-integration-panel.md), "Procesamiento automático")
+corre el mismo flujo de arriba para cada empresa con ERP, sin usuario. Durante el día, logística sincroniza a mano con
+"Sincronizar" cuando lo necesite.
 
 - **Atribución: sin usuario.** `erp_sync_runs.trigger_source` es `manual` o `automatic`. Una automática tiene
   `triggered_by` null, y las órdenes y vínculos de depósito que crea quedan con `created_by` null. La base lo

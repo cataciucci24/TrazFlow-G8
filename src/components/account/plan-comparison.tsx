@@ -1,6 +1,9 @@
+"use client";
+
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Badge, EmptyState, InlineAlert, SectionHeader, TableShell } from "@/components/ui/design-system";
-import { formatPlanPrice, operatorLimitLabel, palletLimitLabel, type CompanyPlanResult, type SubscriptionPlan } from "@/lib/plans/types";
+import { formatPlanPrice, getProvisionalPlan, PLAN_SELECTION_PARAM, operatorLimitLabel, palletLimitLabel, type CompanyPlanResult, type SubscriptionPlan } from "@/lib/plans/types";
 
 export function CurrentCompanyPlan({ current }: { current: CompanyPlanResult }) {
   return <section className="section-stack" aria-labelledby="current-plan-title">
@@ -23,28 +26,70 @@ export function CurrentCompanyPlan({ current }: { current: CompanyPlanResult }) 
   </section>;
 }
 
-export function PlanComparison({ plans, currentCode }: { plans: SubscriptionPlan[]; currentCode: string | null }) {
+export function PlanComparison({ plans, currentCode, selectionEnabled = false }: {
+  plans: SubscriptionPlan[]; currentCode: string | null; selectionEnabled?: boolean;
+}) {
+  const searchParams = useSearchParams();
+  const candidates = searchParams.getAll(PLAN_SELECTION_PARAM);
+  const selected = selectionEnabled
+    ? getProvisionalPlan(plans, candidates.length === 1 ? candidates[0] : candidates, currentCode)
+    : null;
+
+  function selectPlan(code: string | null) {
+    if (!selectionEnabled || (code !== null && !getProvisionalPlan(plans, code, currentCode))) return;
+    const url = new URL(window.location.href);
+    if (code === null) url.searchParams.delete(PLAN_SELECTION_PARAM);
+    else url.searchParams.set(PLAN_SELECTION_PARAM, code);
+    // Next integrates native history with useSearchParams, without another catalog request.
+    window.history.pushState(null, "", url.pathname + url.search + url.hash);
+  }
+
   if (plans.length === 0) return <div className="surface"><EmptyState title="Todavía no hay planes publicados" description="El catálogo de planes aparecerá acá cuando esté disponible." /></div>;
   return <>
     {plans.some((plan) => plan.preliminary) ? <InlineAlert variant="info" announce={false}>
       <p className="font-semibold">Propuesta comercial preliminar</p>
       <p className="mt-1">Los precios y límites publicados están pendientes de validación comercial.</p>
     </InlineAlert> : null}
+    <p id="plan-selection-help" className="text-sm text-stone-600">
+      Elegí un plan de forma provisional. Tu selección no cambia el plan actual ni autoriza cobros.
+    </p>
+    {!selectionEnabled ? <InlineAlert variant="warning">La selección estará disponible cuando podamos verificar el plan actual de tu empresa.</InlineAlert> : null}
+    {selectionEnabled && candidates.length > 0 && !selected ? <InlineAlert variant="warning">
+      La selección indicada no está disponible o corresponde a tu plan actual. Elegí otro plan del catálogo.
+    </InlineAlert> : null}
     <div className="plan-grid">
-      {plans.map((plan) => <article key={plan.code} aria-labelledby={`plan-${plan.code}`} className={`surface plan-card ${plan.code === currentCode ? "plan-card-current" : ""}`}>
+      {plans.map((plan) => <article key={plan.code} aria-labelledby={`plan-${plan.code}`} className={`surface plan-card ${plan.code === currentCode ? "plan-card-current" : ""} ${plan.code === selected?.code ? "plan-card-selected" : ""}`}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h3 id={`plan-${plan.code}`} className="text-xl font-bold text-stone-950">{plan.name}</h3>
           {plan.code === currentCode ? <Badge tone="success">Tu plan actual</Badge> : null}
         </div>
         <div className="plan-card-price">
           <p className="plan-price">{formatPlanPrice(plan.monthlyPriceCents, plan.currency)}{plan.monthlyPriceCents !== null ? <span className="plan-period"> / mes</span> : null}</p>
-          <p className="mt-1 text-sm text-stone-500">{plan.monthlyPriceCents === null ? "Precio según tu operación" : "Suscripción mensual en dólares"}</p>
+          <p className="mt-1 text-sm text-stone-500">{plan.monthlyPriceCents === null ? "Precio según tu operación" : `Suscripción mensual en ${plan.currency}`}</p>
         </div>
         <dl className="plan-limits">
           <div><dt>Operadores</dt><dd>{operatorLimitLabel(plan.maxOperators)}</dd></div>
           <div><dt>Pallets</dt><dd>{palletLimitLabel(plan.maxPalletsPerMonth)}</dd></div>
         </dl>
+        <div className="mt-auto pt-6">
+          {plan.code === selected?.code ? <p className="mb-3 text-sm font-semibold text-sky-800">Selección provisional</p> : null}
+          <button type="button" className="button-secondary w-full"
+            aria-label={`Seleccionar plan ${plan.name}`} aria-pressed={plan.code === selected?.code}
+            aria-describedby="plan-selection-help" disabled={!selectionEnabled || plan.code === currentCode}
+            onClick={() => selectPlan(plan.code)}>
+            {plan.code === currentCode ? "Plan actual" : "Seleccionar plan"}
+          </button>
+        </div>
       </article>)}
+    </div>
+    <div role="status" aria-label="Selección de plan" aria-live="polite" aria-atomic="true" className="surface p-5 text-sm">
+      {selected ? <>
+        <p className="font-semibold">Selección provisional: {selected.name}</p>
+        <p className="mt-2 text-stone-600">Revisá el precio y las características del plan antes de continuar. Podés cambiar o quitar esta selección.</p>
+        <Link href={{ pathname: "/dashboard/account/review", query: { [PLAN_SELECTION_PARAM]: selected.code } }}
+          prefetch={false} className="button-primary mt-3">Ver resumen del plan</Link>
+        <button type="button" className="button-ghost mt-3" onClick={() => selectPlan(null)}>Quitar selección</button>
+      </> : <p className="text-stone-600">Todavía no elegiste un plan provisional.</p>}
     </div>
   </>;
 }
@@ -60,7 +105,7 @@ export function PlanEquipment({ plans }: { plans: SubscriptionPlan[] }) {
         </tr></thead>
         <tbody role="rowgroup">{plans.map((plan) => <tr role="row" key={plan.code}>
           <td role="cell" data-label="Plan" className="mobile-primary font-bold">{plan.name}</td>
-          <td role="cell" data-label="Impresoras incluidas">{plan.printerCount === null ? "Según operadores simultáneos" : `${plan.printerCount} ${plan.printerCount === 1 ? "unidad" : "unidades"}`}</td>
+          <td role="cell" data-label="Impresoras incluidas">{plan.printerCount === null ? "No especificado" : `${plan.printerCount} ${plan.printerCount === 1 ? "unidad" : "unidades"}`}</td>
           <td role="cell" data-label="Modelo">{plan.printerModel}</td>
           <td role="cell" data-label="Precio de equipamiento" className="mobile-priority font-semibold">{formatPlanPrice(plan.equipmentPriceCents, plan.currency)}</td>
         </tr>)}</tbody>

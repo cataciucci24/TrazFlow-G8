@@ -5,8 +5,8 @@ barra lateral o del menú móvil. Cerrar sesión mantiene su acción independien
 Ambos accesos permanecen al pie del menú; la lista de navegación se desplaza
 independientemente cuando no entra completa en la pantalla.
 
-La historia permite consultar y comparar el catálogo, con el diseño compartido
-de la aplicación. Logística actúa como el rol administrativo existente; depósito
+Las historias permiten consultar y comparar el catálogo y seleccionar un plan
+provisionalmente, con el diseño compartido de la aplicación. Logística actúa como el rol administrativo existente; depósito
 y chofer conservan su navegación y no acceden al catálogo comercial.
 
 ## Fuente de datos
@@ -17,6 +17,11 @@ y chofer conservan su navegación y no acceden al catálogo comercial.
   La ausencia de fila significa «Sin plan asignado». No se asigna un plan al
   crear empresas o usuarios.
 - `NULL` en límites significa ilimitado; en precios, cotización a medida.
+  La cantidad de impresoras nula se muestra como «No especificado»; cero en
+  precios se conserva como cero. La moneda se toma del catálogo (actualmente USD).
+- El esquema no tiene un indicador de activo: todos los registros del catálogo
+  están publicados. No existe un costo adicional de equipamiento separado del
+  precio de equipamiento; no se infiere ni se agrega una condición comercial.
 - Se cargó la propuesta proporcionada: Starter US$69/mes, 3 operadores y 500
   pallets/mes; Growth US$269/mes, 10 operadores y 3.000 pallets/mes; Enterprise
   a medida, sin límites. Los tres están marcados como preliminares.
@@ -48,3 +53,80 @@ La consulta del plan se comparte entre layout y página mediante `React.cache`.
 - `npm run test:e2e -- tests/e2e/company-plans.spec.ts`: acceso desde el menú,
   comparación en celular y escritorio, plan asignado, catálogo no disponible y
   rechazo del rol chofer. Las asignaciones de esta prueba son solo fixtures locales.
+
+La cobertura E2E incluye 390, 768 y 1280 px, un catálogo variable, precios cero,
+impresoras no especificadas, catálogo vacío y ausencia de confirmación y pagos.
+La carga utiliza el `loading.tsx` compartido del dashboard.
+
+
+## US34 — Selección provisional
+
+Solo logística con sesión y perfil operativo puede acceder a `/dashboard/account`
+e iniciar la selección. Se reutilizan `PlanComparison`, las consultas de US33 y
+sus políticas RLS; la empresa siempre se obtiene del perfil autenticado.
+
+Cada tarjeta tiene un botón con `aria-pressed`. Una única tarjeta muestra
+«Selección provisional», con fondo celeste y un aviso accesible. El plan asignado
+conserva «Tu plan actual» y su botón está deshabilitado para evitar volver a
+contratarlo. Si no se puede leer la asignación actual, la comparación sigue
+visible pero se deshabilita la selección hasta poder verificarla.
+
+La URL conserva exclusivamente `selectedPlan=<code>`. `pushState`, integrado con
+`useSearchParams` en Next.js, actualiza la selección sin recargar ni repetir las
+consultas. Atrás/adelante recuperan las selecciones anteriores. Recargar conserva
+el código, pero vuelve a contrastarlo con el catálogo consultado. Quitar la
+selección elimina ese parámetro. Una navegación que no conserve el parámetro
+pierde la selección; no hay almacenamiento local, cookies de selección ni
+persistencia en Supabase. La URL no vincula una selección a una empresa ni
+representa una autorización comercial.
+
+`getProvisionalPlan` en `src/lib/plans/types.ts` resuelve el código contra el
+catálogo, devuelve el registro comercial y rechaza códigos inexistentes,
+parámetros repetidos o el plan actual. No se confía en precios enviados por el
+navegador. Si el catálogo deja de contener un código, se muestra un aviso sin
+selección activa; si falla la consulta, no se ofrece una selección utilizable.
+
+## US35 — Revisión antes de contratar
+
+Cuando hay una selección válida, «Ver resumen del plan» abre
+`/dashboard/account/review?selectedPlan=<code>`. Solo se transporta el código;
+no se envían precios ni identificadores de empresa. El enlace no precarga la
+revisión: esta consulta el catálogo al ingresar.
+
+La página es un Server Component. Exige `requireUserProfile` y el rol
+`logistics_manager` antes de consultar el catálogo y la asignación de la empresa
+obtenida del perfil. Reutiliza `getPlanCatalog`, `getCompanyPlan` y
+`getProvisionalPlan`; `React.cache` comparte la lectura de la asignación con el
+layout dentro de cada request. Los parámetros repetidos, ausentes, vacíos,
+inexistentes y el plan ya asignado no habilitan un resumen. Si falla la lectura
+del catálogo o del plan actual se muestra un aviso y se bloquea la revisión.
+
+El resumen muestra el precio y moneda vigentes, límites, equipamiento y aviso de
+propuesta preliminar cuando corresponde. Reutiliza los formatos y
+`PlanEquipment` de US33. Los valores nulos y cero mantienen su significado. No
+se agregan impuestos, descuentos ni costos adicionales que el modelo no define.
+
+«Volver a comparar planes» conserva `selectedPlan` cuando es válido y lleva a
+`#planes`. Se puede elegir otro plan y volver a revisar. Los estados inválidos o
+de error ofrecen volver sin una selección confirmada. Recargar la revisión
+consulta otra vez los datos actuales: una selección que deja de existir o pasa
+a ser el plan actual queda bloqueada.
+
+### Confirmación pendiente de definición comercial
+
+No existe una regla documentada de confirmación o contratación. El resumen
+informa que el plan todavía no fue contratado y que activarlo requiere un paso
+posterior aún no disponible. No hay botón de confirmación, activación ficticia,
+Server Actions, escrituras en `company_plans`, suscripciones, facturas ni pagos.
+Una historia posterior deberá definir las reglas comerciales y permisos de
+confirmación antes de incorporar cualquier operación persistente.
+
+Las pruebas de US34 amplían las de US33: teclado, selección única, reemplazo,
+recarga, historial, plan actual no seleccionable, parámetros inválidos, acceso de
+chofer/depósito/sin sesión, fallos de asignación y ausencia de mutaciones de planes
+en el servidor local de fixtures. El test SQL de RLS conserva su rollback.
+
+Las pruebas de US35 verifican navegación al resumen y regreso con selección,
+cambio de plan, datos vigentes tras modificar el catálogo de fixtures, códigos
+inválidos/repetidos/ausentes, plan eliminado, errores de ambas consultas, acceso
+por roles y sin sesión, ausencia de escrituras y revisión a 390/768/1280 px.
