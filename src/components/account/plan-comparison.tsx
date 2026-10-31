@@ -1,33 +1,43 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
-import Link from "next/link";
+import Link, { type LinkProps } from "next/link";
 import { Badge, EmptyState, InlineAlert, SectionHeader, TableShell } from "@/components/ui/design-system";
 import { formatPlanPrice, getProvisionalPlan, PLAN_SELECTION_PARAM, operatorLimitLabel, palletLimitLabel, type CompanyPlanResult, type SubscriptionPlan } from "@/lib/plans/types";
 
-export function CurrentCompanyPlan({ current }: { current: CompanyPlanResult }) {
+import { PlanLimitNotice } from "./plan-usage";
+import { isLowerPlan, type PlanUsageResult } from "@/lib/plans/usage";
+
+export function CurrentCompanyPlan({ current, children, comparisonHref = "#planes" }: {
+  current: CompanyPlanResult; children?: ReactNode; comparisonHref?: LinkProps["href"];
+}) {
   return <section className="section-stack" aria-labelledby="current-plan-title">
     <SectionHeader id="current-plan-title" title="Plan actual" description="El plan se aplica a toda tu empresa." />
-    {!current.available ? <InlineAlert variant="warning">No pudimos consultar el plan de tu empresa. Actualizá la página para intentarlo nuevamente.</InlineAlert>
-      : current.plan ? <div className="surface current-plan-panel">
-        <div className="min-w-0">
-          <Badge tone="success">Tu plan actual</Badge>
-          <h3 className="mt-3 text-2xl font-bold text-stone-950">{current.plan.name}</h3>
-          <p className="mt-2 text-sm text-stone-600">{operatorLimitLabel(current.plan.maxOperators)}</p>
-          <p className="mt-1 text-sm text-stone-600">{palletLimitLabel(current.plan.maxPalletsPerMonth)}</p>
+    <div className="surface overflow-hidden">
+      <div className={children ? "grid lg:grid-cols-2" : ""}>
+        <div className="min-w-0 p-5 sm:p-6">
+          {!current.available ? <InlineAlert variant="warning">No pudimos consultar el plan de tu empresa. Actualizá la página para intentarlo nuevamente.</InlineAlert>
+            : current.plan ? <>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h3 className="text-2xl font-bold text-stone-950">{current.plan.name}</h3>
+                <Badge tone="success">Tu plan actual</Badge>
+              </div>
+              <p className="plan-current-price mt-4">{formatPlanPrice(current.plan.monthlyPriceCents, current.plan.currency)}{current.plan.monthlyPriceCents !== null ? <span className="plan-period"> / mes</span> : null}</p>
+              <p className="mt-3 text-sm text-stone-600">{operatorLimitLabel(current.plan.maxOperators)}</p>
+              <p className="mt-1 text-sm text-stone-600">{palletLimitLabel(current.plan.maxPalletsPerMonth)}</p>
+              <Link href={comparisonHref} className="button-secondary mt-4">Comparar planes</Link>
+            </> : <EmptyState title="Sin plan asignado" description="Tu empresa todavía no tiene un plan registrado. Consultá las opciones y sus límites para evaluar cuál se ajusta a tu operación."
+              action={<Link href={comparisonHref} className="button-secondary">Ver planes</Link>} />}
         </div>
-        <div className="min-w-0">
-          <p className="plan-current-price">{formatPlanPrice(current.plan.monthlyPriceCents, current.plan.currency)}{current.plan.monthlyPriceCents !== null ? <span className="plan-period"> / mes</span> : null}</p>
-          <Link href="#planes" className="button-secondary mt-4">Comparar planes</Link>
-        </div>
+        {children ? <div className="min-w-0 border-t border-stone-200 p-5 sm:p-6 lg:border-t-0 lg:border-l">{children}</div> : null}
       </div>
-      : <div className="surface"><EmptyState title="Sin plan asignado" description="Tu empresa todavía no tiene un plan registrado. Consultá las opciones y sus límites para evaluar cuál se ajusta a tu operación."
-        action={<Link href="#planes" className="button-secondary">Ver planes</Link>} /></div>}
+    </div>
   </section>;
 }
 
-export function PlanComparison({ plans, currentCode, selectionEnabled = false }: {
-  plans: SubscriptionPlan[]; currentCode: string | null; selectionEnabled?: boolean;
+export function PlanComparison({ plans, currentCode, selectionEnabled = false, usage }: {
+  plans: SubscriptionPlan[]; currentCode: string | null; selectionEnabled?: boolean; usage?: PlanUsageResult;
 }) {
   const searchParams = useSearchParams();
   const candidates = searchParams.getAll(PLAN_SELECTION_PARAM);
@@ -46,10 +56,7 @@ export function PlanComparison({ plans, currentCode, selectionEnabled = false }:
 
   if (plans.length === 0) return <div className="surface"><EmptyState title="Todavía no hay planes publicados" description="El catálogo de planes aparecerá acá cuando esté disponible." /></div>;
   return <>
-    {plans.some((plan) => plan.preliminary) ? <InlineAlert variant="info" announce={false}>
-      <p className="font-semibold">Propuesta comercial preliminar</p>
-      <p className="mt-1">Los precios y límites publicados están pendientes de validación comercial.</p>
-    </InlineAlert> : null}
+    {plans.some((plan) => plan.preliminary) ? <p className="text-xs leading-relaxed text-stone-500"><span className="font-medium">Propuesta comercial preliminar</span>. Los precios y límites publicados están pendientes de validación comercial.</p> : null}
     <p id="plan-selection-help" className="text-sm text-stone-600">
       Elegí un plan de forma provisional. Tu selección no cambia el plan actual ni autoriza cobros.
     </p>
@@ -57,6 +64,7 @@ export function PlanComparison({ plans, currentCode, selectionEnabled = false }:
     {selectionEnabled && candidates.length > 0 && !selected ? <InlineAlert variant="warning">
       La selección indicada no está disponible o corresponde a tu plan actual. Elegí otro plan del catálogo.
     </InlineAlert> : null}
+    {selected && usage?.available ? <PlanLimitNotice plan={selected} usage={usage.usage} context={isLowerPlan(plans, currentCode, selected.code) ? "lower" : "selected"} /> : null}
     <div className="plan-grid">
       {plans.map((plan) => <article key={plan.code} aria-labelledby={`plan-${plan.code}`} className={`surface plan-card ${plan.code === currentCode ? "plan-card-current" : ""} ${plan.code === selected?.code ? "plan-card-selected" : ""}`}>
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -74,21 +82,22 @@ export function PlanComparison({ plans, currentCode, selectionEnabled = false }:
         <div className="mt-auto pt-6">
           {plan.code === selected?.code ? <p className="mb-3 text-sm font-semibold text-sky-800">Selección provisional</p> : null}
           <button type="button" className="button-secondary w-full"
-            aria-label={`Seleccionar plan ${plan.name}`} aria-pressed={plan.code === selected?.code}
-            aria-describedby="plan-selection-help" disabled={!selectionEnabled || plan.code === currentCode}
+            aria-label={plan.code === currentCode ? `Plan actual: ${plan.name}` : plan.code === selected?.code ? `Seleccionado: ${plan.name}` : `Seleccionar plan ${plan.name}`} aria-pressed={plan.code === selected?.code}
+            aria-describedby="plan-selection-help" disabled={!selectionEnabled || plan.code === currentCode || plan.code === selected?.code}
             onClick={() => selectPlan(plan.code)}>
-            {plan.code === currentCode ? "Plan actual" : "Seleccionar plan"}
+            {plan.code === currentCode ? "Plan actual" : plan.code === selected?.code ? "Seleccionado" : "Seleccionar plan"}
           </button>
         </div>
       </article>)}
     </div>
-    <div role="status" aria-label="Selección de plan" aria-live="polite" aria-atomic="true" className="surface p-5 text-sm">
+    <div role="status" aria-label="Selección de plan" aria-live="polite" aria-atomic="true" className="flex flex-col items-stretch gap-4 border-t border-stone-200 pt-4 text-sm sm:flex-row sm:items-center sm:justify-between">
       {selected ? <>
-        <p className="font-semibold">Selección provisional: {selected.name}</p>
-        <p className="mt-2 text-stone-600">Revisá el precio y las características del plan antes de continuar. Podés cambiar o quitar esta selección.</p>
+        <div className="min-w-0 sm:flex-1"><p className="font-semibold text-stone-900">Selección provisional: {selected.name}</p>
+        <p className="mt-1 text-xs text-stone-500">Revisá el precio y las características del plan antes de continuar. Podés cambiar o quitar esta selección.</p></div>
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
         <Link href={{ pathname: "/dashboard/account/review", query: { [PLAN_SELECTION_PARAM]: selected.code } }}
-          prefetch={false} className="button-primary mt-3">Ver resumen del plan</Link>
-        <button type="button" className="button-ghost mt-3" onClick={() => selectPlan(null)}>Quitar selección</button>
+          prefetch={false} className="button-primary">Ver resumen del plan</Link>
+        <button type="button" className="button-ghost" onClick={() => selectPlan(null)}>Quitar selección</button></div>
       </> : <p className="text-stone-600">Todavía no elegiste un plan provisional.</p>}
     </div>
   </>;
@@ -96,7 +105,12 @@ export function PlanComparison({ plans, currentCode, selectionEnabled = false }:
 
 export function PlanEquipment({ plans }: { plans: SubscriptionPlan[] }) {
   if (plans.length === 0) return null;
-  return <section id="equipamiento" className="section-stack" aria-labelledby="equipment-title">
+  return <details id="equipamiento" className="surface group">
+    <summary className="flex min-h-16 list-none items-center justify-between gap-4 rounded-xl p-5 text-stone-800 sm:px-6">
+      <span><span className="block text-sm font-semibold">Información comercial</span><span className="mt-1 block text-xs font-normal text-stone-500">Equipamiento y consumibles · Ver detalles</span></span>
+      <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" className="size-5 shrink-0 transition-transform group-open:rotate-180"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="m5 7.5 5 5 5-5" /></svg>
+    </summary>
+    <section className="section-stack border-t border-stone-200 p-5 sm:p-6" aria-labelledby="equipment-title">
     <SectionHeader id="equipment-title" title="Instalación y equipamiento" description="El equipamiento tiene un precio separado de la suscripción mensual." />
     <TableShell label="Equipamiento por plan" mobileLayout="rows">
       <table role="table" aria-label="Equipamiento por plan" className="data-table">
@@ -111,9 +125,10 @@ export function PlanEquipment({ plans }: { plans: SubscriptionPlan[] }) {
         </tr>)}</tbody>
       </table>
     </TableShell>
-    <InlineAlert variant="info" announce={false}>
-      <p className="font-semibold">Consumibles según uso</p>
-      <p className="mt-1">Los rollos de etiquetas adhesivas térmicas se facturan por separado de la suscripción y del equipamiento, según el consumo real de cada depósito.</p>
-    </InlineAlert>
-  </section>;
+    <div className="text-sm text-stone-600">
+      <p className="font-medium text-stone-800">Consumibles según uso</p>
+      <p className="mt-1 leading-relaxed">Los rollos de etiquetas adhesivas térmicas se facturan por separado de la suscripción y del equipamiento, según el consumo real de cada depósito.</p>
+    </div>
+    </section>
+  </details>;
 }

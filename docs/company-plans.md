@@ -130,3 +130,12 @@ Las pruebas de US35 verifican navegación al resumen y regreso con selección,
 cambio de plan, datos vigentes tras modificar el catálogo de fixtures, códigos
 inválidos/repetidos/ausentes, plan eliminado, errores de ambas consultas, acceso
 por roles y sin sesión, ausencia de escrituras y revisión a 390/768/1280 px.
+
+
+## TRZ-43 y TRZ-46 — Avisos de consumo (reglas MVP pendientes de validación del equipo)
+
+Se cuentan operadores activos de depósito y chofer; logística, revocados y solicitudes quedan fuera. Cada alta de pallet consume una unidad durante el mes calendario de Argentina, sin importar estado o cantidad de mercadería. El registro `plan_pallet_registrations` sobrevive a la eliminación del pallet. La migración carga solamente pallets existentes: los eliminados previamente no se inventan. El mes de transición se muestra como mínimo conocido hasta comenzar un mes completo de seguimiento.
+
+`get_company_plan_usage()` obtiene empresa y permisos desde la sesión, sin parámetros del navegador. Las tablas internas no admiten acceso directo autenticado. Cuenta y resumen reutilizan la medición y comparación; un único aviso identifica la selección inferior usando el orden comercial del catálogo. NULL es ilimitado; igualar un límite no es superarlo. No hay bloqueos, cobros ni cambios de plan. Los errores de consumo no se interpretan como cero ni deshabilitan la selección. Se utiliza el loading compartido del dashboard; actualizar la página vuelve a medir.
+
+Aplicar la migración `20261031110000_trz43_46_plan_usage.sql` antes de usar la medición. Verificaciones: tests de planes y componentes, `supabase/tests/trz43_46_plan_usage.sql` (rollback), y `tests/e2e/plan-usage.spec.ts`.

@@ -28,6 +28,8 @@ for (const width of [390, 768, 1280]) {
     const enterprise = page.getByRole("article", { name: "Enterprise", exact: true });
     await expect(enterprise.getByText("A medida", { exact: true })).toBeVisible();
     await expect(enterprise.getByText("Operadores ilimitados", { exact: true })).toBeVisible();
+    const commercial = page.locator("#equipamiento > summary");
+    await commercial.click();
     const equipment = page.getByRole("table", { name: "Equipamiento por plan", exact: true });
     await expect(equipment.getByText(/US\$\s*450/)).toBeVisible();
     await expect(equipment.getByText(/US\$\s*1\.350/)).toBeVisible();
@@ -37,12 +39,15 @@ for (const width of [390, 768, 1280]) {
     await expect(starter.getByText("Suscripción mensual en USD", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: /contratar|activar|pagar|continuar|confirmar/i })).toHaveCount(0);
     await expect(page.getByRole("link", { name: /contratar|activar|pagar|continuar|confirmar/i })).toHaveCount(0);
-    const selectStarter = starter.getByRole("button", { name: "Seleccionar plan Starter", exact: true });
-    const selectEnterprise = enterprise.getByRole("button", { name: "Seleccionar plan Enterprise", exact: true });
+    const selectStarter = starter.getByRole("button");
+    const selectEnterprise = enterprise.getByRole("button");
     await expect(selectStarter).toHaveAttribute("aria-pressed", "false");
     await selectStarter.focus();
     await page.keyboard.press("Enter");
     await expect(selectStarter).toHaveAttribute("aria-pressed", "true");
+    await expect(selectStarter).toHaveText("Seleccionado");
+    await expect(selectStarter).toBeDisabled();
+    await expect(selectEnterprise).toBeEnabled();
     await expect(page.getByRole("status", { name: "Selección de plan", exact: true })).toContainText("Selección provisional: Starter");
     await expect(page).toHaveURL(/selectedPlan=starter/);
     await selectEnterprise.click();
@@ -67,7 +72,7 @@ for (const width of [390, 768, 1280]) {
     await expect(current.getByRole("heading", { name: "Growth", exact: true })).toBeVisible();
     await expect(growth.getByText("Tu plan actual", { exact: true })).toBeVisible();
     await expect(starter.getByText("Tu plan actual", { exact: true })).toHaveCount(0);
-    await expect(growth.getByRole("button", { name: "Seleccionar plan Growth", exact: true })).toBeDisabled();
+    await expect(growth.getByRole("button", { name: "Plan actual: Growth", exact: true })).toBeDisabled();
     await selectStarter.click();
     await expect(selectStarter).toHaveAttribute("aria-pressed", "true");
     await expect(growth.getByText("Tu plan actual", { exact: true })).toBeVisible();
@@ -86,6 +91,7 @@ for (const width of [390, 768, 1280]) {
     await expect(summary.getByText("Hasta 3 operadores", { exact: true })).toBeVisible();
     await expect(summary.getByText("Hasta 500 pallets por mes", { exact: true })).toBeVisible();
     await expect(summary.getByText("Plan actual de tu empresa: Growth.", { exact: true })).toBeVisible();
+    await commercial.click();
     await expect(equipment.getByText("1 unidad", { exact: true })).toBeVisible();
     await expect(equipment.getByText("Zebra ZQ320", { exact: true })).toBeVisible();
     await expect(equipment.getByText(/US\$\s*450/)).toBeVisible();
@@ -101,6 +107,7 @@ for (const width of [390, 768, 1280]) {
     const enterpriseSummary = page.getByRole("region", { name: "Enterprise", exact: true });
     await expect(enterpriseSummary.getByText("A medida", { exact: true })).toBeVisible();
     await expect(enterpriseSummary.getByText("Operadores ilimitados", { exact: true })).toBeVisible();
+    await commercial.click();
     await expect(equipment.getByText("No especificado", { exact: true })).toBeVisible();
     await page.getByRole("link", { name: "Volver a comparar planes", exact: true }).click();
     await expect(selectEnterprise).toHaveAttribute("aria-pressed", "true");
@@ -121,6 +128,7 @@ for (const width of [390, 768, 1280]) {
     await expect(custom.getByText("Hasta 2 operadores", { exact: true })).toBeVisible();
     await expect(custom.getByText("Pallets sin límite mensual", { exact: true })).toBeVisible();
     await expect(custom.getByText("Tu plan actual", { exact: true })).toBeVisible();
+    await commercial.click();
     await expect(equipment.getByText("No especificado", { exact: true })).toBeVisible();
     await expect(equipment.getByText(/US\$\s*0/)).toBeVisible();
     await expect(page.getByText("Propuesta comercial preliminar", { exact: true })).toHaveCount(0);
@@ -184,7 +192,7 @@ test("los identificadores inválidos no seleccionan planes ni habilitan confirma
 
   }
   await page.goto("/dashboard/account");
-  const starter = page.getByRole("button", { name: "Seleccionar plan Starter", exact: true });
+  const starter = page.getByRole("article", { name: "Starter", exact: true }).getByRole("button");
   await starter.click();
   await expect(starter).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByText("La selección indicada no está disponible", { exact: false })).toHaveCount(0);
@@ -237,6 +245,7 @@ test("el resumen revalida el catálogo vigente y bloquea consultas fallidas", as
   await expect(summary.getByText("Hasta 7 operadores", { exact: true })).toBeVisible();
   await expect(summary.getByText("Hasta 987 pallets por mes", { exact: true })).toBeVisible();
   await expect(summary.getByText("Tu empresa no tiene un plan asignado.", { exact: true })).toBeVisible();
+  await page.locator("#equipamiento > summary").click();
   await expect(page.getByRole("table", { name: "Equipamiento por plan", exact: true }).getByText(/US\$\s*0/)).toBeVisible();
   await expect(page.getByText("Propuesta comercial preliminar", { exact: true })).toHaveCount(0);
 
