@@ -14,6 +14,8 @@ let plansUnavailable = false;
 let planMutations = 0;
 let companyPlanUnavailable = false;
 let catalogUnavailable = false;
+let planUsage = { operators: 0, pallets: 0, month_start: "2026-10-01", pallets_complete: true };
+let usageUnavailable = false;
 const subscriptionPlans = [
   { code: 'starter', name: 'Starter', monthly_price_cents: 6900, currency: 'USD', max_operators: 3, max_pallets_per_month: 500, printer_count: 1, printer_model: 'Zebra ZQ320', equipment_price_cents: 45000, preliminary: true },
   { code: 'growth', name: 'Growth', monthly_price_cents: 26900, currency: 'USD', max_operators: 10, max_pallets_per_month: 3000, printer_count: 3, printer_model: 'Zebra ZQ320', equipment_price_cents: 135000, preliminary: true },
@@ -37,7 +39,9 @@ createServer(async (req, res) => {
   const body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString()) : {};
   const send = (data, status = 200) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(data)); };
   if (url.pathname === '/health') return send({ ok: true });
-  if (url.pathname === '/test/reset') { delivered = false; confirmations = 0; validated = false; activeRole = 'driver_operator'; companyPlanCode = null; plansUnavailable = false; catalogPlans = subscriptionPlans; planMutations = 0; companyPlanUnavailable = false; catalogUnavailable = false; return send({ ok: true }); }
+  if (url.pathname === '/test/usage') { planUsage = body.usage ?? planUsage; usageUnavailable = Boolean(body.unavailable); return send({ok: true}); }
+  if (url.pathname === '/rest/v1/rpc/get_company_plan_usage') return usageUnavailable ? send({message: 'unavailable'}, 500) : send([planUsage]);
+  if (url.pathname === '/test/reset') { planUsage = { operators: 0, pallets: 0, month_start: '2026-10-01', pallets_complete: true }; usageUnavailable = false; delivered = false; confirmations = 0; validated = false; activeRole = 'driver_operator'; companyPlanCode = null; plansUnavailable = false; catalogPlans = subscriptionPlans; planMutations = 0; companyPlanUnavailable = false; catalogUnavailable = false; return send({ ok: true }); }
   if (url.pathname === '/test/plan') { companyPlanCode = body.code ?? null; plansUnavailable = Boolean(body.unavailable); catalogPlans = body.plans ?? subscriptionPlans; companyPlanUnavailable = Boolean(body.companyPlanUnavailable); catalogUnavailable = Boolean(body.catalogUnavailable); return send({ ok: true }); }
   if (url.pathname === '/test/state') return send({ delivered, confirmations });
   if (url.pathname === '/test/plan-state') return send({ companyPlanCode, planMutations });
