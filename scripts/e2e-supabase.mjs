@@ -51,6 +51,8 @@ createServer(async (req, res) => {
     return send({ access_token: token, refresh_token: 'fixture-refresh', token_type: 'bearer', expires_in: 360000, user });
   }
   if (url.pathname === '/auth/v1/user') return send(user);
+  if (url.pathname === '/rest/v1/company_payments') return send([]);
+  if (url.pathname === '/rest/v1/rpc/get_company_subscription_access') return send([]);
   if (url.pathname === '/rest/v1/subscription_plans' || url.pathname === '/rest/v1/company_plans') {
     if (req.method !== 'GET') { planMutations++; return send({ message: 'Plans are read-only' }, 403); }
     if (plansUnavailable || (catalogUnavailable && url.pathname.endsWith('/subscription_plans')) || (companyPlanUnavailable && url.pathname.endsWith('/company_plans'))) return send({ code: 'PGRST205', message: 'Catalog unavailable' }, 503);

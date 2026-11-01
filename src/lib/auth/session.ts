@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getAccessRequest } from "@/lib/access-requests/queries";
 import type { UserProfile, UserRole } from "@/lib/types";
 import { canAccessDashboard, toUserProfile, type StoredUserProfile } from "@/lib/auth/profile";
+import { getSubscriptionAccess } from "@/lib/plans/payments-query";
 
 /**
  * Capa de acceso a la sesión (Data Access Layer).
@@ -78,7 +79,8 @@ export async function requireUser(): Promise<User> {
  * Sin perfil operativo, una solicitud permite consultar su estado, no entrar
  * al dashboard. Sin solicitud se conserva el error de perfil incompleto.
  * Un perfil revocado (TRZ-38) o con un rol que ya no existe (TRZ-91) tampoco
- * entra: /access-status le explica por qué.
+ * entra: /access-status le explica por qué. Lo mismo vale para una empresa cuya
+ * suscripción cancelada ya llegó al fin del período pagado (TRZ-50).
  */
 export async function requireUserProfile(): Promise<UserProfile> {
   const user = await requireUser();
@@ -90,6 +92,7 @@ export async function requireUserProfile(): Promise<UserProfile> {
     redirect("/login?error=perfil-incompleto");
   }
   if (!canAccessDashboard(profile)) redirect("/access-status");
+  if ((await getSubscriptionAccess()).ended) redirect("/access-status");
 
   return profile;
 }

@@ -30,7 +30,7 @@ y chofer conservan su navegación y no acceden al catálogo comercial.
   Los consumibles se informan como facturación separada según uso.
 
 No se infiere una contratación desde una visita o un botón. La historia no
-implementa cobros, cambios de suscripción ni bloqueo de operaciones por cuotas.
+implementa cobros ni bloqueo de operaciones por cuotas.
 Una asignación real se registra mediante un proceso administrativo confiable,
 con privilegios de servidor, cuando corresponda comercialmente.
 
@@ -120,7 +120,7 @@ las reglas provisionales de TRZ-44/45 detalladas al final de este documento.
 Seleccionar y revisar siguen sin cambiar el plan: solo la confirmación explícita
 invoca la operación persistente. Enterprise requiere gestión comercial y una
 empresa sin plan no puede asignarse el primero desde este flujo. No se implementa
-contratación formal, suscripciones facturadas, facturas ni pagos.
+contratación formal; los pagos y facturas se describen en TRZ-47 a TRZ-50.
 
 Las pruebas de US34 amplían las de US33: teclado, selección única, reemplazo,
 recarga, historial, plan actual no seleccionable, parámetros inválidos, acceso de
@@ -149,3 +149,20 @@ Reglas pendientes de validación del equipo antes del despliegue: logística act
 La confirmación explícita acepta los avisos, incluso si se exceden límites o el consumo es incompleto/no disponible. No bloquea operaciones ni modifica usuarios o consumo. La función `change_company_plan` obtiene la empresa desde la sesión, bloquea la asignación y verifica código y `assigned_at` revisados. El registro privado `company_plan_change_requests` distingue reintentos del mismo cambio y evita reaplicar solicitudes antiguas. `assigned_at` cambia solo con una asignación efectiva y no es una fecha de facturación.
 
 Aplicar localmente `20261101100000_trz44_45_plan_changes.sql`; verificar `supabase/tests/trz44_45_plan_changes.sql` (rollback) y `tests/local/plan-changes.spec.ts` mediante `npx playwright test --config playwright.plan-changes.config.ts`. La configuración consulta las credenciales de Supabase local, exige localhost y levanta un servidor aislado en el puerto 3102 sin modificar `.env.local`. Las pruebas crean usuarios y una empresa sintéticos y los eliminan al finalizar; si se interrumpe el proceso, puede requerirse limpieza local de esos fixtures. La migración remota requiere coordinación y autorización independiente.
+
+## TRZ-47 a TRZ-50 — Pagos, facturas y cancelación (MVP provisional)
+
+No hay pasarela de cobro: `company_payments` la escribe un proceso confiable con `service_role`, y logística activa solo lee los pagos de su empresa. Importes en centavos; fechas y períodos en fecha de Argentina, con ambos extremos incluidos. Mientras no exista ese proceso, los pagos se cargan a mano:
+
+```sql
+insert into public.company_payments (company_id, plan_code, plan_name, billed_to, amount_cents, status, payment_date, period_start, period_end, invoice_number)
+values ('<company_id>', 'starter', 'Starter', '<razón social>', 6900, 'paid', '2026-11-01', '2026-11-01', '2026-11-30', 'A-0001');
+```
+
+**Lista y factura.** `/dashboard/account#pagos` muestra fecha, período, plan, monto y estado. Todo pago `paid` o `refunded` exige `invoice_number`. La factura es un PDF que se genera al descargarla en `/dashboard/account/payments/<id>/invoice`, con copias de plan y cliente guardadas en el pago. Es un documento interno: no tiene CAE ni datos fiscales del emisor, y lo aclara en el pie. Para validez fiscal falta integrar la facturación electrónica de ARCA.
+
+**Cancelación.** `cancel_company_subscription` obtiene la empresa de la sesión y guarda `canceled_at` y `access_until` en `company_plans`. `access_until` es el mayor `period_end` pagado y vigente; sin período vigente devuelve `no_paid_period` y no cancela, porque no hay plazo que respetar. Reintentar es idempotente. Anula los cobros pendientes de períodos posteriores, y un trigger rechaza registrar nuevos. Una suscripción cancelada no admite cambios de plan. La reactivación es administrativa: poner ambas columnas en `NULL`.
+
+**Acceso.** Hasta `access_until` inclusive la operación sigue igual, con un aviso en el dashboard para todos los roles. Desde el día siguiente, `requireUserProfile` envía a `/access-status`, y logística conserva allí sus pagos y facturas. Si `get_company_subscription_access` falla, no se bloquea: una falla de lectura no corta la operación. El corte es de la aplicación, no de RLS: las políticas de las tablas operativas no cambian, así que una llamada directa a la API de Supabase con una sesión válida no queda bloqueada. Las empresas sin cancelación no se ven afectadas, tengan o no pagos.
+
+Aplicar localmente `20261101110000_trz47_50_payments_subscription.sql`; verificar `supabase/tests/trz47_50_payments_subscription.sql` (rollback) y `npx playwright test --config playwright.subscription.config.ts`. La migración remota requiere coordinación y autorización independiente.

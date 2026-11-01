@@ -10,7 +10,9 @@ import { getCompanyPlan, getPlanCatalog } from "@/lib/plans/queries";
 import { formatPlanPrice, getProvisionalPlan, operatorLimitLabel, palletLimitLabel, PLAN_SELECTION_PARAM } from "@/lib/plans/types";
 
 import { getCompanyPlanUsage } from "@/lib/plans/usage-query";
+import { getSubscriptionAccess } from "@/lib/plans/payments-query";
 import { isLowerPlan } from "@/lib/plans/usage";
+import { planChangeMessages } from "@/lib/plans/change";
 import { PlanLimitNotice, UsageSummary } from "@/components/account/plan-usage";
 
 import styles from "@/components/account/account.module.css";
@@ -23,8 +25,8 @@ export default async function PlanReviewPage({ searchParams }: {
   const profile = await requireUserProfile();
   if (!hasRole(profile, "logistics_manager")) redirect("/dashboard");
 
-  const [current, catalog, params, usage] = await Promise.all([
-    getCompanyPlan(profile.companyId), getPlanCatalog(), searchParams, getCompanyPlanUsage(),
+  const [current, catalog, params, usage, access] = await Promise.all([
+    getCompanyPlan(profile.companyId), getPlanCatalog(), searchParams, getCompanyPlanUsage(), getSubscriptionAccess(),
   ]);
   // Validate against fresh server data; a URL never authorizes a subscription.
   const selected = current.available && catalog.available
@@ -62,6 +64,7 @@ export default async function PlanReviewPage({ searchParams }: {
         <section className="surface section-stack p-5 sm:p-6" aria-label="Confirmar cambio de plan">
           <p className="text-sm text-stone-600">El cambio actualiza inmediatamente la asignación interna de la empresa. No representa una contratación formal ni genera cobros. Conserva los datos y el consumo acumulado.</p>
           {!current.plan ? <InlineAlert variant="info">Tu empresa no tiene un plan asignado. La asignación inicial requiere gestión administrativa.</InlineAlert>
+            : access.canceledAt ? <InlineAlert variant="info">{planChangeMessages.subscription_canceled}</InlineAlert>
             : selected.monthlyPriceCents === null ? <><InlineAlert variant="info">Este plan requiere gestión comercial y no puede activarse automáticamente.</InlineAlert><button className="button-primary" disabled>Requiere gestión comercial</button></>
             : !current.assignedAt ? <InlineAlert variant="warning">No pudimos verificar la versión del plan actual. Actualizá la página antes de confirmar.</InlineAlert>
             : <PlanChangeForm targetCode={selected.code} expectedCode={current.plan.code} assignedAt={current.assignedAt} requestId={randomUUID()} lower={isLowerPlan(catalog.plans, current.plan.code, selected.code)} />}

@@ -6,6 +6,7 @@ export const planChangeMessages: Record<string, string> = {
   invalid_plan: "El plan seleccionado ya no está disponible.",
   commercial_required: "Este plan requiere gestión comercial y no puede activarse automáticamente.",
   same_plan: "Este ya es el plan actual de tu empresa.",
+  subscription_canceled: "La suscripción de tu empresa está cancelada: ya no admite cambios de plan.",
 };
 
 export function parsePlanChange(form: FormData) {
