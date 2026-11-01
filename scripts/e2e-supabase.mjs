@@ -55,7 +55,7 @@ createServer(async (req, res) => {
     if (req.method !== 'GET') { planMutations++; return send({ message: 'Plans are read-only' }, 403); }
     if (plansUnavailable || (catalogUnavailable && url.pathname.endsWith('/subscription_plans')) || (companyPlanUnavailable && url.pathname.endsWith('/company_plans'))) return send({ code: 'PGRST205', message: 'Catalog unavailable' }, 503);
     if (url.pathname.endsWith('/subscription_plans')) return send(catalogPlans);
-    return send(companyPlanCode ? { subscription_plans: catalogPlans.find(plan => plan.code === companyPlanCode) } : null);
+    return send(companyPlanCode ? { assigned_at: '2026-10-01T00:00:00+00:00', subscription_plans: catalogPlans.find(plan => plan.code === companyPlanCode) } : null);
   }
   if (url.pathname === '/rest/v1/users') {
     const profile = { id: driverId, company_id: 'company-demo', name: 'Operador Demo', email: user.email, role: activeRole, revoked_at: null };

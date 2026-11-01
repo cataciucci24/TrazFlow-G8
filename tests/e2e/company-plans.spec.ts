@@ -95,8 +95,8 @@ for (const width of [390, 768, 1280]) {
     await expect(equipment.getByText("1 unidad", { exact: true })).toBeVisible();
     await expect(equipment.getByText("Zebra ZQ320", { exact: true })).toBeVisible();
     await expect(equipment.getByText(/US\$\s*450/)).toBeVisible();
-    await expect(page.getByText("Este plan todavía no fue contratado", { exact: true })).toBeVisible();
-    await expect(page.getByRole("button", { name: /confirmar|contratar|activar|pagar/i })).toHaveCount(0);
+    await expect(page.getByText(/No representa una contratación formal ni genera cobros/)).toBeVisible();
+    await expect(page.getByRole("button", { name: "Confirmar bajada", exact: true })).toBeDisabled();
     await expect(page.getByRole("link", { name: /confirmar|contratar|activar|pagar/i })).toHaveCount(0);
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.screenshot({ path: testInfo.outputPath(`review-${width}.png`), fullPage: true });

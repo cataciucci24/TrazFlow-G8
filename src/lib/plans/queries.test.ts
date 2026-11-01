@@ -64,3 +64,9 @@ test("el catálogo vacío es válido y se consulta en orden comercial", async ()
   assert.deepEqual(await api.getPlanCatalog(), { available: true, plans: [] });
   assert.deepEqual(orders, ["display_order"]);
 });
+
+test("conserva assigned_at con precisión original para detectar cambios concurrentes", async () => {
+  const assignedAt = "2026-10-01T00:00:00.123456+00:00";
+  const { api } = harness({ data: { assigned_at: assignedAt, subscription_plans: { code: "starter" } }, error: null });
+  assert.equal((await api.getCompanyPlan("company-a")).assignedAt, assignedAt);
+});
