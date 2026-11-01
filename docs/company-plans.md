@@ -38,7 +38,8 @@ con privilegios de servidor, cuando corresponda comercialmente.
 
 Las tablas tienen RLS y solo conceden lectura a usuarios de logística activos.
 Las asignaciones se restringen a la propia empresa. Las sesiones autenticadas
-no pueden editar el catálogo ni cambiar la asignación. Anónimos no tienen acceso.
+no pueden editar el catálogo ni escribir directamente la asignación. El cambio
+interno pasa por la RPC autorizada de TRZ-44/45. Anónimos no tienen acceso.
 El rol se verifica también en la página, antes de cargar datos comerciales.
 
 Una falla de lectura muestra «Plan no disponible» y un aviso para reintentar;
@@ -112,14 +113,14 @@ de error ofrecen volver sin una selección confirmada. Recargar la revisión
 consulta otra vez los datos actuales: una selección que deja de existir o pasa
 a ser el plan actual queda bloqueada.
 
-### Confirmación pendiente de definición comercial
+### Confirmación de asignación interna (TRZ-44/45)
 
-No existe una regla documentada de confirmación o contratación. El resumen
-informa que el plan todavía no fue contratado y que activarlo requiere un paso
-posterior aún no disponible. No hay botón de confirmación, activación ficticia,
-Server Actions, escrituras en `company_plans`, suscripciones, facturas ni pagos.
-Una historia posterior deberá definir las reglas comerciales y permisos de
-confirmación antes de incorporar cualquier operación persistente.
+El resumen permite confirmar un cambio inmediato de asignación interna siguiendo
+las reglas provisionales de TRZ-44/45 detalladas al final de este documento.
+Seleccionar y revisar siguen sin cambiar el plan: solo la confirmación explícita
+invoca la operación persistente. Enterprise requiere gestión comercial y una
+empresa sin plan no puede asignarse el primero desde este flujo. No se implementa
+contratación formal, suscripciones facturadas, facturas ni pagos.
 
 Las pruebas de US34 amplían las de US33: teclado, selección única, reemplazo,
 recarga, historial, plan actual no seleccionable, parámetros inválidos, acceso de
@@ -129,7 +130,8 @@ en el servidor local de fixtures. El test SQL de RLS conserva su rollback.
 Las pruebas de US35 verifican navegación al resumen y regreso con selección,
 cambio de plan, datos vigentes tras modificar el catálogo de fixtures, códigos
 inválidos/repetidos/ausentes, plan eliminado, errores de ambas consultas, acceso
-por roles y sin sesión, ausencia de escrituras y revisión a 390/768/1280 px.
+por roles y sin sesión, ausencia de escrituras durante la selección y revisión
+sin confirmar, y revisión a 390/768/1280 px.
 
 
 ## TRZ-43 y TRZ-46 — Avisos de consumo (reglas MVP pendientes de validación del equipo)
@@ -139,3 +141,11 @@ Se cuentan operadores activos de depósito y chofer; logística, revocados y sol
 `get_company_plan_usage()` obtiene empresa y permisos desde la sesión, sin parámetros del navegador. Las tablas internas no admiten acceso directo autenticado. Cuenta y resumen reutilizan la medición y comparación; un único aviso identifica la selección inferior usando el orden comercial del catálogo. NULL es ilimitado; igualar un límite no es superarlo. No hay bloqueos, cobros ni cambios de plan. Los errores de consumo no se interpretan como cero ni deshabilitan la selección. Se utiliza el loading compartido del dashboard; actualizar la página vuelve a medir.
 
 Aplicar la migración `20261031110000_trz43_46_plan_usage.sql` antes de usar la medición. Verificaciones: tests de planes y componentes, `supabase/tests/trz43_46_plan_usage.sql` (rollback), y `tests/e2e/plan-usage.spec.ts`.
+
+## TRZ-44 y TRZ-45 — Cambio interno inmediato (MVP provisional)
+
+Reglas pendientes de validación del equipo antes del despliegue: logística activa puede confirmar una subida o bajada de la asignación interna. No hay contratación, cobros, períodos ni vencimientos. Enterprise y cualquier plan con precio a medida requieren gestión comercial. Una empresa sin asignación previa no puede usar este flujo.
+
+La confirmación explícita acepta los avisos, incluso si se exceden límites o el consumo es incompleto/no disponible. No bloquea operaciones ni modifica usuarios o consumo. La función `change_company_plan` obtiene la empresa desde la sesión, bloquea la asignación y verifica código y `assigned_at` revisados. El registro privado `company_plan_change_requests` distingue reintentos del mismo cambio y evita reaplicar solicitudes antiguas. `assigned_at` cambia solo con una asignación efectiva y no es una fecha de facturación.
+
+Aplicar localmente `20261101100000_trz44_45_plan_changes.sql`; verificar `supabase/tests/trz44_45_plan_changes.sql` (rollback) y `tests/local/plan-changes.spec.ts` mediante `npx playwright test --config playwright.plan-changes.config.ts`. La configuración consulta las credenciales de Supabase local, exige localhost y levanta un servidor aislado en el puerto 3102 sin modificar `.env.local`. Las pruebas crean usuarios y una empresa sintéticos y los eliminan al finalizar; si se interrumpe el proceso, puede requerirse limpieza local de esos fixtures. La migración remota requiere coordinación y autorización independiente.

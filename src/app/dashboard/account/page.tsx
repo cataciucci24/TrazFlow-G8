@@ -13,14 +13,16 @@ import styles from "@/components/account/account.module.css";
 
 export const metadata: Metadata = { title: "Cuenta y plan | TrazFlow" };
 
-export default async function AccountPage() {
+export default async function AccountPage({ searchParams }: { searchParams: Promise<{ done?: string | string[] }> }) {
   const profile = await requireUserProfile();
   if (!hasRole(profile, "logistics_manager")) redirect("/dashboard");
   const [current, catalog, usage] = await Promise.all([getCompanyPlan(profile.companyId), getPlanCatalog(), getCompanyPlanUsage()]);
+  const params = await searchParams;
 
   return <div className={`app-page ${styles.page}`}>
     <PageHeader title="Cuenta y plan" description="Consultá el plan de tu empresa y compará precios y límites según tu operación."
       action={<Link href="/dashboard" className="button-secondary">Volver al inicio</Link>} />
+    {params.done === "plan-changed" ? <InlineAlert variant="success">El plan de tu empresa se actualizó correctamente.</InlineAlert> : null}
     <CurrentCompanyPlan current={current}><UsageSummary result={usage} /></CurrentCompanyPlan>
     {current.available && current.plan && usage.available ? <PlanLimitNotice plan={current.plan} usage={usage.usage} context="assigned" /> : null}
     <section id="planes" className="section-stack" aria-labelledby="plans-title">

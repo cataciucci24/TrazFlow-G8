@@ -12,6 +12,7 @@ export type SubscriptionPlan = {
 };
 
 export type CompanyPlanResult = {
+  assignedAt?: string;
   available: boolean;
   plan: SubscriptionPlan | null;
 };
