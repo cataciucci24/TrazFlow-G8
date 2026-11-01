@@ -13,6 +13,7 @@ export type ErpConfig =
       apiKey: string;
       apiSecret: string;
       timeoutMs: number;
+      itemGroup?: string;
     };
 
 type Env = Record<string, string | undefined>;
@@ -26,6 +27,7 @@ type Env = Record<string, string | undefined>;
  * - ERP_MOCK_DISPATCH_STATUS: solo mock. Estado que informa getDispatchStatus: `confirmed` (por defecto) | `draft`.
  * - ERP_BASE_URL, ERP_API_KEY, ERP_API_SECRET: obligatorias con erpnext.
  * - ERP_TIMEOUT_MS: opcional, 10000 por defecto.
+ * - ERP_ITEM_GROUP: opcional. Item Group de los productos que crea la importación (USH1); sin valor, el primero que no sea grupo.
  */
 export function readErpConfig(env: Env = process.env): ErpConfig {
   const rawProvider = env.ERP_PROVIDER?.trim() || "mock";
@@ -69,5 +71,6 @@ export function readErpConfig(env: Env = process.env): ErpConfig {
     apiKey: env.ERP_API_KEY!.trim(),
     apiSecret: env.ERP_API_SECRET!.trim(),
     timeoutMs,
+    ...(env.ERP_ITEM_GROUP?.trim() ? { itemGroup: env.ERP_ITEM_GROUP.trim() } : {}),
   };
 }

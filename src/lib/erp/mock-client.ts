@@ -19,6 +19,7 @@ import {
   type ErpPullOptions,
   type PalletScanReport,
   type StockEntryReport,
+  type StockImportReport,
 } from "./types.ts";
 import {
   assertValidDeliveryReceipt,
@@ -28,6 +29,7 @@ import {
   assertValidIdempotencyKey,
   assertValidPalletScanReport,
   assertValidStockEntryReport,
+  assertValidStockImportReport,
 } from "./validation.ts";
 
 export type MockErpClientOptions = {
@@ -53,10 +55,11 @@ type Operation =
   | "attachDeliveryReceipt"
   | "getBatchPickingPolicy"
   | "reportStockEntry"
+  | "reportStockImport"
   | "reportPalletScan";
 
 const WRITE_OPERATIONS: ReadonlySet<Operation> = new Set([
-  "reportDispatch", "reportDelivery", "attachDeliveryReceipt", "reportStockEntry", "reportPalletScan",
+  "reportDispatch", "reportDelivery", "attachDeliveryReceipt", "reportStockEntry", "reportStockImport", "reportPalletScan",
 ]);
 
 type StoredReport = { fingerprint: string; result: DispatchReportResult };
@@ -197,6 +200,12 @@ export class MockErpClient implements ErpClient {
     this.#simulate("reportStockEntry");
     assertValidStockEntryReport(entry);
     return this.#storeWrite(entry.idempotencyKey, `MOCK-STE-${entry.idempotencyKey.slice("stock-entry:".length)}`, stableStringify(entry));
+  }
+
+  async reportStockImport(entry: StockImportReport): Promise<DeliveryReportResult> {
+    this.#simulate("reportStockImport");
+    assertValidStockImportReport(entry);
+    return this.#storeWrite(entry.idempotencyKey, `MOCK-STE-${entry.idempotencyKey.slice("stock-import:".length)}`, stableStringify(entry));
   }
 
   /** TRZ-63: un unscan necesita que su scan ya haya llegado; si no, not_ready. */

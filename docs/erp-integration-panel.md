@@ -118,7 +118,7 @@ o la base no responde. Nunca devuelven payloads, claves ni datos del operador.
 **Límites por ejecución** (`maxDuration = 300 s`, el máximo de Hobby):
 
 - Outbox: tandas de 5 reportes con 20 s de timeout por envío (una tanda dura menos que el lease de 2 min), hasta
-  25 por ejecución, y no arranca otra tanda pasados los 150 s. Si una tanda tuvo envíos sin respuesta, corta. El
+  250 por ejecución, y no arranca otra tanda pasados los 150 s. Si una tanda tuvo envíos sin respuesta, corta. El
   backoff, los 10 intentos, el lease y la idempotencia los sigue decidiendo la base: dos ejecuciones solapadas no
   toman el mismo reporte (`for update skip locked` + lease).
 - Sincronización: una empresa a la vez y no arranca otra pasados los 120 s. Ver `erp-sync.md`.

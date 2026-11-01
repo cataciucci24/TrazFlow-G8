@@ -13,6 +13,7 @@ import {
   type ErpWarehouse,
   type PalletScanReport,
   type StockEntryReport,
+  type StockImportReport,
   STOCK_ENTRY_TYPES,
 } from "./types.ts";
 
@@ -178,6 +179,24 @@ export function stockEntryReportProblems(entry: StockEntryReport): string[] {
 export function assertValidStockEntryReport(entry: StockEntryReport): void {
   const problems = stockEntryReportProblems(entry);
   if (problems.length) throw new ErpError("validation", `Movimiento de stock inválido: ${problems.join("; ")}`);
+}
+
+export function stockImportReportProblems(entry: StockImportReport): string[] {
+  const problems: string[] = [];
+  if (entry.contractVersion !== ERP_CONTRACT_VERSION) problems.push(`contractVersion ${String(entry.contractVersion)} no soportada`);
+  if (!text(entry.idempotencyKey) || !entry.idempotencyKey.startsWith("stock-import:")) problems.push("idempotencyKey inválida");
+  for (const field of ["sku", "productName", "lotNumber", "warehouseExternalId", "uom"] as const) {
+    if (!text(entry[field])) problems.push(`${field} es obligatorio`);
+  }
+  if (typeof entry.expirationDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(entry.expirationDate)) problems.push("expirationDate no es una fecha YYYY-MM-DD");
+  if (typeof entry.quantity !== "number" || !Number.isFinite(entry.quantity) || entry.quantity <= 0) problems.push("quantity debe ser mayor a 0");
+  if (typeof entry.requestedAt !== "string" || Number.isNaN(Date.parse(entry.requestedAt))) problems.push("requestedAt no es una fecha ISO 8601");
+  return problems;
+}
+
+export function assertValidStockImportReport(entry: StockImportReport): void {
+  const problems = stockImportReportProblems(entry);
+  if (problems.length) throw new ErpError("validation", `Importación de stock inválida: ${problems.join("; ")}`);
 }
 
 export function palletScanReportProblems(scan: PalletScanReport): string[] {

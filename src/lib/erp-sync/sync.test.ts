@@ -210,6 +210,7 @@ test("un error inesperado no filtra detalles a la auditoría", async () => {
     attachDeliveryReceipt: async () => { throw new Error("no"); },
     getBatchPickingPolicy: async () => { throw new Error("no"); },
     reportStockEntry: async () => { throw new Error("no"); },
+    reportStockImport: async () => { throw new Error("no"); },
     reportPalletScan: async () => { throw new Error("no"); },
   };
   const run = await syncCompanyFromErp({ ...base, db, getClient: () => leaky });

@@ -134,6 +134,7 @@ function spyClient(inner: ErpClient = new MockErpClient()) {
     attachDeliveryReceipt: (receipt, content) => inner.attachDeliveryReceipt(receipt, content),
     getBatchPickingPolicy: () => inner.getBatchPickingPolicy(),
     reportStockEntry: (entry) => inner.reportStockEntry(entry),
+    reportStockImport: (entry) => inner.reportStockImport(entry),
     reportPalletScan: (scan) => inner.reportPalletScan(scan),
   };
   return { client, received };
@@ -368,4 +369,31 @@ test("filtra por orden cuando se procesa justo después de confirmar", async () 
 
   assert.equal(summary.claimed, 1);
   assert.equal(fake.events.get("ev-2")!.status, "pending");
+});
+
+test("USH1: stock-import va a reportStockImport y un payload roto no llega al ERP", async () => {
+  const entry = {
+    contractVersion: 1, idempotencyKey: "stock-import:r:2", sku: "ACE-500", productName: "Aceite", lotNumber: "L1",
+    expirationDate: "2030-01-31", warehouseExternalId: "W", quantity: 3, uom: "Caja",
+    requestedAt: "2026-11-02T12:00:00.000Z", requestedBy: { id: "u", name: null },
+  };
+  const received: unknown[] = [];
+  const client = Object.assign(new MockErpClient(), {
+    reportStockImport: async (sent: unknown) => { received.push(sent); return { erpReference: "STE-1", duplicate: false, acceptedAt: "2026-11-02T12:00:00.000Z" }; },
+  });
+  const events = [
+    { id: "e1", idempotency_key: entry.idempotencyKey, payload: entry, attempts: 1 },
+    { id: "e2", idempotency_key: "stock-import:r:3", payload: { ...entry, idempotencyKey: "stock-import:r:3", expirationDate: null }, attempts: 1 },
+  ];
+  const calls: [string, Record<string, unknown>][] = [];
+  const db = { rpc: async (fn: string, args: Record<string, unknown>) => {
+    calls.push([fn, args]);
+    return { data: fn === "erp_outbox_claim" ? events : fn === "erp_outbox_mark_sent" ? true : "failed", error: null };
+  } };
+  const logger = { info() {}, warn() {}, error() {} };
+  const summary = await processErpOutbox({ db, getClient: () => client, logger });
+  assert.deepEqual(received, [entry]);
+  assert.equal(summary.sent, 1);
+  assert.equal(summary.failed, 1);
+  assert.equal(calls.find(([fn]) => fn === "erp_outbox_mark_failed")![1].p_retryable, false);
 });

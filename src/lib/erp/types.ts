@@ -246,6 +246,26 @@ export type StockEntryReport = {
 };
 
 /**
+ * USH1: una fila de la planilla de stock. El ERP crea el producto y el lote si faltan y deja el stock en borrador,
+ * como un Stock Entry. Se identifica por SKU y número de lote porque el producto puede no existir todavía.
+ */
+export type StockImportReport = {
+  contractVersion: ErpContractVersion;
+  /** stock-import:{importación}:{fila} */
+  idempotencyKey: string;
+  sku: string;
+  productName: string;
+  lotNumber: string;
+  /** Fecha `YYYY-MM-DD`. */
+  expirationDate: string;
+  warehouseExternalId: string;
+  quantity: number;
+  uom: string;
+  requestedAt: string;
+  requestedBy: { id: string; name: string | null };
+};
+
+/**
  * Un pallet escaneado en el despacho (scan) o que dejó de estarlo (unscan: se desasoció o se corrigió su cantidad).
  * scanIdempotencyKey es la clave del escaneo al que se refiere; en un scan es la misma idempotencyKey.
  */

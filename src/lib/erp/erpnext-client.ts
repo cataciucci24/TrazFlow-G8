@@ -26,6 +26,7 @@ import {
   type ErpWarehouse,
   type PalletScanReport,
   type StockEntryReport,
+  type StockImportReport,
 } from "./types.ts";
 import {
   assertValidDeliveryReceipt,
@@ -35,6 +36,7 @@ import {
   assertValidIdempotencyKey,
   assertValidPalletScanReport,
   assertValidStockEntryReport,
+  assertValidStockImportReport,
 } from "./validation.ts";
 
 /**
@@ -66,6 +68,7 @@ export type ErpNextClientOptions = {
   apiKey: string;
   apiSecret: string;
   timeoutMs: number;
+  itemGroup?: string;
   fetch?: typeof fetch;
   now?: () => Date;
 };
@@ -393,6 +396,7 @@ export class ErpNextClient implements ErpClient {
   readonly #baseUrl: string;
   readonly #authorization: string;
   readonly #timeoutMs: number;
+  readonly #itemGroup: string | undefined;
   readonly #fetch: typeof fetch;
   readonly #now: () => Date;
 
@@ -400,6 +404,7 @@ export class ErpNextClient implements ErpClient {
     this.#baseUrl = options.baseUrl.replace(/\/+$/, "");
     this.#authorization = `token ${options.apiKey}:${options.apiSecret}`;
     this.#timeoutMs = options.timeoutMs;
+    this.#itemGroup = options.itemGroup;
     this.#fetch = options.fetch ?? fetch;
     this.#now = options.now ?? (() => new Date());
   }
@@ -612,6 +617,90 @@ export class ErpNextClient implements ErpClient {
    */
   async reportStockEntry(entry: StockEntryReport): Promise<DeliveryReportResult> {
     assertValidStockEntryReport(entry);
+    return this.#draftStockEntry(entry);
+  }
+
+  /**
+   * USH1: crea lo que falte (unidad, Item, Batch) y deja el stock como Stock Entry en borrador. Cada paso busca antes
+   * de crear, así que un reintento después de una falla a mitad de camino retoma donde quedó.
+   */
+  async reportStockImport(entry: StockImportReport): Promise<DeliveryReportResult> {
+    assertValidStockImportReport(entry);
+    const uom = await this.#ensureImportItem(entry);
+    await this.#ensureImportBatch(entry);
+    return this.#draftStockEntry({
+      contractVersion: entry.contractVersion,
+      idempotencyKey: entry.idempotencyKey,
+      entryType: "receipt",
+      productExternalId: entry.sku,
+      lotExternalId: entry.lotNumber,
+      warehouseExternalId: entry.warehouseExternalId,
+      quantity: entry.quantity,
+      uom,
+      reason: "Importación de planilla",
+      requestedAt: entry.requestedAt,
+      requestedBy: entry.requestedBy,
+    });
+  }
+
+  /** Devuelve la unidad del Item: si ya existe manda la del ERP, y una distinta es un error de datos, no se convierte. */
+  async #ensureImportItem(entry: StockImportReport): Promise<string> {
+    const find = async () => (await this.#list<{ name: string; stock_uom: string; has_batch_no: number }>(
+      "Item", ["name", "stock_uom", "has_batch_no"], [["item_code", "=", entry.sku]], 1,
+    ))[0];
+    const check = (item: { stock_uom: string; has_batch_no: number }) => {
+      if (item.has_batch_no !== 1) throw validation(`El producto ${entry.sku} existe en ERPNext sin control por lote.`);
+      if (item.stock_uom !== entry.uom) throw validation(`El producto ${entry.sku} usa la unidad ${item.stock_uom} en ERPNext, no ${entry.uom}.`);
+      return item.stock_uom;
+    };
+    const existing = await find();
+    if (existing) return check(existing);
+
+    if (!(await this.#list<{ name: string }>("UOM", ["name"], [["name", "=", entry.uom]], 1)).length) {
+      await this.#createOrFind("UOM", { uom_name: entry.uom }, async () => (await this.#list<{ name: string }>("UOM", ["name"], [["name", "=", entry.uom]], 1))[0]);
+    }
+    const group = this.#itemGroup ?? (await this.#list<{ name: string }>("Item Group", ["name"], [["is_group", "=", 0]], 1))[0]?.name;
+    if (!group) throw validation("ERPNext no tiene un grupo de productos donde crear el producto.");
+    const winner = await this.#createOrFind("Item", {
+      item_code: entry.sku,
+      item_name: entry.productName.slice(0, 140),
+      item_group: group,
+      stock_uom: entry.uom,
+      is_stock_item: 1,
+      has_batch_no: 1,
+    }, find);
+    return winner ? check(winner) : entry.uom;
+  }
+
+  async #ensureImportBatch(entry: StockImportReport): Promise<void> {
+    const find = async () => (await this.#list<{ name: string; item: string; expiry_date: string | null }>(
+      "Batch", ["name", "item", "expiry_date"], [["name", "=", entry.lotNumber]], 1,
+    ))[0];
+    const check = (batch: { item: string; expiry_date: string | null }) => {
+      if (batch.item !== entry.sku) throw validation(`El lote ${entry.lotNumber} ya existe en ERPNext para el producto ${batch.item}.`);
+      if (batch.expiry_date !== entry.expirationDate) throw validation(`El lote ${entry.lotNumber} tiene otro vencimiento en ERPNext.`);
+    };
+    const existing = await find();
+    if (existing) return check(existing);
+    const winner = await this.#createOrFind("Batch", { batch_id: entry.lotNumber, item: entry.sku, expiry_date: entry.expirationDate }, find);
+    if (winner) check(winner);
+  }
+
+  /** Crea el documento. Si otro proceso lo creó antes, devuelve ese; si no se creó nada, propaga el error. */
+  async #createOrFind<T>(doctype: string, doc: Record<string, unknown>, find: () => Promise<T | undefined>): Promise<T | null> {
+    try {
+      await this.#request("POST", resourcePath(doctype), doc);
+      return null;
+    } catch (error) {
+      if (isErpError(error) && (error.code === "conflict" || error.code === "validation")) {
+        const winner = await find();
+        if (winner) return winner;
+      }
+      throw error;
+    }
+  }
+
+  async #draftStockEntry(entry: StockEntryReport): Promise<DeliveryReportResult> {
     const find = async () => (await this.#list<ErpNextDeliveryNoteRef>(
       "Stock Entry",
       ["name", "creation"],

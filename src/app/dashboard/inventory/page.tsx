@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { InventoryPanel } from "@/components/inventory/inventory-panel";
@@ -35,7 +36,8 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
 
   return (
     <div className="app-page">
-      <PageHeader title="Stock" description="Consultá los pallets de tu empresa por ubicación, producto y estado." />
+      <PageHeader title="Stock" description="Consultá los pallets de tu empresa por ubicación, producto y estado."
+        action={<Link href="/dashboard/inventory/import" className="button-secondary">Importar desde Excel</Link>} />
       <InventoryPanel pallets={pallets} actions={actions} initialSearch={params.search ?? ""} />
     </div>
   );
