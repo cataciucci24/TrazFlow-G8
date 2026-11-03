@@ -27,13 +27,13 @@ export const getCompanyPlan = cache(async (companyId: string): Promise<CompanyPl
   try {
     const supabase = await createClient();
     const { data, error } = await supabase.from("company_plans")
-      .select(`subscription_plans (${PLAN_SELECT})`).eq("company_id", companyId).maybeSingle();
+      .select(`assigned_at, subscription_plans (${PLAN_SELECT})`).eq("company_id", companyId).maybeSingle();
     if (error) return { available: false, plan: null };
     const relation = data?.subscription_plans as unknown as PlanRow | PlanRow[] | null;
     const row = Array.isArray(relation) ? relation[0] : relation;
     // A hidden/missing related plan is an unavailable record, not an unassigned company.
     if (data && !row) return { available: false, plan: null };
-    return { available: true, plan: row ? toPlan(row) : null };
+    return { available: true, plan: row ? toPlan(row) : null, ...(typeof data?.assigned_at === "string" ? { assignedAt: data.assigned_at } : {}) };
   } catch {
     // A billing/catalog outage must not take down the operational sidebar.
     return { available: false, plan: null };

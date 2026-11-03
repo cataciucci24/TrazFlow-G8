@@ -8,7 +8,7 @@ import { isCronAuthorized } from "./auth.ts";
 import type { CronResponse } from "./erp-outbox-job.ts";
 
 /**
- * Cron de la sincronización automática con el ERP (TRZ-104). Lo llama pg_cron (Supabase) cada 15 minutos con
+ * Cron de la sincronización automática con el ERP (TRZ-104). Lo llama pg_cron (Supabase) una vez por día con
  * `Authorization: Bearer ${CRON_SECRET}`. Por cada empresa con ERP corre la misma syncCompanyFromErp que el
  * botón "Sincronizar" (remitos → depósitos → productos → lotes → saldos → órdenes), con service_role y sin
  * usuario: la ejecución queda como `automatic` y sin triggered_by.

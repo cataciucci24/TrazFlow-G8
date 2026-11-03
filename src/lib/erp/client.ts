@@ -11,6 +11,9 @@ import type {
   ErpMasterData,
   ErpProvider,
   ErpPullOptions,
+  PalletScanReport,
+  StockEntryReport,
+  StockImportReport,
 } from "./types.ts";
 
 /**
@@ -60,4 +63,23 @@ export interface ErpClient {
    * pallets al armar una orden. Si el ERP no tiene una regla configurada, devuelve `fifo`.
    */
   getBatchPickingPolicy(): Promise<BatchPickingPolicy>;
+
+  /**
+   * TRZ-62: alta o baja de stock como documento en borrador (en ERPNext, un Stock Entry). Nunca lo confirma: lo
+   * hace el ERP. Idempotente por `entry.idempotencyKey`.
+   */
+  reportStockEntry(entry: StockEntryReport): Promise<DeliveryReportResult>;
+
+  /**
+   * USH1: crea el producto y el lote que falten y deja el stock como documento en borrador. Nunca lo confirma.
+   * Idempotente por `entry.idempotencyKey`.
+   */
+  reportStockImport(entry: StockImportReport): Promise<DeliveryReportResult>;
+
+  /**
+   * TRZ-63: agrega (scan) o saca (unscan) el pallet del documento de preparación de la orden (en ERPNext, un Pick
+   * List en borrador). Idempotente por `scan.idempotencyKey`. Un unscan que llega antes que su scan falla con
+   * `not_ready` (reintentable).
+   */
+  reportPalletScan(scan: PalletScanReport): Promise<DeliveryReportResult>;
 }

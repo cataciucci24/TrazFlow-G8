@@ -304,6 +304,7 @@ textarea.form-control { min-height: 7rem; resize: vertical; }
 .plan-grid { display: grid; gap: 1rem; }
 .plan-card { display: flex; min-width: 0; flex-direction: column; padding: 1.5rem; }
 .plan-card-current { border-color: var(--brand); box-shadow: 0 0 0 1px var(--brand); }
+.plan-card-selected { border-color: #0284c7; background: #f0f9ff; box-shadow: 0 0 0 1px #0284c7; }
 .plan-card-price { margin-block: 1.5rem; }
 .plan-price, .plan-current-price { color: var(--foreground); font-size: 2rem; font-weight: 750; letter-spacing: -0.04em; line-height: 1.2; font-variant-numeric: tabular-nums; }
 .plan-period { color: var(--muted); font-size: 0.875rem; font-weight: 400; letter-spacing: normal; }

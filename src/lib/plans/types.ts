@@ -12,6 +12,7 @@ export type SubscriptionPlan = {
 };
 
 export type CompanyPlanResult = {
+  assignedAt?: string;
   available: boolean;
   plan: SubscriptionPlan | null;
 };
@@ -31,4 +32,14 @@ export function operatorLimitLabel(limit: number | null): string {
 
 export function palletLimitLabel(limit: number | null): string {
   return limit === null ? "Pallets sin límite mensual" : `Hasta ${COUNT_FORMATTER.format(limit)} pallets por mes`;
+}
+
+/** Only a catalog code travels between steps; prices always come from the catalog. */
+export const PLAN_SELECTION_PARAM = "selectedPlan";
+
+export function getProvisionalPlan(
+  plans: readonly SubscriptionPlan[], code: unknown, currentCode: string | null,
+): SubscriptionPlan | null {
+  if (typeof code !== "string" || code === currentCode) return null;
+  return plans.find((plan) => plan.code === code) ?? null;
 }

@@ -7,6 +7,9 @@ import { getAccessRequest, getRequestedCompanyName } from "@/lib/access-requests
 import type { AccessRequest, AccessRequestStatus, RequestedRole } from "@/lib/access-requests/types";
 import { canAccessDashboard, hasUnknownRole } from "@/lib/auth/profile";
 import { getUserProfile, requireUser } from "@/lib/auth/session";
+import { PaymentsTable } from "@/components/account/company-payments";
+import { formatPaymentDate, type CompanyPayment } from "@/lib/plans/payments";
+import { getCompanyPayments, getSubscriptionAccess } from "@/lib/plans/payments-query";
 
 export const metadata: Metadata = { title: "Estado de solicitud | TrazFlow" };
 
@@ -41,12 +44,22 @@ export default async function AccessStatusPage() {
   let hasActiveProfile = false;
   let revoked = false;
   let unknownRole = false;
+  let endedOn: string | null = null;
+  let invoices: { available: boolean; payments: CompanyPayment[] } | null = null;
   let failed = false;
   try {
     const profile = await getUserProfile();
     hasActiveProfile = profile !== null && canAccessDashboard(profile);
     revoked = Boolean(profile?.revokedAt);
     unknownRole = profile !== null && hasUnknownRole(profile);
+    if (hasActiveProfile && profile) {
+      const access = await getSubscriptionAccess();
+      if (access.ended) {
+        endedOn = access.accessUntil;
+        // Las facturas son el respaldo contable: siguen disponibles sin suscripción.
+        if (profile.role === "logistics_manager") invoices = await getCompanyPayments(profile.companyId);
+      }
+    }
     if (!profile) {
       request = await getAccessRequest(user.id);
       if (request) companyName = await getRequestedCompanyName(request.companyId);
@@ -56,7 +69,7 @@ export default async function AccessStatusPage() {
     failed = true;
   }
   // Aprobado o restaurado: no hay nada que esperar en esta página.
-  if (hasActiveProfile) redirect("/dashboard");
+  if (hasActiveProfile && !endedOn) redirect("/dashboard");
 
   const status = request ? statuses[request.status] : null;
   // Solo tiene sentido volver a consultar mientras la solicitud está pendiente.
@@ -64,10 +77,10 @@ export default async function AccessStatusPage() {
 
   return (
     <main className="flex min-h-dvh items-center justify-center bg-stone-50 px-5 py-12 sm:px-8">
-      <div className="w-full max-w-md space-y-8">
+      <div className={`w-full space-y-8 ${invoices ? "max-w-4xl" : "max-w-md"}`}>
         <div className="text-center">
           <div className="mb-5 flex justify-center"><BrandLogo /></div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-950">Estado de tu solicitud</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-950">{endedOn ? "Estado de tu acceso" : "Estado de tu solicitud"}</h1>
           <p className="mt-2 break-words text-sm text-stone-500">{user.email}</p>
         </div>
         <section className="surface space-y-6 p-6 sm:p-8" aria-label="Solicitud de acceso">
@@ -75,6 +88,14 @@ export default async function AccessStatusPage() {
             <p role="alert" className="feedback feedback-danger">
               No pudimos consultar los datos de tu solicitud. Intentá nuevamente.
             </p>
+          ) : endedOn ? (
+            <>
+              <div className="feedback feedback-warning">
+                <h2 className="font-bold">Suscripción finalizada</h2>
+                <p className="mt-2 text-sm">La suscripción de tu empresa se canceló y el período pagado terminó el {formatPaymentDate(endedOn)}. Para volver a usar TrazFlow, comunicate con el equipo comercial.</p>
+              </div>
+              {invoices ? <PaymentsTable available={invoices.available} payments={invoices.payments} /> : null}
+            </>
           ) : revoked ? (
             <div className="feedback feedback-danger">
               <h2 className="font-bold">Acceso revocado</h2>

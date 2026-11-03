@@ -17,9 +17,9 @@ select pg_temp.assert_true(
           and command like '%trazflow_cron_request(''/api/cron/erp-outbox'')%'),
   'job del outbox cada 5 minutos');
 select pg_temp.assert_true(
-  exists (select 1 from cron.job where jobname = 'trazflow-erp-sync' and schedule = '2,17,32,47 * * * *' and active
+  exists (select 1 from cron.job where jobname = 'trazflow-erp-sync' and schedule = '2 9 * * *' and active
           and command like '%trazflow_cron_request(''/api/cron/erp-sync'')%'),
-  'job de sincronización cada 15 minutos');
+  'job de sincronización una vez por día (06:02 Argentina)');
 select pg_temp.assert_true(
   (select count(*) from cron.job where jobname like 'trazflow-%') = 2, 'solo dos jobs de TrazFlow');
 select pg_temp.assert_true(

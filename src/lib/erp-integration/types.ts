@@ -34,6 +34,10 @@ export const ACTIVITY_KIND_LABELS: Record<ActivityKind, string> = {
 const OUTBOX_EVENT_LABELS: Record<string, string> = {
   delivery_confirmed: "Informe de entrega",
   delivery_receipt_attached: "Remito firmado",
+  stock_entry_requested: "Movimiento de stock",
+  stock_import_requested: "Importación de stock",
+  pallet_scanned: "Pallet escaneado",
+  pallet_unscanned: "Pallet sacado del despacho",
 };
 
 export function activityKindLabel(kind: string): string {

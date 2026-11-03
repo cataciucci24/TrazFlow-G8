@@ -1,0 +1,8 @@
+/* Scoped to Cuenta y plan and its review; shared dashboard styles stay unchanged. */
+.page:global(.app-page) { gap: 1.5rem; }
+.page :global(.plan-card) { padding: 1.25rem; }
+.page :global(.plan-card-price) { margin-block: 1rem; }
+.page :global(.plan-card-current) { border-color: var(--border-strong); box-shadow: none; }
+.page :global(.plan-card-selected) { border-color: #0284c7; box-shadow: 0 0 0 1px #0284c7; }
+.page :global(.feedback-danger) { border-color: #fecaca; background: #fff5f5; color: #991b1b; }
+.page summary::-webkit-details-marker { display: none; }

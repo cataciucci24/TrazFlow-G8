@@ -22,13 +22,14 @@ import { isCronAuthorized } from "./auth.ts";
  *   - Tandas de OUTBOX_BATCH_SIZE eventos con OUTBOX_REPORT_TIMEOUT_MS por envío: una tanda dura como mucho
  *     5 × 20 s = 100 s, menos que el lease de 2 min, así que nadie retoma un evento que todavía se está enviando.
  *   - No se arranca otra tanda después de OUTBOX_START_BUDGET_MS (150 s): el peor caso es 150 + 100 s < 300 s.
- *   - Como mucho OUTBOX_MAX_EVENTS por ejecución; el resto queda para la próxima.
+ *   - Como mucho OUTBOX_MAX_EVENTS por ejecución; el resto queda para la próxima. Lo que acota de verdad es el
+ *     presupuesto de tiempo: este tope alcanza para que una importación grande (USH1) avance.
  *   - Si una tanda tuvo envíos sin respuesta (el ERP no contesta), se corta: no tiene sentido seguir.
  */
 
 export const OUTBOX_BATCH_SIZE = 5;
 export const OUTBOX_REPORT_TIMEOUT_MS = 20_000;
-export const OUTBOX_MAX_EVENTS = 25;
+export const OUTBOX_MAX_EVENTS = 250;
 export const OUTBOX_START_BUDGET_MS = 150_000;
 
 export type CronResponse<T> = { status: 200 | 401 | 500; body: T };

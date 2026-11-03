@@ -9,11 +9,12 @@ const ts = require("typescript");
 
 function harness(result: { data: unknown; error: unknown }, throws = false) {
   const filters: [string, unknown][] = [];
+  const orders: string[] = [];
   const builder = {
     select: () => builder,
     eq: (key: string, value: unknown) => { filters.push([key, value]); return builder; },
     maybeSingle: async () => { if (throws) throw new Error("network"); return result; },
-    order: async () => { if (throws) throw new Error("network"); return result; },
+    order: async (column: string) => { orders.push(column); if (throws) throw new Error("network"); return result; },
   };
   const source = ts.transpileModule(readFileSync(new URL("./queries.ts", import.meta.url), "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS },
@@ -25,7 +26,7 @@ function harness(result: { data: unknown; error: unknown }, throws = false) {
     if (name === "@/lib/supabase/server") return { createClient: async () => ({ from: () => builder }) };
     throw new Error(`Unexpected import: ${name}`);
   }, compiled, compiled.exports);
-  return { api: compiled.exports as typeof Queries, filters };
+  return { api: compiled.exports as typeof Queries, filters, orders };
 }
 
 test("sin asignación se informa sin plan, filtrando siempre por la empresa de la sesión", async () => {
@@ -56,4 +57,16 @@ test("el plan actual y el catálogo usan los valores persistidos, incluyendo pre
   }
   const { api } = harness({ data: [row], error: null });
   assert.deepEqual(await api.getPlanCatalog(), { available: true, plans: [expected] });
+});
+
+test("el catálogo vacío es válido y se consulta en orden comercial", async () => {
+  const { api, orders } = harness({ data: [], error: null });
+  assert.deepEqual(await api.getPlanCatalog(), { available: true, plans: [] });
+  assert.deepEqual(orders, ["display_order"]);
+});
+
+test("conserva assigned_at con precisión original para detectar cambios concurrentes", async () => {
+  const assignedAt = "2026-10-01T00:00:00.123456+00:00";
+  const { api } = harness({ data: { assigned_at: assignedAt, subscription_plans: { code: "starter" } }, error: null });
+  assert.equal((await api.getCompanyPlan("company-a")).assignedAt, assignedAt);
 });

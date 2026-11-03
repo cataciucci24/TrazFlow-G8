@@ -24,6 +24,9 @@ import {
   type ErpPullOptions,
   type ErpStockBalance,
   type ErpWarehouse,
+  type PalletScanReport,
+  type StockEntryReport,
+  type StockImportReport,
 } from "./types.ts";
 import {
   assertValidDeliveryReceipt,
@@ -31,6 +34,9 @@ import {
   assertValidDispatchReport,
   assertValidErpWarehouses,
   assertValidIdempotencyKey,
+  assertValidPalletScanReport,
+  assertValidStockEntryReport,
+  assertValidStockImportReport,
 } from "./validation.ts";
 
 /**
@@ -47,9 +53,9 @@ const MAX_ERROR_MESSAGE = 300;
 
 /** Campos personalizados que la instancia de ERPNext debe tener (Customize Form). */
 export const ERPNEXT_CUSTOM_FIELDS = {
-  idempotencyKey: "trazflow_idempotency_key", // Delivery Note, Data, único
+  idempotencyKey: "trazflow_idempotency_key", // Delivery Note, Stock Entry y Pick List (Data, único) y Pick List Item (Data)
   operator: "trazflow_operator", // Delivery Note, Data
-  palletCode: "trazflow_pallet_code", // Delivery Note Item, Data
+  palletCode: "trazflow_pallet_code", // Delivery Note Item y Pick List Item, Data
 } as const;
 
 /** Etiqueta (tag de Frappe) que deja TrazFlow en un remito cuya entrega cerró con diferencias (TRZ-103). */
@@ -62,6 +68,7 @@ export type ErpNextClientOptions = {
   apiKey: string;
   apiSecret: string;
   timeoutMs: number;
+  itemGroup?: string;
   fetch?: typeof fetch;
   now?: () => Date;
 };
@@ -108,6 +115,7 @@ export type ErpNextSalesOrderItem = {
 
 export type ErpNextSalesOrder = {
   name: string;
+  company?: string;
   customer: string;
   customer_name: string;
   delivery_date: string | null;
@@ -319,6 +327,26 @@ export function buildDeliveryNote(report: DispatchReport, order: ErpNextSalesOrd
   };
 }
 
+/** Línea del Pick List (TRZ-63): el depósito es el de la línea de la orden, igual que en el Delivery Note. */
+export function buildPickListLine(scan: PalletScanReport, order: ErpNextSalesOrder): Record<string, unknown> {
+  const item = order.items.find((orderItem) => orderItem.item_code === scan.productExternalId);
+  if (!item) throw validation(`El producto ${scan.productExternalId} no figura en la orden ${order.name}.`);
+  return {
+    item_code: scan.productExternalId,
+    qty: scan.quantity,
+    stock_qty: scan.quantity,
+    uom: scan.uom,
+    conversion_factor: 1,
+    warehouse: item.warehouse,
+    batch_no: scan.lotExternalId,
+    use_serial_batch_fields: 1,
+    sales_order: order.name,
+    sales_order_item: item.name,
+    [ERPNEXT_CUSTOM_FIELDS.palletCode]: scan.palletCode,
+    [ERPNEXT_CUSTOM_FIELDS.idempotencyKey]: scan.idempotencyKey,
+  };
+}
+
 /**
  * true si el remito guardado corresponde al mismo reporte: fecha y hora, operador y, por pallet, producto, lote,
  * cantidad y unidad. Es la comparación que hace el mock con el payload completo, sobre lo que ERPNext conserva.
@@ -368,6 +396,7 @@ export class ErpNextClient implements ErpClient {
   readonly #baseUrl: string;
   readonly #authorization: string;
   readonly #timeoutMs: number;
+  readonly #itemGroup: string | undefined;
   readonly #fetch: typeof fetch;
   readonly #now: () => Date;
 
@@ -375,6 +404,7 @@ export class ErpNextClient implements ErpClient {
     this.#baseUrl = options.baseUrl.replace(/\/+$/, "");
     this.#authorization = `token ${options.apiKey}:${options.apiSecret}`;
     this.#timeoutMs = options.timeoutMs;
+    this.#itemGroup = options.itemGroup;
     this.#fetch = options.fetch ?? fetch;
     this.#now = options.now ?? (() => new Date());
   }
@@ -581,6 +611,241 @@ export class ErpNextClient implements ErpClient {
     return mapBatchPickingPolicy(value);
   }
 
+  /**
+   * TRZ-62: Stock Entry en borrador (Material Receipt para altas, Material Issue para bajas) con la clave en
+   * trazflow_idempotency_key. Nunca se submitea: lo confirma el ERP. La empresa sale del depósito.
+   */
+  async reportStockEntry(entry: StockEntryReport): Promise<DeliveryReportResult> {
+    assertValidStockEntryReport(entry);
+    return this.#draftStockEntry(entry);
+  }
+
+  /**
+   * USH1: crea lo que falte (unidad, Item, Batch) y deja el stock como Stock Entry en borrador. Cada paso busca antes
+   * de crear, así que un reintento después de una falla a mitad de camino retoma donde quedó.
+   */
+  async reportStockImport(entry: StockImportReport): Promise<DeliveryReportResult> {
+    assertValidStockImportReport(entry);
+    const uom = await this.#ensureImportItem(entry);
+    await this.#ensureImportBatch(entry);
+    return this.#draftStockEntry({
+      contractVersion: entry.contractVersion,
+      idempotencyKey: entry.idempotencyKey,
+      entryType: "receipt",
+      productExternalId: entry.sku,
+      lotExternalId: entry.lotNumber,
+      warehouseExternalId: entry.warehouseExternalId,
+      quantity: entry.quantity,
+      uom,
+      reason: "Importación de planilla",
+      requestedAt: entry.requestedAt,
+      requestedBy: entry.requestedBy,
+    });
+  }
+
+  /** Devuelve la unidad del Item: si ya existe manda la del ERP, y una distinta es un error de datos, no se convierte. */
+  async #ensureImportItem(entry: StockImportReport): Promise<string> {
+    const find = async () => (await this.#list<{ name: string; stock_uom: string; has_batch_no: number }>(
+      "Item", ["name", "stock_uom", "has_batch_no"], [["item_code", "=", entry.sku]], 1,
+    ))[0];
+    const check = (item: { stock_uom: string; has_batch_no: number }) => {
+      if (item.has_batch_no !== 1) throw validation(`El producto ${entry.sku} existe en ERPNext sin control por lote.`);
+      if (item.stock_uom !== entry.uom) throw validation(`El producto ${entry.sku} usa la unidad ${item.stock_uom} en ERPNext, no ${entry.uom}.`);
+      return item.stock_uom;
+    };
+    const existing = await find();
+    if (existing) return check(existing);
+
+    if (!(await this.#list<{ name: string }>("UOM", ["name"], [["name", "=", entry.uom]], 1)).length) {
+      await this.#createOrFind("UOM", { uom_name: entry.uom }, async () => (await this.#list<{ name: string }>("UOM", ["name"], [["name", "=", entry.uom]], 1))[0]);
+    }
+    const group = this.#itemGroup ?? (await this.#list<{ name: string }>("Item Group", ["name"], [["is_group", "=", 0]], 1))[0]?.name;
+    if (!group) throw validation("ERPNext no tiene un grupo de productos donde crear el producto.");
+    const winner = await this.#createOrFind("Item", {
+      item_code: entry.sku,
+      item_name: entry.productName.slice(0, 140),
+      item_group: group,
+      stock_uom: entry.uom,
+      is_stock_item: 1,
+      has_batch_no: 1,
+    }, find);
+    return winner ? check(winner) : entry.uom;
+  }
+
+  async #ensureImportBatch(entry: StockImportReport): Promise<void> {
+    const find = async () => (await this.#list<{ name: string; item: string; expiry_date: string | null }>(
+      "Batch", ["name", "item", "expiry_date"], [["name", "=", entry.lotNumber]], 1,
+    ))[0];
+    const check = (batch: { item: string; expiry_date: string | null }) => {
+      if (batch.item !== entry.sku) throw validation(`El lote ${entry.lotNumber} ya existe en ERPNext para el producto ${batch.item}.`);
+      if (batch.expiry_date !== entry.expirationDate) throw validation(`El lote ${entry.lotNumber} tiene otro vencimiento en ERPNext.`);
+    };
+    const existing = await find();
+    if (existing) return check(existing);
+    const winner = await this.#createOrFind("Batch", { batch_id: entry.lotNumber, item: entry.sku, expiry_date: entry.expirationDate }, find);
+    if (winner) check(winner);
+  }
+
+  /** Crea el documento. Si otro proceso lo creó antes, devuelve ese; si no se creó nada, propaga el error. */
+  async #createOrFind<T>(doctype: string, doc: Record<string, unknown>, find: () => Promise<T | undefined>): Promise<T | null> {
+    try {
+      await this.#request("POST", resourcePath(doctype), doc);
+      return null;
+    } catch (error) {
+      if (isErpError(error) && (error.code === "conflict" || error.code === "validation")) {
+        const winner = await find();
+        if (winner) return winner;
+      }
+      throw error;
+    }
+  }
+
+  async #draftStockEntry(entry: StockEntryReport): Promise<DeliveryReportResult> {
+    const find = async () => (await this.#list<ErpNextDeliveryNoteRef>(
+      "Stock Entry",
+      ["name", "creation"],
+      [[ERPNEXT_CUSTOM_FIELDS.idempotencyKey, "=", entry.idempotencyKey], ["docstatus", "!=", 2]],
+      1,
+    ))[0];
+    const existing = await find();
+    if (existing) return duplicateResult(existing);
+
+    const company = await this.#warehouseCompany(entry.warehouseExternalId);
+    const receipt = entry.entryType === "receipt";
+    const type = receipt ? "Material Receipt" : "Material Issue";
+    const stockEntry = {
+      stock_entry_type: type,
+      purpose: type,
+      company,
+      remarks: `TrazFlow: ${entry.reason} (${entry.requestedBy.name || entry.requestedBy.id})`.slice(0, 500),
+      [ERPNEXT_CUSTOM_FIELDS.idempotencyKey]: entry.idempotencyKey,
+      items: [{
+        item_code: entry.productExternalId,
+        qty: entry.quantity,
+        uom: entry.uom,
+        conversion_factor: 1,
+        batch_no: entry.lotExternalId,
+        use_serial_batch_fields: 1,
+        ...(receipt
+          ? { t_warehouse: entry.warehouseExternalId, allow_zero_valuation_rate: 1 }
+          : { s_warehouse: entry.warehouseExternalId }),
+      }],
+    };
+    try {
+      const body = await this.#request<{ data?: { name?: unknown } }>("POST", resourcePath("Stock Entry"), stockEntry);
+      if (typeof body.data?.name !== "string") throw invalidResponse("ERPNext no devolvió el nombre del Stock Entry");
+      return { erpReference: body.data.name, duplicate: false, acceptedAt: this.#now().toISOString() };
+    } catch (error) {
+      if (isErpError(error) && (error.code === "conflict" || error.code === "validation")) {
+        const winner = await find();
+        if (winner) return duplicateResult(winner);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * TRZ-63: un Pick List en borrador por orden (clave pick-list:{orden}), con una línea por pallet escaneado. El
+   * scan agrega la línea; el unscan la saca y deja un comentario con su clave, que es lo que lo marca como hecho.
+   * El ERP aplica su regla de lotes al confirmar; TrazFlow no decide nada. El Delivery Note sigue saliendo del
+   * despacho (reportDispatch).
+   */
+  async reportPalletScan(scan: PalletScanReport): Promise<DeliveryReportResult> {
+    assertValidPalletScanReport(scan);
+    const pickKey = `pick-list:${scan.orderExternalId}`;
+    const ref = (await this.#list<ErpNextDeliveryNoteRef>(
+      "Pick List",
+      ["name", "creation"],
+      [[ERPNEXT_CUSTOM_FIELDS.idempotencyKey, "=", pickKey], ["docstatus", "!=", 2]],
+      1,
+    ))[0];
+    const key = ERPNEXT_CUSTOM_FIELDS.idempotencyKey;
+
+    if (scan.action === "scan" && !ref) {
+      const order = await this.#salesOrderFor(scan.orderExternalId);
+      const pickList = {
+        company: order.company,
+        purpose: "Delivery",
+        customer: order.customer,
+        pick_manually: 1,
+        [key]: pickKey,
+        locations: [buildPickListLine(scan, order)],
+      };
+      try {
+        const body = await this.#request<{ data?: { name?: unknown } }>("POST", resourcePath("Pick List"), pickList);
+        if (typeof body.data?.name !== "string") throw invalidResponse("ERPNext no devolvió el nombre del Pick List");
+        return { erpReference: body.data.name, duplicate: false, acceptedAt: this.#now().toISOString() };
+      } catch (error) {
+        // Otro escaneo de la misma orden creó el Pick List al mismo tiempo: se reintenta y se agrega la línea.
+        if (isErpError(error) && error.code === "conflict") {
+          throw new ErpError("not_ready", `El Pick List de ${scan.orderExternalId} se está creando: se reintenta.`);
+        }
+        throw error;
+      }
+    }
+    if (!ref) {
+      throw new ErpError("not_ready", `Todavía no llegó el escaneo ${scan.scanIdempotencyKey}: se reintenta.`);
+    }
+
+    const path = `${resourcePath("Pick List")}/${encodeURIComponent(ref.name)}`;
+    const doc = (await this.#request<{ data?: { name: string; docstatus: number; locations?: Array<Record<string, unknown>> } }>("GET", path)).data;
+    if (!doc || !Array.isArray(doc.locations)) throw invalidResponse(`Pick List ${ref.name} sin líneas`);
+    const index = doc.locations.findIndex((line) => line[key] === scan.scanIdempotencyKey);
+
+    if (scan.action === "scan") {
+      if (index >= 0) return duplicateResult(ref);
+      if (doc.docstatus !== 0) throw validation(`El Pick List ${ref.name} ya está confirmado: no admite más pallets.`);
+      const order = await this.#salesOrderFor(scan.orderExternalId);
+      await this.#request("PUT", path, { locations: [...doc.locations, buildPickListLine(scan, order)] });
+      return { erpReference: ref.name, duplicate: false, acceptedAt: this.#now().toISOString() };
+    }
+
+    const marker = `[trazflow:${scan.idempotencyKey}]`;
+    const marked = (await this.#list<{ name: string }>(
+      "Comment",
+      ["name"],
+      [["reference_doctype", "=", "Pick List"], ["reference_name", "=", ref.name], ["content", "like", `%${marker}%`]],
+      1,
+    )).length > 0;
+    if (index < 0) {
+      if (marked) return duplicateResult(ref);
+      throw new ErpError("not_ready", `Todavía no llegó el escaneo ${scan.scanIdempotencyKey}: se reintenta.`);
+    }
+    if (doc.docstatus !== 0) throw validation(`El Pick List ${ref.name} ya está confirmado: no se puede sacar el pallet ${scan.palletCode}.`);
+    // Primero el comentario y después sacar la línea: si algo falla en el medio, el reintento termina el trabajo.
+    if (!marked) {
+      await this.#request("POST", resourcePath("Comment"), {
+        comment_type: "Comment",
+        reference_doctype: "Pick List",
+        reference_name: ref.name,
+        content: `<p>TrazFlow sacó el pallet ${escapeHtml(scan.palletCode)} (lote ${escapeHtml(scan.lotExternalId)}, ${scan.quantity} ${escapeHtml(scan.uom)}) ${escapeHtml(marker)}</p>`,
+      });
+    }
+    await this.#request("PUT", path, { locations: doc.locations.filter((_, position) => position !== index) });
+    return { erpReference: ref.name, duplicate: false, acceptedAt: this.#now().toISOString() };
+  }
+
+  async #salesOrderFor(name: string): Promise<ErpNextSalesOrder> {
+    try {
+      return await this.#getSalesOrder(name);
+    } catch (error) {
+      if (isErpError(error) && error.code === "not_found") throw validation(`La orden ${name} no existe en ERPNext.`);
+      throw error;
+    }
+  }
+
+  async #warehouseCompany(warehouse: string): Promise<string> {
+    let company: unknown;
+    try {
+      company = (await this.#request<{ data?: { company?: unknown } }>("GET", `${resourcePath("Warehouse")}/${encodeURIComponent(warehouse)}`)).data?.company;
+    } catch (error) {
+      if (isErpError(error) && error.code === "not_found") throw validation(`El depósito ${warehouse} no existe en ERPNext.`);
+      throw error;
+    }
+    if (typeof company !== "string" || !company) throw invalidResponse(`Warehouse ${warehouse} sin empresa`);
+    return company;
+  }
+
   /** El Delivery Note que generó el despacho. Si todavía no existe, la entrega llegó antes: se reintenta. */
   async #requireDispatchNote(dispatchIdempotencyKey: string): Promise<ErpNextDeliveryNoteRef> {
     const note = await this.#findDeliveryNote(dispatchIdempotencyKey);
@@ -651,7 +916,7 @@ export class ErpNextClient implements ErpClient {
   }
 
   /** JSON por defecto; un FormData se manda como multipart (upload_file) y fetch arma el Content-Type. */
-  async #request<T>(method: "GET" | "POST", path: string, payload?: unknown): Promise<T> {
+  async #request<T>(method: "GET" | "POST" | "PUT", path: string, payload?: unknown): Promise<T> {
     const multipart = payload instanceof FormData;
     let response: Response;
     try {

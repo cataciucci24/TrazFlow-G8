@@ -330,3 +330,7 @@ Decisiones y requisitos de la instancia:
   `NEXT_PUBLIC_` y ningún componente `"use client"` importa algo más que tipos del ERP.
 
 En tests no hay bundler de Next: `scripts/test-server-only.mjs` resuelve `server-only` a un módulo vacío.
+
+## Importación de stock (USH1)
+
+`reportStockImport(entry: StockImportReport)` es aditiva al contrato v1. Cada fila de la planilla se envía por el outbox con la clave `stock-import:{importación}:{fila}`. El proveedor crea el producto y el lote si faltan y deja el stock en un documento en borrador; nunca lo confirma. Ver [`stock-import.md`](stock-import.md).

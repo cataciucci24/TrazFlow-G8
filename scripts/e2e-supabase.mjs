@@ -11,11 +11,17 @@ let activeRole = 'driver_operator';
 let validated = false;
 let companyPlanCode = null;
 let plansUnavailable = false;
+let planMutations = 0;
+let companyPlanUnavailable = false;
+let catalogUnavailable = false;
+let planUsage = { operators: 0, pallets: 0, month_start: "2026-10-01", pallets_complete: true };
+let usageUnavailable = false;
 const subscriptionPlans = [
   { code: 'starter', name: 'Starter', monthly_price_cents: 6900, currency: 'USD', max_operators: 3, max_pallets_per_month: 500, printer_count: 1, printer_model: 'Zebra ZQ320', equipment_price_cents: 45000, preliminary: true },
   { code: 'growth', name: 'Growth', monthly_price_cents: 26900, currency: 'USD', max_operators: 10, max_pallets_per_month: 3000, printer_count: 3, printer_model: 'Zebra ZQ320', equipment_price_cents: 135000, preliminary: true },
   { code: 'enterprise', name: 'Enterprise', monthly_price_cents: null, currency: 'USD', max_operators: null, max_pallets_per_month: null, printer_count: null, printer_model: 'Zebra ZQ320', equipment_price_cents: null, preliminary: true },
 ];
+let catalogPlans = subscriptionPlans;
 const roleEmails = { 'chofer@trazflow.test': 'driver_operator', 'deposito@trazflow.test': 'warehouse_operator', 'logistica@trazflow.test': 'logistics_manager' };
 const product = { id: 'product-demo', name: 'Producto Demo con descripción extendida para comprobar el diseño en celular', sku: 'SKU-DEMO', unit_of_measure: 'cajas' };
 const batch = { id: 'batch-demo', batch_number: 'LOTE-DEMO', expiration_date: '2099-12-31', source_system: 'erp', products: product };
@@ -33,19 +39,25 @@ createServer(async (req, res) => {
   const body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString()) : {};
   const send = (data, status = 200) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(data)); };
   if (url.pathname === '/health') return send({ ok: true });
-  if (url.pathname === '/test/reset') { delivered = false; confirmations = 0; validated = false; activeRole = 'driver_operator'; companyPlanCode = null; plansUnavailable = false; return send({ ok: true }); }
-  if (url.pathname === '/test/plan') { companyPlanCode = body.code ?? null; plansUnavailable = Boolean(body.unavailable); return send({ ok: true }); }
+  if (url.pathname === '/test/usage') { planUsage = body.usage ?? planUsage; usageUnavailable = Boolean(body.unavailable); return send({ok: true}); }
+  if (url.pathname === '/rest/v1/rpc/get_company_plan_usage') return usageUnavailable ? send({message: 'unavailable'}, 500) : send([planUsage]);
+  if (url.pathname === '/test/reset') { planUsage = { operators: 0, pallets: 0, month_start: '2026-10-01', pallets_complete: true }; usageUnavailable = false; delivered = false; confirmations = 0; validated = false; activeRole = 'driver_operator'; companyPlanCode = null; plansUnavailable = false; catalogPlans = subscriptionPlans; planMutations = 0; companyPlanUnavailable = false; catalogUnavailable = false; return send({ ok: true }); }
+  if (url.pathname === '/test/plan') { companyPlanCode = body.code ?? null; plansUnavailable = Boolean(body.unavailable); catalogPlans = body.plans ?? subscriptionPlans; companyPlanUnavailable = Boolean(body.companyPlanUnavailable); catalogUnavailable = Boolean(body.catalogUnavailable); return send({ ok: true }); }
   if (url.pathname === '/test/state') return send({ delivered, confirmations });
+  if (url.pathname === '/test/plan-state') return send({ companyPlanCode, planMutations });
   if (url.pathname === '/auth/v1/token') {
     if (!roleEmails[body.email] || body.password !== 'test1234') return send({ code: 'invalid_credentials', message: 'Invalid login credentials' }, 400);
     activeRole = roleEmails[body.email];
     return send({ access_token: token, refresh_token: 'fixture-refresh', token_type: 'bearer', expires_in: 360000, user });
   }
   if (url.pathname === '/auth/v1/user') return send(user);
+  if (url.pathname === '/rest/v1/company_payments') return send([]);
+  if (url.pathname === '/rest/v1/rpc/get_company_subscription_access') return send([]);
   if (url.pathname === '/rest/v1/subscription_plans' || url.pathname === '/rest/v1/company_plans') {
-    if (plansUnavailable) return send({ code: 'PGRST205', message: 'Catalog unavailable' }, 503);
-    if (url.pathname.endsWith('/subscription_plans')) return send(subscriptionPlans);
-    return send(companyPlanCode ? { subscription_plans: subscriptionPlans.find(plan => plan.code === companyPlanCode) } : null);
+    if (req.method !== 'GET') { planMutations++; return send({ message: 'Plans are read-only' }, 403); }
+    if (plansUnavailable || (catalogUnavailable && url.pathname.endsWith('/subscription_plans')) || (companyPlanUnavailable && url.pathname.endsWith('/company_plans'))) return send({ code: 'PGRST205', message: 'Catalog unavailable' }, 503);
+    if (url.pathname.endsWith('/subscription_plans')) return send(catalogPlans);
+    return send(companyPlanCode ? { assigned_at: '2026-10-01T00:00:00+00:00', subscription_plans: catalogPlans.find(plan => plan.code === companyPlanCode) } : null);
   }
   if (url.pathname === '/rest/v1/users') {
     const profile = { id: driverId, company_id: 'company-demo', name: 'Operador Demo', email: user.email, role: activeRole, revoked_at: null };

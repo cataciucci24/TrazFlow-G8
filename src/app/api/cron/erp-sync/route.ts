@@ -5,8 +5,8 @@ import { configuredErpProvider, isErpEnabled } from "@/lib/erp-sync/enabled";
 import { createServiceClient } from "@/lib/supabase/service";
 
 /**
- * Cron de la sincronización automática con el ERP (TRZ-104). Lo llama pg_cron + pg_net desde Supabase cada
- * 15 minutos con `Authorization: Bearer ${CRON_SECRET}`; sin el secreto responde 401. Ver docs/erp-sync.md.
+ * Cron de la sincronización automática con el ERP (TRZ-104). Lo llama pg_cron + pg_net desde Supabase una vez
+ * por día con `Authorization: Bearer ${CRON_SECRET}`; sin el secreto responde 401. Ver docs/erp-sync.md.
  */
 
 // Nunca se cachea.
