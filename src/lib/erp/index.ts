@@ -4,6 +4,7 @@ import type { ErpClient } from "./client.ts";
 import { readErpConfig, type ErpConfig } from "./config.ts";
 import { ErpNextClient } from "./erpnext-client.ts";
 import { MockErpClient } from "./mock-client.ts";
+import { OdooClient } from "./odoo-client.ts";
 
 export type { ErpClient } from "./client.ts";
 export * from "./types.ts";
@@ -27,6 +28,8 @@ export function createErpClient(config: ErpConfig): ErpClient {
     }
     case "erpnext":
       return new ErpNextClient(config);
+    case "odoo":
+      return new OdooClient(config);
   }
 }
 

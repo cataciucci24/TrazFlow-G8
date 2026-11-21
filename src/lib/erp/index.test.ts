@@ -5,12 +5,21 @@ import { readErpConfig } from "./config.ts";
 import { ErpNextClient } from "./erpnext-client.ts";
 import { ErpError, getErpClient } from "./index.ts";
 import { MockErpClient } from "./mock-client.ts";
+import { OdooClient } from "./odoo-client.ts";
 
 const ERPNEXT_ENV = {
   ERP_PROVIDER: "erpnext",
   ERP_BASE_URL: "https://erp.example.com/",
   ERP_API_KEY: "key",
   ERP_API_SECRET: "secret",
+};
+
+const ODOO_ENV = {
+  ERP_PROVIDER: "odoo",
+  ERP_BASE_URL: "http://localhost:8069/",
+  ERP_ODOO_DB: "trazflow",
+  ERP_ODOO_USER: "api@trazflow.local",
+  ERP_API_KEY: "odoo-key",
 };
 
 function rejectsConfig(env: Record<string, string | undefined>, pattern: RegExp) {
@@ -62,7 +71,32 @@ test("la configuración de erpnext se normaliza", () => {
   assert.ok(getErpClient("company-1", ERPNEXT_ENV) instanceof ErpNextClient);
 });
 
+test("con odoo se exigen URL, base, usuario y API key (no API secret)", () => {
+  rejectsConfig({ ERP_PROVIDER: "odoo" }, /Faltan variables de entorno del ERP: ERP_BASE_URL, ERP_ODOO_DB, ERP_ODOO_USER, ERP_API_KEY\./);
+  for (const name of ["ERP_BASE_URL", "ERP_ODOO_DB", "ERP_ODOO_USER", "ERP_API_KEY"] as const) {
+    rejectsConfig({ ...ODOO_ENV, [name]: " " }, new RegExp(`^Faltan variables de entorno del ERP: ${name}\\.$`));
+  }
+  rejectsConfig({ ...ODOO_ENV, ERP_BASE_URL: "no es url" }, /ERP_BASE_URL/);
+  rejectsConfig({ ...ODOO_ENV, ERP_BASE_URL: "ftp://odoo.example.com" }, /http/);
+  rejectsConfig({ ...ODOO_ENV, ERP_TIMEOUT_MS: "1.5" }, /ERP_TIMEOUT_MS/);
+});
+
+test("la configuración de odoo se normaliza y getErpClient devuelve OdooClient", () => {
+  assert.deepEqual(readErpConfig({ ...ODOO_ENV, ERP_API_SECRET: "ignorado", ERP_ITEM_GROUP: "ignorado" }), {
+    provider: "odoo",
+    baseUrl: "http://localhost:8069",
+    database: "trazflow",
+    username: "api@trazflow.local",
+    apiKey: "odoo-key",
+    timeoutMs: 10_000,
+  });
+  assert.equal(readErpConfig({ ...ODOO_ENV, ERP_PROVIDER: " odoo ", ERP_TIMEOUT_MS: "2500" }).provider, "odoo");
+  const client = getErpClient("company-1", ODOO_ENV);
+  assert.ok(client instanceof OdooClient);
+  assert.equal(client.provider, "odoo");
+});
+
 test("proveedor o escenario desconocidos fallan con error de configuración", () => {
-  rejectsConfig({ ERP_PROVIDER: "softplan" }, /ERP_PROVIDER/);
+  rejectsConfig({ ERP_PROVIDER: "softplan" }, /ERP_PROVIDER inválido: "softplan"\. Valores posibles: mock, erpnext, odoo\./);
   rejectsConfig({ ERP_MOCK_SCENARIO: "explotar" }, /ERP_MOCK_SCENARIO/);
 });
