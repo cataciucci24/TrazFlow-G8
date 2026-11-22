@@ -6,7 +6,8 @@
 > TRZ-101 le sumó `warehouses` a `pullMasterData` (§4.1). Es un campo nuevo, obligatorio en la respuesta; quedó
 > en la versión 1 porque los dos proveedores (mock y ERPNext) son de TrazFlow y se actualizaron juntos: no hay un
 > ERP externo que mande payloads v1 sin el campo.
-> Implementación: `src/lib/erp/`. Proveedores: `mock` (por defecto) y `erpnext` (ERPNext/Frappe v15).
+> Implementación: `src/lib/erp/`. Proveedores: `mock` (por defecto), `erpnext` (ERPNext/Frappe v15) y `odoo`
+> (Odoo 19 Community, solo lectura; TRZ-113, §10).
 >
 > Reemplaza a la propuesta anterior de US-C1 (Odoo + Edge Function), que se eliminó; queda en el historial de git.
 
@@ -27,12 +28,14 @@
 
 | Variable | Obligatoria | Valores | Descripción |
 |---|---|---|---|
-| `ERP_PROVIDER` | No | `mock` (defecto) \| `erpnext` | Proveedor. El deploy en Vercel usa `mock`: un ERPNext local no es alcanzable desde ahí. |
+| `ERP_PROVIDER` | No | `mock` (defecto) \| `erpnext` \| `odoo` | Proveedor. El deploy en Vercel usa `mock`: un ERPNext local no es alcanzable desde ahí. |
 | `ERP_MOCK_SCENARIO` | No | `ok` (defecto) \| `timeout` \| `unauthorized` \| `validation` \| `server_error` | Falla permanente que simula el mock (§6). |
 | `ERP_MOCK_DISPATCH_STATUS` | No | `confirmed` (defecto) \| `draft` | Solo mock: qué responde `getDispatchStatus` (§7). |
-| `ERP_BASE_URL` | Con `erpnext` | URL http(s) | Raíz de la instancia, p. ej. `http://localhost:8080`. |
-| `ERP_API_KEY` | Con `erpnext` | texto | API key del usuario técnico. |
+| `ERP_BASE_URL` | Con `erpnext` u `odoo` | URL http(s) | Raíz de la instancia, p. ej. `http://localhost:8080` (ERPNext) o `http://localhost:8069` (Odoo). |
+| `ERP_API_KEY` | Con `erpnext` u `odoo` | texto | API key del usuario técnico. En Odoo reemplaza a la contraseña del usuario. |
 | `ERP_API_SECRET` | Con `erpnext` | texto | API secret del usuario técnico. ERPNext autentica con `Authorization: token <key>:<secret>`. |
+| `ERP_ODOO_DB` | Con `odoo` | texto | Base de datos de Odoo. |
+| `ERP_ODOO_USER` | Con `odoo` | texto | Login del usuario dueño de la API key. |
 | `ERP_TIMEOUT_MS` | No | entero > 0 (defecto `10000`) | Timeout por request. |
 
 Ninguna lleva prefijo `NEXT_PUBLIC_` (hay un test que lo verifica). Una configuración inválida falla con
@@ -42,7 +45,7 @@ Ninguna lleva prefijo `NEXT_PUBLIC_` (hay un test que lo verifica). Una configur
 
 ```ts
 interface ErpClient {
-  readonly provider: "mock" | "erpnext";
+  readonly provider: "mock" | "erpnext" | "odoo";
   healthcheck(): Promise<ErpHealth>;
   pullMasterData(options?: { updatedSince?: string }): Promise<ErpMasterData>;
   pullDispatchOrders(options?: { updatedSince?: string }): Promise<ErpDispatchOrder[]>;
@@ -324,7 +327,11 @@ Decisiones y requisitos de la instancia:
   varios remitos, errores HTTP y respuesta inválida).
 - `erpnext-delivery.test.ts` (TRZ-103): comentario y etiqueta de la entrega, adjunto del remito, duplicados,
   `not_ready` sin remito del despacho y que nunca se modifica ni confirma el Delivery Note.
-- `index.test.ts`: factory y validación de entorno (incluido `ERP_MOCK_DISPATCH_STATUS`).
+- `odoo-client.test.ts` (TRZ-113): mapeo de `pullMasterData` con respuestas JSON-RPC falsas de Odoo 19, suma de
+  quants a mano por depósito (negativos incluidos en la suma, saldos ≤ 0 descartados), `updatedSince`, fechas, errores (credenciales y base inválidas con
+  HTTP 200, `AccessError`, timeout, red, 5xx, JSON-RPC mal formado), que la API key no llega al mensaje y un test por
+  operación no soportada.
+- `index.test.ts`: factory y validación de entorno (incluido `ERP_MOCK_DISPATCH_STATUS` y las variables de Odoo).
 - `types.test.ts`: clave de idempotencia y clasificación de errores.
 - `server-boundary.test.ts`: los módulos con entorno o red importan `server-only`, ninguna variable ERP usa
   `NEXT_PUBLIC_` y ningún componente `"use client"` importa algo más que tipos del ERP.
@@ -334,3 +341,53 @@ En tests no hay bundler de Next: `scripts/test-server-only.mjs` resuelve `server
 ## Importación de stock (USH1)
 
 `reportStockImport(entry: StockImportReport)` es aditiva al contrato v1. Cada fila de la planilla se envía por el outbox con la clave `stock-import:{importación}:{fila}`. El proveedor crea el producto y el lote si faltan y deja el stock en un documento en borrador; nunca lo confirma. Ver [`stock-import.md`](stock-import.md).
+
+## 10. Odoo (`ERP_PROVIDER=odoo`, TRZ-113)
+
+Segundo adaptador, **solo lectura**: implementa `healthcheck` y `pullMasterData`. El resto de las operaciones falla
+con `ErpError` de código `config` ("Odoo: operación no soportada todavía") sin llamar a Odoo, y
+`getBatchPickingPolicy` responde `fifo`. Verificado contra **Odoo 19.0 Community** (imagen oficial `odoo:19.0`) con
+los módulos Inventario (`stock`) y Fechas de vencimiento (`product_expiry`). Cómo levantarlo y cargar datos:
+[`odoo-deploy.md`](odoo-deploy.md).
+
+**API.** JSON-RPC externa: `POST {ERP_BASE_URL}/jsonrpc`. `common.authenticate(db, usuario, api_key, {})` devuelve el
+uid (o `false`) y cada lectura es `object.execute_kw(db, uid, api_key, modelo, "search_read", …)`, de a 500 registros
+ordenados por `id`. Odoo marca `/jsonrpc` como deprecado desde la versión 19 y anuncia su eliminación en Odoo 22
+(fines de 2028) y Online 21.1; el reemplazo es la API JSON-2 (`/json/2/<modelo>/<método>` con `Authorization: bearer`).
+
+| Operación | Llamadas | Mapeo |
+|---|---|---|
+| `healthcheck` | `common.version` + `common.authenticate` | Sin `server_version` → `invalid_response`; uid `false` → `unauthorized`. |
+| Depósitos | `stock.warehouse` (incluye archivados, sin `updatedSince`) | `id` → `externalId`, `name`, `active`, `write_date` → `updatedAt`. |
+| Productos | `product.product` con `is_storable = True` (incluye archivados) | `id` → `externalId`, `default_code` → `sku` (vacío → el id), `name`, nombre de `uom_id` → `uom`, `tracking === "lot"` → `batchTracked`, `active`, `write_date`. |
+| Lotes | `stock.lot` de productos con `tracking = "lot"` | `id` → `externalId`, `name` → `lotNumber`, `product_id` → `productExternalId`, `expiration_date` → `expirationDate`, `write_date`. |
+| Stock | `stock.quant` en ubicaciones `internal`, con lote | Suma de `quantity` (a mano) por producto + lote + `warehouse_id` (el depósito de la ubicación, `location_id.warehouse_id`). Unidad: `product_uom_id`. |
+
+- **Ids.** Todos los `externalId` son el id numérico de Odoo como texto: es lo único estable (`default_code`, el
+  código del depósito y el nombre del lote se pueden editar).
+- **`updatedSince`** filtra productos y lotes por `write_date >= …` en UTC. Depósitos y stock vienen siempre completos.
+- **Fechas.** Odoo guarda los Datetime en UTC sin offset (`"YYYY-MM-DD HH:MM:SS"`): `write_date` se pasa a ISO 8601
+  agregando `Z`. El vencimiento del lote es un Datetime: se informa el día en hora argentina (`ODOO_DATE_UTC_OFFSET`,
+  `-03:00`), como hace el adaptador de ERPNext.
+- **Errores.** Odoo responde los errores con HTTP 200 y `error` en el cuerpo. Se traducen por el nombre de la
+  excepción: `AccessDenied`/`AccessError` → `unauthorized`; base inexistente (`psycopg2.OperationalError` "database …
+  does not exist") → `unauthorized`; `MissingError` → `not_found`; `ValidationError`/`UserError`/`ValueError` →
+  `validation`; cualquier otra → `unavailable`. HTTP distinto de 2xx → `erpErrorCodeFromStatus`; timeout → `timeout`;
+  sin respuesta → `network`; respuesta no JSON o sin `result` ni `error` → `invalid_response`. El mensaje usa solo
+  `data.message` (nunca `data.debug`, que trae la traza, ni los argumentos, que llevan la API key) y un error de
+  autenticación tiene siempre el mismo texto fijo.
+
+### Lo que Odoo no cumple tal cual
+
+| Contrato | Odoo | Qué hace el adaptador |
+|---|---|---|
+| Stock por depósito | El stock está en `stock.location`, no en depósitos. | Suma las ubicaciones internas de cada depósito. Un quant en una ubicación interna que no está dentro de ningún depósito se omite. |
+| Stock disponible | `quantity` (a mano) y `reserved_quantity` (reservada); `available_quantity` = a mano − reservada. | Informa `quantity` (a mano), igual que ERPNext (`get_batch_qty`). No usa la disponible porque TrazFlow ya descuenta lo despachado en borrador (TRZ-100): con lo reservado, los dos ERP no serían comparables y, cuando Odoo soporte despachos, se descontaría dos veces. |
+| Quants negativos | Odoo permite quants negativos. | Primero suma todos los quants (también los negativos) por producto + lote + depósito y después descarta los saldos ≤ 0: con −5 y +10 en el mismo depósito informa 5; un saldo total de −3 no se informa. La suma se redondea a 6 decimales para que un resto de coma flotante no cuente como saldo. |
+| `lots[].manufacturingDate` | No existe en Odoo estándar. | Siempre `null`. |
+| `lots[].expirationDate` | Solo con el módulo Fechas de vencimiento, y es un Datetime. | `null` si el módulo no está o el lote no tiene fecha (`fields_get` lo detecta). Fecha en `-03:00`. |
+| `lots[].active` | `stock.lot` no tiene `active`. | Siempre `true`. |
+| `products[].sku` | `default_code` es opcional. | Sin código, el SKU es el id. |
+| `products[].uom` | Nombre traducible de `uom.uom` (según el idioma de la base). | Se informa tal cual. `units.ts` traduce "Units"/"Unidades" y "kg"; **no** traduce "g", "L", "ml", "Pack of 6" (en Odoo 19 reemplaza a "Dozens") ni el resto: esos productos fallan en la sincronización y quedan auditados. |
+| Lotes de números de serie | `tracking = "serial"`. | No se informan lotes ni stock de productos con número de serie (`batchTracked: false`). |
+| Multiempresa | El usuario de la API ve las compañías que tenga permitidas. | Trae todo lo visible. Filtrar por compañía queda para la configuración por empresa (TRZ-112). |

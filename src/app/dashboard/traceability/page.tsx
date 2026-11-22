@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { LotTraceability } from "@/components/traceability/lot-traceability";
 import { PalletTraceability } from "@/components/traceability/pallet-traceability";
 import { hasRole, requireUserProfile } from "@/lib/auth/session";
-import { getLotTraceability, getPalletTraceability } from "@/lib/traceability/queries";
+import { getLotTraceability, getPalletsTimeline, getPalletTraceability } from "@/lib/traceability/queries";
 import { EmptyState, InlineAlert, PageHeader } from "@/components/ui/design-system";
 
 export const metadata: Metadata = { title: "Trazabilidad | TrazFlow" };
@@ -32,11 +32,12 @@ export default async function TraceabilityPage({ searchParams }: { searchParams:
   }
 
   const pallet = isTooLong ? null : await getPalletTraceability(query, profile.companyId);
-  return <TraceabilityLayout backHref={profile.role === "warehouse_operator" ? "/dashboard/locations" : "/dashboard/pallets"} backLabel={profile.role === "warehouse_operator" ? "Ubicaciones" : "Pallets"} title="pallet">{isTooLong ? <TooLongMessage /> : !pallet ? <NotFoundMessage entity="pallet" /> : <PalletTraceability traceability={pallet} canPrint={profile.role === "logistics_manager"} />}</TraceabilityLayout>;
+  const timeline = pallet ? await getPalletsTimeline([pallet.pallet.id], profile.companyId) : [];
+  return <TraceabilityLayout backHref={profile.role === "warehouse_operator" ? "/dashboard/locations" : "/dashboard/pallets"} backLabel={profile.role === "warehouse_operator" ? "Ubicaciones" : "Pallets"} title="pallet">{isTooLong ? <TooLongMessage /> : !pallet ? <NotFoundMessage entity="pallet" /> : <PalletTraceability traceability={pallet} timeline={timeline} canPrint={profile.role === "logistics_manager"} />}</TraceabilityLayout>;
 }
 
 function TraceabilityLayout({ backHref, backLabel, title, children }: { backHref: string; backLabel: string; title: string; children: React.ReactNode }) {
-  return <div className="app-page"><PageHeader title={`Trazabilidad de ${title}`} description="Consultá el historial de movimientos registrado." action={<Link href={backHref} className="button-secondary">← Volver a {backLabel}</Link>} />{children}</div>;
+  return <div className="app-page"><PageHeader title={`Trazabilidad de ${title}`} description="Consultá todo el recorrido registrado." action={<Link href={backHref} className="button-secondary">← Volver a {backLabel}</Link>} />{children}</div>;
 }
 
 function TooLongMessage() {

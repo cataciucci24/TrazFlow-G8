@@ -8,6 +8,7 @@ import type {
   PalletMovement,
   PalletTraceability,
 } from "@/lib/traceability/types";
+import { buildTimeline, type TimelineEntry, type TimelineEventRow } from "@/lib/traceability/timeline";
 
 type RelatedProduct = {
   name: string;
@@ -209,4 +210,76 @@ export async function getLotTraceability(batchNumber: string): Promise<LotTracea
   }
 
   return Array.from(lots.values());
+}
+
+type RawTimelineRow = {
+  id: string;
+  event_type: string;
+  created_at: string;
+  pallet_id: string | null;
+  order_id: string | null;
+  details: Record<string, unknown> | null;
+  user: { name: string | null } | { name: string | null }[] | null;
+};
+
+const TIMELINE_SELECT = "id, event_type, created_at, pallet_id, order_id, details, user:users ( name )";
+/** Eventos de la orden (sin pallet) que también son parte del recorrido de cada uno de sus pallets. */
+const ORDER_LEVEL_EVENTS = ["order_created", "dispatch_confirmed"];
+
+function toTimelineRow(row: RawTimelineRow): TimelineEventRow {
+  const user = Array.isArray(row.user) ? row.user[0] : row.user;
+  return {
+    id: row.id,
+    event_type: row.event_type,
+    created_at: row.created_at,
+    pallet_id: row.pallet_id,
+    order_id: row.order_id,
+    details: row.details,
+    user_name: user?.name ?? null,
+  };
+}
+
+/**
+ * TRZ-57 / TRZ-58: línea de tiempo de uno o varios pallets de la empresa. Junta los eventos de cada pallet,
+ * los de las órdenes en las que estuvo (creación y despacho confirmado) y su alta. Más viejo primero.
+ */
+export async function getPalletsTimeline(palletIds: string[], companyId: string): Promise<TimelineEntry[]> {
+  const ids = [...new Set(palletIds)];
+  if (ids.length === 0) return [];
+  const supabase = await createClient();
+
+  const [palletsResult, eventsResult, ordersResult] = await Promise.all([
+    supabase.from("pallets").select("id, qr_code, created_at").eq("company_id", companyId).in("id", ids),
+    supabase.from("traceability_events").select(TIMELINE_SELECT).eq("company_id", companyId).in("pallet_id", ids)
+      .order("created_at", { ascending: true }).order("id", { ascending: true }),
+    supabase.from("order_pallets").select("order_id").in("pallet_id", ids),
+  ]);
+  const failed = palletsResult.error ?? eventsResult.error ?? ordersResult.error;
+  if (failed) {
+    throw new Error(`No se pudo consultar la línea de tiempo (${failed.code}: ${failed.message}).`, { cause: failed });
+  }
+
+  const palletRows = (palletsResult.data ?? []) as { id: string; qr_code: string; created_at: string }[];
+  const eventRows = ((eventsResult.data ?? []) as unknown as RawTimelineRow[]).map(toTimelineRow);
+  // Órdenes en las que está o estuvo cada pallet (desasociados incluidos, por sus eventos).
+  const orderIds = [...new Set([
+    ...((ordersResult.data ?? []) as { order_id: string }[]).map((row) => row.order_id),
+    ...eventRows.map((row) => row.order_id).filter((id): id is string => Boolean(id)),
+  ])];
+
+  let orderRows: TimelineEventRow[] = [];
+  if (orderIds.length > 0) {
+    const { data, error } = await supabase.from("traceability_events").select(TIMELINE_SELECT)
+      .eq("company_id", companyId).is("pallet_id", null).in("order_id", orderIds).in("event_type", ORDER_LEVEL_EVENTS)
+      .order("created_at", { ascending: true }).order("id", { ascending: true });
+    if (error) {
+      throw new Error(`No se pudo consultar la línea de tiempo (${error.code}: ${error.message}).`, { cause: error });
+    }
+    orderRows = ((data ?? []) as unknown as RawTimelineRow[]).map(toTimelineRow);
+  }
+
+  return buildTimeline(
+    [...eventRows, ...orderRows],
+    palletRows.map((row) => ({ palletId: row.id, qrCode: row.qr_code, createdAt: row.created_at })),
+  );
 }
