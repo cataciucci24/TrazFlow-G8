@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { decodeCsv, parseCsv } from "./csv.ts";
 import { MAX_IMPORT_ROWS, parseImportDate, parseImportQuantity, toRawRows, validateRows, type RawImportRow } from "./rows.ts";
 import { buildImportTemplate, declaredZipSize, parseXlsx } from "./xlsx.ts";

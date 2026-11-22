@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
-import { test } from "node:test";
+import { test } from "vitest";
 
 /** Chequeos estáticos de que la configuración y las credenciales del ERP no llegan al navegador. */
 

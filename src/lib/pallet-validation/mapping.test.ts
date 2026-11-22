@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { mapOrderPalletValidations, ORDER_PALLET_VALIDATION_SELECT } from "./mapping.ts";
 
 const location = { warehouse_code: "DEP-01", code: "B03", aisle: "B", rack: "3", level: "1", position: "1" };

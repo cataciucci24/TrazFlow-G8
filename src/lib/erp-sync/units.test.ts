@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 
 import { MOCK_ERP_FIXTURES } from "../erp/fixtures.ts";
 import { mapErpUnit } from "./units.ts";

@@ -1,5 +1,5 @@
 ﻿import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { locationErrorMessage } from "./errors.ts";
 
 test("conserva explicaciones del backend de permisos, estado y conflicto", () => {
