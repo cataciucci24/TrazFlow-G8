@@ -9,12 +9,14 @@ import { canCreateManualOrders, ERP_ORDERS_NOTICE } from "@/lib/orders/erp-polic
 import { createClient } from "@/lib/supabase/server";
 import { EmptyState, InlineAlert, OrderStatusBadge, PageHeader, TableShell } from "@/components/ui/design-system";
 import type { OrderStatus } from "@/lib/types";
+import { ORDER_STATUS_LABELS } from "@/lib/orders/labels";
+import { applyOrderFilters, readOrderFilters, type OrderSearchParams } from "@/lib/orders/filters";
 
 export const metadata: Metadata = {
   title: "Órdenes de despacho | TrazFlow",
 };
 
-export default async function OrdersPage() {
+export default async function OrdersPage({ searchParams }: { searchParams: Promise<OrderSearchParams> }) {
   const profile = await requireUserProfile();
   const supabase = await createClient();
 
@@ -25,11 +27,17 @@ export default async function OrdersPage() {
   const canCreateOrders = isLogisticsManager && canCreateManualOrders(erpEnabled);
   const lastRun = showErpSync ? await getLatestErpSyncRun(profile.companyId) : null;
 
-  const { data: orders, error } = await supabase
+  const filters = readOrderFilters(await searchParams);
+  const filtered = Boolean(filters.status || filters.distributor);
+  const { data: distributors, error: distributorsError } = await supabase.from("distributors")
+    .select("id, name").eq("company_id", profile.companyId).order("name");
+  if (distributorsError) throw new Error("No se pudieron cargar las distribuidoras.");
+
+  const query = supabase
     .from("dispatch_orders")
     .select("id, status, estimated_dispatch_date, created_at, notes, source_system, external_id, synced_at, distributors ( name )")
-    .eq("company_id", profile.companyId)
-    .order("created_at", { ascending: false });
+    .eq("company_id", profile.companyId);
+  const { data: orders, error } = await applyOrderFilters(query, filters).order("created_at", { ascending: false });
 
   if (error) {
     throw new Error(`No se pudieron cargar las órdenes: ${error.message}`);
@@ -54,9 +62,28 @@ export default async function OrdersPage() {
 
       {showErpSync ? <ErpSyncPanel lastRun={lastRun} /> : null}
 
-      {!orders || orders.length === 0 ? <div className="surface"><EmptyState title="Todavía no hay órdenes"
-        description="Los envíos registrados para tu empresa aparecerán acá."
-        action={canCreateOrders ? <Link href="/dashboard/orders/new" className="button-primary">Nueva orden</Link> : undefined}
+      <form key={`${filters.status}:${filters.distributor}`} method="get" action="/dashboard/orders" className="surface flex flex-wrap items-end gap-4 p-4" aria-label="Filtrar órdenes">
+        <label className="flex flex-col gap-1">Estado
+          <select name="status" defaultValue={filters.status} className="form-control">
+            <option value="">Todos los estados</option>
+            {Object.entries(ORDER_STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1">Distribuidora
+          <select name="distributor" defaultValue={filters.distributor} className="form-control">
+            <option value="">Todas las distribuidoras</option>
+            {(distributors ?? []).map(distributor => <option key={distributor.id} value={distributor.id}>{distributor.name}</option>)}
+            {filters.distributor && !distributors?.some(distributor => distributor.id === filters.distributor)
+              ? <option value={filters.distributor}>Distribuidora no disponible</option> : null}
+          </select>
+        </label>
+        <button type="submit" className="button-primary">Aplicar filtros</button>
+        {filtered ? <Link href="/dashboard/orders" className="button-secondary">Limpiar filtros</Link> : null}
+      </form>
+
+      {!orders || orders.length === 0 ? <div className="surface"><EmptyState title={filtered ? "No hay órdenes con estos filtros" : "Todavía no hay órdenes"}
+        description={filtered ? "Probá otro estado o distribuidora, o limpiá los filtros." : "Los envíos registrados para tu empresa aparecerán acá."}
+        action={filtered ? <Link href="/dashboard/orders" className="button-secondary">Limpiar filtros</Link> : canCreateOrders ? <Link href="/dashboard/orders/new" className="button-primary">Nueva orden</Link> : undefined}
       /></div> : <TableShell label="Órdenes de despacho registradas" mobileLayout="rows">
           <table role="table" aria-label="Órdenes de despacho registradas" className="data-table min-w-[900px]">
             <thead role="rowgroup">

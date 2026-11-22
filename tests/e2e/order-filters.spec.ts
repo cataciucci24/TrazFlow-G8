@@ -1,0 +1,31 @@
+import { expect, test } from "@playwright/test";
+
+test("logística combina filtros, conserva la URL y puede limpiar un resultado vacío", async ({ page, request }, testInfo) => {
+  await request.post("http://127.0.0.1:54329/test/reset");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/login");
+  await page.getByLabel("Email").fill("logistica@trazflow.test");
+  await page.getByLabel("Contraseña").fill("test1234");
+  await page.getByRole("button", { name: "Ingresar", exact: true }).click();
+  await expect(page).toHaveURL(/dashboard/);
+  await page.goto("/dashboard/orders");
+  const form = page.getByRole("form", { name: "Filtrar órdenes" });
+  await form.getByRole("combobox", { name: "Estado", exact: true }).selectOption("draft");
+  await form.getByRole("combobox", { name: "Distribuidora", exact: true }).selectOption({ label: "Destinatario Demo" });
+  await form.getByRole("button", { name: "Aplicar filtros" }).click();
+  await expect(page).toHaveURL(/status=draft&distributor=40000000-0000-4000-8000-000000000001/);
+  await expect(page.getByRole("table", { name: "Órdenes de despacho registradas", exact: true })).toBeVisible();
+  await page.reload();
+  await expect(form.getByRole("combobox", { name: "Estado", exact: true })).toHaveValue("draft");
+  await expect(form.getByRole("combobox", { name: "Distribuidora", exact: true })).toHaveValue("40000000-0000-4000-8000-000000000001");
+  await form.getByRole("combobox", { name: "Estado", exact: true }).selectOption("delivered");
+  await form.getByRole("button", { name: "Aplicar filtros" }).click();
+  await expect(page.getByRole("heading", { name: "No hay órdenes con estos filtros" })).toBeVisible();
+  await form.getByRole("link", { name: "Limpiar filtros" }).click();
+  await expect(page).toHaveURL(/\/dashboard\/orders$/);
+  await expect(form.getByRole("combobox", { name: "Estado", exact: true })).toHaveValue("");
+  await expect(form.getByRole("combobox", { name: "Distribuidora", exact: true })).toHaveValue("");
+  await expect(page.getByRole("table", { name: "Órdenes de despacho registradas", exact: true })).toBeVisible();
+  await expect(page.locator("body")).toHaveJSProperty("scrollWidth", 390);
+  await page.screenshot({ path: testInfo.outputPath("orders-filters-mobile.png"), fullPage: true });
+});

@@ -174,8 +174,8 @@ export class MockErpClient implements ErpClient {
   }
 
   /**
-   * Registra la entrega en memoria (TRZ-103). Como getDispatchStatus, no exige que el despacho esté en esta
-   * instancia: el mock no guarda estado entre procesos y no queremos entregas trabadas en local.
+   * Registra la entrega en memoria. Igual que el adaptador real, exige el despacho previo;
+   * si el outbox entrega los eventos fuera de orden devuelve not_ready para reintentar.
    */
   async reportDelivery(report: DeliveryReport): Promise<DeliveryReportResult> {
     this.#simulate("reportDelivery");
@@ -239,8 +239,10 @@ export class MockErpClient implements ErpClient {
       }
       return { ...previous.result, duplicate: true };
     }
+    const dispatch = this.#reports.get(dispatchKey);
+    if (!dispatch) throw new ErpError("not_ready", `Todavía no llegó el despacho ${dispatchKey}: se reintenta.`);
     const result: DeliveryReportResult = {
-      erpReference: this.#reports.get(dispatchKey)?.result.erpReference ?? `MOCK-DN-${dispatchKey.replace(/^dispatch:/, "")}`,
+      erpReference: dispatch.result.erpReference,
       duplicate: false,
       acceptedAt: this.#now().toISOString(),
     };

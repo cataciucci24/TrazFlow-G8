@@ -1,7 +1,7 @@
 import type { ProductUnit } from "../pallets/units.ts";
 
 /**
- * Nombres de unidad del ERP (como los muestra ERPNext o el mock) → unidad de TrazFlow. Se comparan sin
+ * Nombres de unidad informados por el contrato ERP → unidad de TrazFlow. Se comparan sin
  * mayúsculas, acentos ni punto final. Lo que no está acá no se adivina: el registro falla y queda auditado.
  */
 const ERP_UNIT_ALIASES: Record<string, ProductUnit> = {

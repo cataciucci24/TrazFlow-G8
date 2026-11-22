@@ -63,8 +63,14 @@ createServer(async (req, res) => {
     const profile = { id: driverId, company_id: 'company-demo', name: 'Operador Demo', email: user.email, role: activeRole, revoked_at: null };
     return send(url.searchParams.has('role') ? [profile] : profile);
   }
+  if (url.pathname === '/rest/v1/distributors') return send([{ id: '40000000-0000-4000-8000-000000000001', name: 'Destinatario Demo' }]);
   if (url.pathname === '/rest/v1/dispatch_orders') {
-    const order = { id: orderId, driver_id: driverId, distributor_id: 'recipient-demo', status: delivered ? 'delivered' : activeRole === 'driver_operator' ? 'confirmed' : 'draft', source_system: 'trazflow', external_id: null, synced_at: null, estimated_dispatch_date: '2026-10-25', created_at: '2026-10-25T12:00:00Z', notes: 'Pedido de prueba con observaciones para comprobar que todo el contenido siga visible en una pantalla pequeña.', distributors: { name: 'Destinatario Demo' }, driver: { name: 'Chofer Demo' }, order_pallets: [{ validated_at: validated ? '2026-10-25T12:00:00Z' : null, delivery_outcome: delivered ? 'delivered' : null }] };
+    const order = { id: orderId, driver_id: driverId, distributor_id: '40000000-0000-4000-8000-000000000001', status: delivered ? 'delivered' : activeRole === 'driver_operator' ? 'confirmed' : 'draft', source_system: 'trazflow', external_id: null, synced_at: null, estimated_dispatch_date: '2026-10-25', created_at: '2026-10-25T12:00:00Z', notes: 'Pedido de prueba con observaciones para comprobar que todo el contenido siga visible en una pantalla pequeña.', distributors: { name: 'Destinatario Demo' }, driver: { name: 'Chofer Demo' }, order_pallets: [{ validated_at: validated ? '2026-10-25T12:00:00Z' : null, delivery_outcome: delivered ? 'delivered' : null }] };
+    const statusFilter = url.searchParams.get('status');
+    const distributorFilter = url.searchParams.get('distributor_id');
+    const matchesStatus = !statusFilter || statusFilter === 'eq.' + order.status
+      || (statusFilter.startsWith('in.(') && statusFilter.slice(4, -1).split(',').map(value => value.replaceAll('"', '')).includes(order.status));
+    if (!matchesStatus || (distributorFilter && distributorFilter !== 'eq.' + order.distributor_id)) return send([]);
     return send(url.searchParams.has('id') ? order : delivered ? [] : [order]);
   }
   if (url.pathname === '/rest/v1/pallets') return send([pallet]);

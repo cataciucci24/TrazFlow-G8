@@ -69,7 +69,7 @@ export function parseImportQuantity(text: string): number | null {
   return quantity <= 1_000_000_000 ? quantity : null;
 }
 
-// Caracteres que aceptan los nombres de Item y Batch de ERPNext sin sorpresas.
+// Formato de códigos de importación de TrazFlow, independiente del proveedor ERP.
 const CODE = /^[A-Za-z0-9][A-Za-z0-9._/ -]{0,139}$/;
 
 export function validateRows(rows: RawImportRow[], today = argentinaToday()): { valid: ImportRow[]; errors: ImportRowError[] } {
