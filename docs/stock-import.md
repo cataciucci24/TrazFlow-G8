@@ -32,7 +32,18 @@ Si borran el borrador en el ERP, TrazFlow no se entera y esa fila no se puede re
 
 ## Verificación
 
+La regla existente es importar solo las filas válidas; una fila inválida no se
+envía a `import_stock_rows`. Los duplicados posteriores se rechazan indicando la
+primera fila válida. La RPC rechaza depósitos inexistentes/inactivos o ajenos a
+la empresa y no crea stock ni eventos para esas filas. Estas reglas ya estaban
+implementadas y se conservan: no se introduce una política nueva sin el PO.
+
+`tests/unit/stock-import-rules.test.ts` documenta las reglas con casos tabulados;
+`src/lib/stock-import/actions.test.ts` comprueba archivos de más de 4 MB, dry-run,
+duplicados, permisos y que las filas inválidas no lleguen a la RPC en ambos modos.
+El rechazo del depósito dentro de la base se verifica en la suite SQL existente.
+
 - `npm test`: `src/lib/stock-import/rows.test.ts` y `src/lib/erp/erpnext-import.test.ts`.
 - `supabase/tests/ush1_stock_import.sql` (rollback): roles, aislamiento, idempotencia y ambos modos.
-- `npx playwright test --config playwright.stock-import.config.ts`: flujo completo sin ERP, incluidas 5.000 filas. Limpia sus datos al terminar.
-- `npx playwright test --config playwright.stock-import-erp.config.ts`: flujo completo con el ERP simulado (`mock`), hasta el envío. Ninguna prueba usa un ERPNext real.
+- `npx playwright test --project=stock-import`: flujo completo sin ERP, incluidas 5.000 filas. Limpia sus datos al terminar.
+- `npx playwright test --project=stock-import-erp`: flujo completo con el ERP simulado (`mock`), hasta el envío. Ninguna prueba usa un ERPNext real.

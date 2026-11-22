@@ -1,6 +1,10 @@
 # TrazFlow
 
+[![CI](https://github.com/cataciucci24/TrazFlow-G8/actions/workflows/ci.yml/badge.svg)](https://github.com/cataciucci24/TrazFlow-G8/actions/workflows/ci.yml)
+
 Logistics traceability and visibility platform.
+
+<img src="docs/images/orders-filters-mobile.png" alt="TrazFlow order list and filters on mobile, using synthetic demo data" width="280" />
 
 ## Current operation
 
@@ -30,10 +34,10 @@ The contract (payloads, external ids, error codes, idempotency key and ERPNext s
 `ERP_PROVIDER` must be set **explicitly** for the integration to be on (`isErpEnabled` in `src/lib/erp-sync/enabled.ts`). `getErpClient` still falls back to the mock, but an unset variable means "this installation has no ERP": the manual product/lot/pallet forms keep working and the sync action answers with a clear message. Copy [`.env.example`](.env.example) to `.env.local` and set `ERP_PROVIDER=mock` to try the flow:
 
 1. Apply the migrations (`npx supabase db reset` on a local database).
-2. Sign in as a logistics manager and open **Pallets**. Under *Integración ERP*, link the ERP warehouse `Depósito Central - SRV` (the mock's warehouse) to `DEP-01`.
+2. Sign in as a logistics manager and open **Pallets**. Under *Integración ERP*, check that `Depósito Central - SRV` is linked to `DEP-01` (the local seed already creates this mapping).
 3. Press **Sincronizar con ERP** (also available in **Órdenes**). The panel shows the result and every run is audited in `erp_sync_runs`. Use `ERP_MOCK_SCENARIO=timeout` (or another scenario) to see a failed run: the app stays usable and the error is shown and stored.
 
-What gets imported: products, lots, one pallet per stock balance (lot × warehouse) and the header of open dispatch orders, which arrive as drafts. Order lines are not imported yet. Upserts always use `(company_id, external_id)`. Nothing is deleted when it stops coming from the ERP, and a re-sync never overwrites local progress. With the ERP enabled, the manual create forms are hidden and ERP-owned fields cannot be edited through the API.
+What gets imported: products, lots, one pallet per stock balance (lot × warehouse) and open dispatch orders with their product lines, which arrive as drafts. Upserts always use `(company_id, external_id)`. Nothing is deleted when it stops coming from the ERP, and a re-sync never overwrites local progress. With the ERP enabled, the manual create forms are hidden and ERP-owned fields cannot be edited through the API.
 
 > **An imported pallet is an ERP stock balance, not a verified physical pallet.** TrazFlow generates its QR code. Print the label only when the pallet is physically prepared (US-OPS-08).
 
@@ -47,7 +51,7 @@ Logistics managers get **Integración ERP** (`/dashboard/integrations`): ERP con
 
 Run the app against the **local** Supabase stack (Docker), not the shared cloud database. Syncing with the ERP mock writes data, so never set `ERP_PROVIDER` while pointing at the cloud.
 
-1. Start the stack and build the database from scratch (migrations + [`supabase/seed.sql`](supabase/seed.sql)):
+1. Start the stack and build the database from scratch (migrations + [`supabase/seeds/001_demo.sql`](supabase/seeds/001_demo.sql)):
 
    ```bash
    npx supabase start
@@ -72,7 +76,7 @@ Run the app against the **local** Supabase stack (Docker), not the shared cloud 
    | `deposito@trazflow.test` | `test1234` | `warehouse_operator` |
    | `chofer@trazflow.test` | `test1234` | `driver_operator` |
 
-5. The seed loads no ERP data. Sign in as `logistica@trazflow.test` and follow [Syncing master data and orders](#syncing-master-data-and-orders-us-erp-03) (link the mock warehouse to `DEP-01`, then **Sincronizar con ERP**) to import products, lots, pallets and orders from the mock.
+5. The seed loads no ERP data. Sign in as `logistica@trazflow.test` and follow [Syncing master data and orders](#syncing-master-data-and-orders-us-erp-03) (the seed links the mock warehouse to `DEP-01`; press **Sincronizar con ERP**) to import products, lots, pallets and orders from the mock.
 
 Troubleshooting:
 
@@ -80,27 +84,29 @@ Troubleshooting:
 - *"No pudimos cargar esta pantalla"*: the local database is missing migrations. Run `npx supabase migration up --local --include-all`, or `npx supabase db reset` to rebuild it (this erases local data).
 - Accounts from the cloud database do not exist locally; use the seeded users above. Mail sent by the local stack (sign-up confirmations) goes to Mailpit at http://127.0.0.1:54324.
 
-## Getting Started
+## Architecture
 
-First, run the development server:
+The browser uses Next.js Server Components and authenticated Server Actions. Supabase provides authentication, PostgreSQL, RLS, RPCs and file storage. ERP reads enter through synchronization; operational writes go through a persistent outbox with idempotency and retries.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+```mermaid
+flowchart LR
+  Users[Logistics, warehouse and drivers] --> App[Next.js application]
+  App --> DB[Supabase: Auth, PostgreSQL, RLS and Storage]
+  App --> Contract[ErpClient interface]
+  Contract --> Mock[In-memory mock]
+  Contract --> ERP[ERPNext adapter]
+  DB --> Outbox[Outbox and cron]
+  Outbox --> Contract
 ```
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+The current providers are mock and ERPNext. Odoo and per-company credentials belong to pending sprint work (TRZ-113/TRZ-112); this branch does not claim those features are implemented. The ERP C4 level 3 is assigned to TRZ-125.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Onboarding and decisions
 
-## Deploy on Vercel
+See [operator onboarding](docs/onboarding.md), [current roles](docs/modelo-de-roles.md) and [architecture decisions](docs/decisiones/). A recipient is business data; drivers are assigned to dispatch orders, not linked to recipient accounts.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+The portfolio README requires a final review after the remaining sprint work merges (TRZ-124): confirm the public deployment URL, refresh the demo screenshot and add the seven team members, link the final C4 diagrams, and have another person cross-check the content. Local seeded users above are not production demo accounts.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Testing
+
+Run `npm test` for all unit tests in `src/` and `tests/unit/` (Vitest). Run `npm run test:coverage` for the unified V8 report in `coverage/index.html`, `npm run typecheck` for generated Next route types and TypeScript, and `npm run test:e2e` for browser tests. See [testing and suite selection](docs/testing-demo.md). CI runs lint, type checking, unit tests and a build with dummy Supabase values.

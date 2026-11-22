@@ -44,7 +44,7 @@ información personal ni se usan claves administrativas en la app.
 ```sh
 npm test
 npx tsc --noEmit
-npx playwright test --config playwright.forecast.config.ts
+npx playwright test --project=forecast
 npx supabase db query --linked --file supabase/tests/trz109_cloud_state_checks.sql
 ```
 

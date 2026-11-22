@@ -211,3 +211,17 @@ con 4 órdenes `pending`. No se probó todavía `reportDispatch` ni el envío de
   con HTTPS (por ejemplo un reverse proxy con Let's Encrypt).
 - **IP efímera**: si cambia, actualizar `ERP_BASE_URL`. Se puede reservar una IP pública en Oracle.
 - **Backups**: no hay backups automáticos. Manual: `docker compose -f pwd.yml exec backend bench --site frontend backup`.
+
+## Acceso pendiente para TRZ-118
+
+El estado de servidor indicado arriba es el último estado documentado, no una
+confirmación de infraestructura actual. Persona 1 no dispone todavía de consola
+Oracle ni clave SSH. No se ha reservado IP, instalado TLS ni rotado credenciales.
+No sustituir la URL documentada por una URL HTTPS supuesta hasta verificarla.
+
+El administrador de la VM debe reservar/asignar la IP pública, elegir un dominio
+que resuelva a ella y configurar un proxy TLS delante del puerto interno 8080.
+Después debe comprobar el certificado, cerrar 8080 al exterior, rotar las claves
+del usuario de integración y actualizar la configuración del despliegue. Finalmente
+probar healthcheck, sincronización y reinicio conservando la IP. Los comandos y
+valores definitivos dependen del acceso y del estado real de esa VM.

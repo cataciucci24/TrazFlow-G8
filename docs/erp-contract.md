@@ -6,7 +6,7 @@
 > TRZ-101 le sumó `warehouses` a `pullMasterData` (§4.1). Es un campo nuevo, obligatorio en la respuesta; quedó
 > en la versión 1 porque los dos proveedores (mock y ERPNext) son de TrazFlow y se actualizaron juntos: no hay un
 > ERP externo que mande payloads v1 sin el campo.
-> Implementación: `src/lib/erp/`. Proveedores: `mock` (por defecto) y `erpnext` (ERPNext/Frappe v15).
+> Implementación: `src/lib/erp/`. Proveedores: `mock` (por defecto) y `erpnext` (imagen de demo documentada: ERPNext v16.52.1).
 >
 > Reemplaza a la propuesta anterior de US-C1 (Odoo + Edge Function), que se eliminó; queda en el historial de git.
 
@@ -20,14 +20,14 @@
   conoce URLs, doctypes ni detalles del mock.
 - **Solo servidor.** Las credenciales viven en variables de entorno del servidor; los módulos con entorno o red
   importan `server-only`, así que importarlos desde un componente cliente rompe el build.
-- **Adapter intercambiable.** Cuando Softplan confirme API, archivos o webhooks, se agrega `softplan-client.ts` que
-  implemente `ErpClient` y una opción más en `ERP_PROVIDER`. Pantallas y lógica de negocio no cambian.
+- **Adapter intercambiable.** El próximo adaptador previsto es Odoo (TRZ-113). Debe implementar `ErpClient` y
+  registrar su proveedor; todavía no está implementado en esta rama. Pantallas y lógica de negocio consumen el contrato.
 
 ## 2. Configuración
 
 | Variable | Obligatoria | Valores | Descripción |
 |---|---|---|---|
-| `ERP_PROVIDER` | No | `mock` (defecto) \| `erpnext` | Proveedor. El deploy en Vercel usa `mock`: un ERPNext local no es alcanzable desde ahí. |
+| `ERP_PROVIDER` | No | `mock` (defecto del cliente) \| `erpnext` | La integración se habilita solo al definirlo explícitamente. Para Vercel el ERP debe ser accesible desde el servidor desplegado; ver `erpnext-deploy.md`. |
 | `ERP_MOCK_SCENARIO` | No | `ok` (defecto) \| `timeout` \| `unauthorized` \| `validation` \| `server_error` | Falla permanente que simula el mock (§6). |
 | `ERP_MOCK_DISPATCH_STATUS` | No | `confirmed` (defecto) \| `draft` | Solo mock: qué responde `getDispatchStatus` (§7). |
 | `ERP_BASE_URL` | Con `erpnext` | URL http(s) | Raíz de la instancia, p. ej. `http://localhost:8080`. |
@@ -267,7 +267,7 @@ panel de integración.
   pallets trabados en local. Con `ERP_MOCK_DISPATCH_STATUS=draft` responde `draft`, para probar en local que los
   pallets despachados siguen contando contra el saldo (no vuelven al disponible de "Armar pallet") hasta que el
   remito se confirma.
-- Fallas permanentes con `ERP_MOCK_SCENARIO` (`validation` solo afecta a `reportDispatch`).
+- Fallas permanentes con `ERP_MOCK_SCENARIO` (`validation` afecta a las operaciones de escritura).
 - En tests: `new MockErpClient({ failures: ["timeout", "server_error"] })` falla una vez por cada elemento y después
   responde bien, para probar reintentos; `fixtures` y `now` se pueden inyectar.
 - Valida como un ERP real: orden inexistente o cerrada, producto inexistente, lote de otro producto o línea de otra
@@ -334,3 +334,27 @@ En tests no hay bundler de Next: `scripts/test-server-only.mjs` resuelve `server
 ## Importación de stock (USH1)
 
 `reportStockImport(entry: StockImportReport)` es aditiva al contrato v1. Cada fila de la planilla se envía por el outbox con la clave `stock-import:{importación}:{fila}`. El proveedor crea el producto y el lote si faltan y deja el stock en un documento en borrador; nunca lo confirma. Ver [`stock-import.md`](stock-import.md).
+
+## Tests de contrato (TRZ-114)
+
+`npx vitest run src/lib/erp/contract.test.ts` ejecuta `runErpClientContract`
+(`src/lib/erp/contract-suite.ts`) contra el mock y ERPNext. No usa credenciales ni
+servidores reales: ERPNext recibe un fetch con documentos y persistencia simulada
+basados en `MOCK_ERP_FIXTURES`. La suite comparte todas las aserciones.
+
+Cubre versión, referencias entre entidades, fechas ISO reales, unidades traducibles,
+ids estables, catálogo completo de depósitos con updatedSince, salud, errores
+401/403/timeout/red, ausencia de secretos en mensajes e idempotencia de despacho,
+movimiento y escaneo. Una entrega anterior al despacho devuelve not_ready en ambos
+adaptadores. El mock no simula transporte ni un HTTP 403 separado: esos dos casos
+figuran como omitidos con motivo. Odoo aparece como pendiente de TRZ-113.
+
+Para sumar un adaptador, invocar la suite con una fábrica que cree estado nuevo,
+fábricas de fallos en `options.errors` y secretos sintéticos que no deban aparecer
+en errores. Las capacidades no soportadas se declaran con una explicación en
+`options.supports`; el motivo aparece en el nombre del test omitido. No importar
+la suite desde producción. Cuando cambie el contrato, ampliar los casos comunes.
+
+Prueba de sensibilidad realizada: se cambió temporalmente el mapeo de vencimiento
+de ERPNext a `31/12/2027`; el caso de fechas falló. Se restauró el mapeo antes de
+continuar. Esto demuestra que la suite detecta una regresión de formato.
