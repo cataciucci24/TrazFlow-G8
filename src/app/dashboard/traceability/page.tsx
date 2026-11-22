@@ -28,7 +28,10 @@ export default async function TraceabilityPage({ searchParams }: { searchParams:
   if (isLots) {
     if (!hasRole(profile, "logistics_manager")) redirect("/dashboard/locations");
     const lots = isTooLong ? null : await getLotTraceability(query);
-    return <TraceabilityLayout backHref="/dashboard/lots" backLabel="Lotes" title="lote">{isTooLong ? <TooLongMessage /> : !lots || lots.length === 0 ? <NotFoundMessage entity="lote" /> : <LotTraceability lots={lots} />}</TraceabilityLayout>;
+    // TRZ-58: una línea de tiempo por lote, con los eventos de todos sus pallets.
+    const timelines = Object.fromEntries(await Promise.all((lots ?? []).map(async (lot) =>
+      [lot.batchId, await getPalletsTimeline(lot.pallets.map(({ pallet }) => pallet.id), profile.companyId)] as const)));
+    return <TraceabilityLayout backHref="/dashboard/lots" backLabel="Lotes" title="lote">{isTooLong ? <TooLongMessage /> : !lots || lots.length === 0 ? <NotFoundMessage entity="lote" /> : <LotTraceability lots={lots} timelines={timelines} />}</TraceabilityLayout>;
   }
 
   const pallet = isTooLong ? null : await getPalletTraceability(query, profile.companyId);
@@ -37,7 +40,7 @@ export default async function TraceabilityPage({ searchParams }: { searchParams:
 }
 
 function TraceabilityLayout({ backHref, backLabel, title, children }: { backHref: string; backLabel: string; title: string; children: React.ReactNode }) {
-  return <div className="app-page"><PageHeader title={`Trazabilidad de ${title}`} description="Consultá todo el recorrido registrado." action={<Link href={backHref} className="button-secondary">← Volver a {backLabel}</Link>} />{children}</div>;
+  return <div className="app-page"><PageHeader title={`Trazabilidad de ${title}`} description="Consultá todo el recorrido registrado." action={<Link href={backHref} className="no-print button-secondary">← Volver a {backLabel}</Link>} />{children}</div>;
 }
 
 function TooLongMessage() {

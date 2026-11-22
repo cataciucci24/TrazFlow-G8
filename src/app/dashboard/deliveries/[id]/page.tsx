@@ -21,7 +21,7 @@ export default async function DeliveryDetailPage({ params }: { params: Promise<{
   ]);
   if (!order || order.driverId !== profile.id) notFound();
   return <div className="app-page">
-    <PageHeader title="Confirmar entrega" description={`Destinatario: ${order.distributorName}`} action={<Link href="/dashboard/deliveries" className="button-secondary">Volver</Link>} />
+    <PageHeader title="Confirmar entrega" description={`Destinatario: ${order.distributorName}`} action={<div className="flex flex-wrap gap-2"><Link href={`/dashboard/orders/${order.id}/remito`} className="button-secondary">Ver remito</Link><Link href="/dashboard/deliveries" className="button-secondary">Volver</Link></div>} />
     <div className="space-y-5">
       <DeliveryPanel orderId={order.id} pallets={pallets} canDeliver={order.status === "confirmed"} />
       <DeliveryReceiptUpload orderId={order.id} companyId={profile.companyId} receipts={receipts}

@@ -40,3 +40,14 @@ test("la línea de tiempo va en orden cronológico, con el alta primero y sin du
   assert.deepEqual(timeline.map((entry) => entry.eventType), ["pallet_created", "pallet_associated", "dispatch_confirmed"]);
   assert.equal(timeline[1].palletCode, "PAL-1");
 });
+
+test("la exportación tiene una fila por evento, con la orden completa", async () => {
+  const { timelineExportRows } = await import("./timeline.ts");
+  const rows = timelineExportRows(buildTimeline(
+    [row({ id: "a", event_type: "pallet_associated", order_id: "o-123456789" })],
+    [{ palletId: "p1", qrCode: "PAL-1", createdAt: "2026-11-20T10:00:00.000Z" }],
+  ));
+  assert.equal(rows.length, 2);
+  assert.deepEqual(rows[0].slice(1), ["Pallet armado", "", "Alta en TrazFlow", "PAL-1", ""]);
+  assert.deepEqual(rows[1].slice(1), ["Asociado a una orden", "", "Depósito", "PAL-1", "o-123456789"]);
+});
