@@ -1,6 +1,6 @@
 /**
  * TRZ-51: remito digital de un despacho. Es una copia congelada de los datos al confirmar el despacho
- * (tabla dispatch_notes, migración 20261122100000). Seguro para el cliente: sin Supabase.
+ * (tabla dispatch_notes, migración 20261123100000). Seguro para el cliente: sin Supabase.
  */
 
 export type DispatchNoteLine = {
@@ -36,6 +36,11 @@ export function isDispatched(status: string): boolean {
 /** "R-000012": número del remito con ceros a la izquierda. */
 export function formatDispatchNoteNumber(number: number): string {
   return `R-${String(number).padStart(6, "0")}`;
+}
+
+/** Varias líneas pueden pertenecer al mismo pallet mixto. */
+export function dispatchNotePalletCount(lines: readonly DispatchNoteLine[]): number {
+  return new Set(lines.map(line => line.palletCode)).size;
 }
 
 /** Totales por unidad ("40 cajas · 356,5 kilogramos"). */

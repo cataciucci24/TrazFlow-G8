@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { exceededPlanLimits, isLowerPlan, type PlanUsage } from "./usage.ts";
 import type { SubscriptionPlan } from "./types.ts";
 const plan: SubscriptionPlan = { code: "starter", name: "Starter", monthlyPriceCents: 6900, currency: "USD", maxOperators: 3, maxPalletsPerMonth: 500, printerCount: 1, printerModel: "Zebra", equipmentPriceCents: 45000, preliminary: true };

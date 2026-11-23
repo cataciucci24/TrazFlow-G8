@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 
-import { dispatchNoteTotals, formatDispatchNoteNumber, toDispatchNote } from "./types.ts";
+import { dispatchNotePalletCount, dispatchNoteTotals, formatDispatchNoteNumber, toDispatchNote } from "./types.ts";
 
 test("el remito se arma desde la copia guardada y tolera datos faltantes", () => {
   const note = toDispatchNote({
@@ -29,4 +29,15 @@ test("un contenido vacío no rompe", () => {
   const note = toDispatchNote({ id: "n1", order_id: "o1", number: 1, issued_at: "2026-11-20T15:00:00.000Z", content: null });
   assert.deepEqual(note.lines, []);
   assert.equal(note.issuer.name, "—");
+});
+
+test("un pallet mixto cuenta una vez y sus totales permanecen separados por unidad", () => {
+  const note = toDispatchNote({ id: "n", order_id: "o", number: 1, issued_at: "2026-11-23T00:00:00Z",
+    content: { lines: [
+      { palletCode: "PAL-MIXTO", productSku: "A", lotNumber: "L1", quantity: 10, unit: "cajas" },
+      { palletCode: "PAL-MIXTO", productSku: "B", lotNumber: "L2", quantity: 2.5, unit: "kilogramos" },
+    ] } });
+  assert.equal(dispatchNotePalletCount(note.lines), 1);
+  assert.equal(dispatchNoteTotals(note.lines), "10 cajas · 2,5 kilogramos");
+  assert.equal(dispatchNotePalletCount([]), 0);
 });

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { formatPlanPrice, getProvisionalPlan, operatorLimitLabel, palletLimitLabel, type SubscriptionPlan } from "./types.ts";
 
 test("los precios distinguen cero, centavos y cotización a medida", () => {

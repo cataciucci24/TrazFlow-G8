@@ -13,18 +13,31 @@
 |---|---|
 | Proveedor | Oracle Cloud Always Free, región US West (Phoenix) |
 | VM | `erpnext-vm`, Ubuntu 24.04, `VM.Standard.A1.Flex` (**ARM / aarch64**), 2 OCPU, 12 GB RAM, ~47 GB de disco |
-| IP pública | `129.146.120.18` (**efímera**: puede cambiar si la VM se detiene; entonces hay que actualizar `ERP_BASE_URL` en Vercel) |
-| SSH | usuario `ubuntu`, clave privada propia (no está en el repo) |
-| ERPNext | `http://129.146.120.18:8080`, sitio `frontend`, imagen `frappe/erpnext:v16.52.1` |
+| IP pública | `132.226.26.114` (**reservada**, confirmada por Cata) |
+| SSH | usuario `ambar`, sudo sin contraseña; clave privada fuera del repo. No modificar authorized_keys de ubuntu |
+| ERPNext | `https://erpnext.132-226-26-114.sslip.io`, sitio `frontend`, imagen `frappe/erpnext:v16.52.1` |
 
-Desde WSL, la clave descargada en Windows hay que copiarla con permisos 600 (desde `/mnt/c` SSH la rechaza):
+Acceso confirmado para persona 1:
 
 ```bash
-cp /mnt/c/Users/<usuario>/Downloads/ssh-key-AAAA-MM-DD.key ~/.ssh/oracle-erpnext.key
-chmod 600 ~/.ssh/oracle-erpnext.key
-ssh -i ~/.ssh/oracle-erpnext.key ubuntu@129.146.120.18
-uname -m   # aarch64
+ssh -i ~/.ssh/trazflow-ambar ambar@132.226.26.114
+sudo -i
+cd /home/ubuntu/frappe_docker
 ```
+
+Caddy sirve HTTPS público válido en el dominio final. Configuración y pruebas en
+[estado de TRZ-118](trz118-https-estado.md). Las credenciales se renovaron;
+Cata confirmó la actualización de Vercel. Reinicio y arranque automático del ERP
+verificados el 23/11/2026; ver evidencias y alcance de la prueba en ese documento.
+
+## Arranque automático de la instalación actual
+
+Los nueve servicios permanentes usan `deploy.restart_policy.condition: any`
+en `/home/ubuntu/frappe_docker/pwd.yml`, equivalente a `restart=always` aplicado
+a sus contenedores. La configuración original `on-failure` no los levantaba
+después de un apagado limpio. No volver a introducirla al actualizar el compose.
+`configurator` y `create-site` conservan `condition: none`; no deben repetirse.
+Respaldo privado previo: `/var/backups/trazflow/trz118-reboot/pwd.yml.before`.
 
 ## 1. Docker
 
@@ -168,20 +181,21 @@ Es idempotente: se puede volver a correr y no duplica nada.
 
 ```bash
 # desde la raíz del repo, en tu máquina
-scp -i ~/.ssh/oracle-erpnext.key scripts/erpnext-seed-demo.py ubuntu@129.146.120.18:/tmp/
+scp -i ~/.ssh/trazflow-ambar scripts/erpnext-seed-demo.py ambar@132.226.26.114:/tmp/
 # en la VM
-cd frappe_docker
+sudo -i
+cd /home/ubuntu/frappe_docker
 docker cp /tmp/erpnext-seed-demo.py $(docker compose -f pwd.yml ps -q backend):/tmp/
 docker compose -f pwd.yml exec -T -w /home/frappe/frappe-bench/sites backend ../env/bin/python /tmp/erpnext-seed-demo.py frontend
 ```
 
 ## 8. Firewall
 
-- **Security List de la VCN** (consola de Oracle): ingress TCP 8080 desde `0.0.0.0/0`.
-- **iptables de la VM**: la imagen de Ubuntu de Oracle rechaza todo en `INPUT` salvo el 22, pero no hizo falta abrir
-  el 8080. Docker publica el puerto con sus propias reglas (NAT y cadena `FORWARD`), que no pasan por esa regla. Si
-  algún día el puerto no responde desde afuera con el Security List abierto, revisar `sudo iptables -L -n` antes de
-  agregar reglas.
+- **Security List de la VCN**: TCP 80/443 abiertos, sin ingress 8080, SSH conservado;
+  confirmado por Cata. VNIC sin NSGs.
+- **iptables**: regla INPUT 80/443 persistida antes del REJECT. Se conservaron las reglas Docker.
+- Caddy recibe tráfico público y lo envía a localhost:8080. La prueba externa
+  confirmó HTTPS válido y que 8080 no es accesible. Ver evidencias de TRZ-118.
 
 ## 9. Verificación
 
@@ -202,12 +216,17 @@ con 4 órdenes `pending`. No se probó todavía `reportDispatch` ni el envío de
 | Variable | Valor | Dónde |
 |---|---|---|
 | `ERP_PROVIDER` | `erpnext` | Vercel. En local, `mock` si no querés pegarle al servidor |
-| `ERP_BASE_URL` | `http://129.146.120.18:8080` | Vercel y `.env.local` |
+| `ERP_BASE_URL` | `https://erpnext.132-226-26-114.sslip.io` | Vercel y `.env.local` |
 | `ERP_API_KEY`, `ERP_API_SECRET` | las del paso 5 | Vercel y `.env.local`. **Solo servidor**: nunca con prefijo `NEXT_PUBLIC_` |
 
 ## Pendientes conocidos
 
-- **HTTP sin TLS**: las keys viajan en texto plano entre Vercel y la VM. Para algo más que la demo, poner un dominio
-  con HTTPS (por ejemplo un reverse proxy con Let's Encrypt).
-- **IP efímera**: si cambia, actualizar `ERP_BASE_URL`. Se puede reservar una IP pública en Oracle.
 - **Backups**: no hay backups automáticos. Manual: `docker compose -f pwd.yml exec backend bench --site frontend backup`.
+
+## Estado de TRZ-118
+
+IP reservada y HTTPS público verificados; API key y secret renovados y anteriores
+revocados. Cata confirmó Vercel. Reinicio completo verificado después de corregir
+el arranque automático: misma IP, TLS válido, servicios activos y lecturas del
+adaptador real correctas. La interfaz desplegada no se inspeccionó en esa prueba.
+Ver [evidencias y siguiente pase](trz118-https-estado.md).

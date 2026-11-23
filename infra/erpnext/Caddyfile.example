@@ -1,0 +1,5 @@
+# Plantilla: reemplazar erp.example.com por el dominio real con DNS ya configurado.
+# Caddy corre en la misma VM que el frontend de ERPNext, que escucha en 8080.
+erp.example.com {
+    reverse_proxy 127.0.0.1:8080
+}

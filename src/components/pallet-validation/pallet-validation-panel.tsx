@@ -1,5 +1,10 @@
 "use client";
 
+import { ObservedContentForm } from "@/components/pallets/observed-content-form";
+import { PalletContentList } from "@/components/pallets/content-list";
+import { Modal } from "@/components/ui/modal";
+import type { ObservedPalletItem } from "@/lib/pallets/item-input";
+
 import { Badge, EmptyState, InlineAlert, OperationProgress } from "@/components/ui/design-system";
 import { ScanButton } from "@/components/ui/scan-button";
 
@@ -26,6 +31,7 @@ function PalletRow({ pallet }: { pallet: OrderPalletValidation }) {
       <span aria-hidden="true" className={`mt-1 size-2.5 shrink-0 rounded-full ${pallet.validatedAt ? "bg-emerald-600" : "border border-slate-300 bg-white"}`} />
       <div className="min-w-0 flex-1">
         <p className="break-all font-mono font-semibold text-slate-950">{pallet.qrCode}</p>
+        {pallet.contents && pallet.contents.length > 1 && <PalletContentList items={pallet.contents} />}
         <p className="text-stone-500">
           {pallet.productName} ({pallet.productSku}) · Lote {pallet.batchNumber}
         </p>
@@ -53,6 +59,7 @@ export function PalletValidationPanel({
   dispatchDiscrepancies,
   initialScanHistory,
 }: PalletValidationPanelProps) {
+  const [observing, setObserving] = useState<OrderPalletValidation | null>(null);
   const scanLocked = useRef(false);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
@@ -82,7 +89,9 @@ export function PalletValidationPanel({
   const history = latestScans(scanHistory, initialScanHistory, new Set(missingPallets.map((pallet) => pallet.qrCode)));
 
   const handleScan = useCallback(
-    (qrCode: string) => {
+    (qrCode: string, items?: ObservedPalletItem[]) => {
+      const expected = pallets.find((pallet) => pallet.qrCode === qrCode.trim());
+      if (items === undefined && expected?.contents?.length) { setObserving(expected); setIsScannerOpen(false); return; }
       if (scanLocked.current) return;
       scanLocked.current = true;
       setSubmissionError(null);
@@ -90,9 +99,10 @@ export function PalletValidationPanel({
       setScannedCode(null);
       startTransition(async () => {
         try {
-          const validationResult = await validatePallet(orderId, qrCode);
+          const validationResult = await validatePallet(orderId, qrCode, items);
 
           setResult(validationResult);
+          setObserving(null);
           setScannedCode(qrCode.trim());
           setScanHistory((current) => [{
             code: qrCode,
@@ -115,7 +125,7 @@ export function PalletValidationPanel({
         }
       });
     },
-    [orderId],
+    [orderId, pallets],
   );
 
   const isSuccess = result?.outcome === "validated";
@@ -130,6 +140,12 @@ export function PalletValidationPanel({
 
   return (
     <div className="list-content space-y-5">
+      {dispatchDiscrepancies.some((item) => item.type === "content_mismatch") && <InlineAlert variant="danger">Hay diferencias por ítem pendientes de corregir. Compará producto, lote y cantidad, y volvé a validar el pallet.</InlineAlert>}
+      <Modal open={Boolean(observing)} onClose={() => { if (!isPending) setObserving(null); }} title="Validar contenido del pallet" busy={isPending}>
+        {observing && <><p className="font-mono">{observing.qrCode}</p><PalletContentList items={observing.contents ?? []} />
+          <ObservedContentForm key={observing.id} pending={isPending} expected={(observing.contents ?? []).map((item) => ({ productSku: item.productSku, batchNumber: item.batchNumber, quantity: item.quantity }))}
+            onConfirm={(items) => handleScan(observing.qrCode, items)} /></>}
+      </Modal>
       <div className="grid gap-8 lg:grid-cols-[350px_minmax(0,1fr)]">
         <div className="space-y-3">
           <ScanButton

@@ -1,6 +1,9 @@
+import type { PalletContent } from "../pallets/contents";
 import type { PalletLocation } from "../locations/format.ts";
 
 export type ValidationOutcome =
+  | "content_required"
+  | "content_mismatch"
   | "validated"
   | "already_validated"
   | "pallet_not_found"
@@ -24,6 +27,7 @@ export type PalletValidationResult = {
 };
 
 export type OrderPalletValidation = {
+  contents?: PalletContent[];
   id: string;
   qrCode: string;
   productName: string;

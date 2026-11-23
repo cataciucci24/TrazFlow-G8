@@ -1,4 +1,5 @@
 export type PalletScanDetails = {
+  items?: { product_name: string; product_sku: string; batch_number: string; quantity: number | null; unit_of_measure: string }[];
   qr_code: string;
   product_name: string;
   product_sku: string;
@@ -18,6 +19,7 @@ export type PalletScanResult = {
 };
 
 const ACTIONS: Record<string, string> = {
+  pallet_returned: "Reingreso a depósito",
   order_created: "Creación de orden",
   pallet_associated: "Asociación a una orden",
   pallet_dissociated: "Desasociación de una orden",

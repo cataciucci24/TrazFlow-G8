@@ -1,7 +1,11 @@
 {
   "compilerOptions": {
     "target": "ES2017",
-    "lib": ["dom", "dom.iterable", "esnext"],
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
@@ -20,7 +24,9 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": [
+        "./src/*"
+      ]
     }
   },
   "include": [
@@ -33,7 +39,17 @@
     ".next/forecast-e2e/types/**/*.ts",
     ".next/forecast-e2e/dev/types/**/*.ts",
     ".next/e2e/types/**/*.ts",
-    ".next/e2e/dev/types/**/*.ts"
+    ".next/e2e/dev/types/**/*.ts",
+    ".next/stock-import-local/types/**/*.ts",
+    ".next/stock-import-local/dev/types/**/*.ts",
+    ".next/stock-import-erp-local/types/**/*.ts",
+    ".next/stock-import-erp-local/dev/types/**/*.ts",
+    ".next/plan-changes-local/types/**/*.ts",
+    ".next/plan-changes-local/dev/types/**/*.ts",
+    ".next/subscription-local/types/**/*.ts",
+    ".next/subscription-local/dev/types/**/*.ts"
   ],
-  "exclude": ["node_modules"]
+  "exclude": [
+    "node_modules"
+  ]
 }

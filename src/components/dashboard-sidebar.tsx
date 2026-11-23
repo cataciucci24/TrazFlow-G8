@@ -60,6 +60,7 @@ export function DashboardSidebar({ role, companyPlan }: DashboardSidebarProps) {
         { href: "/dashboard", label: "Inicio", icon: <HomeIcon />, active: pathname === "/dashboard" },
         { href: "/dashboard/orders", label: "Órdenes de despacho", icon: <OrdersIcon />, active: isOrders },
         { href: "/dashboard/next-orders", label: "Próximos pedidos", icon: <OrdersIcon />, active: pathname.startsWith("/dashboard/next-orders") },
+        { href: "/dashboard/trip-planning", label: "Planificación de viajes", icon: <OrdersIcon />, active: pathname.startsWith("/dashboard/trip-planning") },
         { href: "/dashboard/inventory", label: "Stock", icon: <InventoryIcon />, active: isInventory },
         { href: "/dashboard/alerts", label: "Alertas", icon: <AlertIcon />, active: isAlerts },
         { href: "/dashboard/pallets", label: "Pallets", icon: <PalletIcon />, active: isPallets },
@@ -71,6 +72,8 @@ export function DashboardSidebar({ role, companyPlan }: DashboardSidebarProps) {
     : role === "driver_operator"
       ? [{ href: "/dashboard/deliveries", label: "Mis entregas", icon: <ScanIcon />, active: pathname.startsWith("/dashboard/deliveries") }]
       : [{ href: "/dashboard", label: detailTitle, icon: <ScanIcon />, active: pathname === "/dashboard" || pathname.startsWith("/dashboard/orders/") }];
+
+  if (role === "warehouse_operator") links.push({ href: "/dashboard/pallets/armar", label: "Armar pallet", icon: <PalletIcon />, active: pathname.startsWith("/dashboard/pallets/armar") });
 
   if (role !== "driver_operator") links.push({ href: "/dashboard/locations", label: "Ubicaciones", icon: <InventoryIcon />, active: pathname.startsWith("/dashboard/locations") });
 

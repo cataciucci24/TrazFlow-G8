@@ -66,7 +66,10 @@ test(`el chofer procesa un QR y la entrega queda cerrada (${viewport.width}px)`,
     await expect(details).not.toContainText('chofer@');
     await page.screenshot({ path: testInfo.outputPath('confirm-delivery.png') });
     await present();
-    await dialog.getByRole('button', { name: 'Entregado', exact: true }).click();
+    await expect(dialog.getByLabel('SKU', { exact: true })).toHaveValue('SKU-DEMO');
+    await expect(dialog.getByLabel('Lote', { exact: true })).toHaveValue('LOTE-DEMO');
+    await expect(dialog.getByLabel('Cantidad', { exact: true })).toHaveValue('10');
+    await dialog.getByRole('button', { name: 'Confirmar recepción por ítem', exact: true }).click();
     await expect(page.getByText('1 / 1', { exact: true })).toBeVisible();
     await expect(page.getByText('Entregado', { exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: /Escanear pallet en la entrega/ })).toBeDisabled();

@@ -2,103 +2,114 @@
 
 ## Preparación
 
-Desde la raíz del proyecto: `npm ci` y `npx playwright install chromium`.
-Si el entorno usa certificados corporativos, ejecutar primero en PowerShell
-`$env:NODE_OPTIONS='--use-system-ca'`.
+Desde la raíz: `npm ci` y `npx playwright install chromium`.
+En Windows con certificados corporativos: `$env:NODE_OPTIONS='--use-system-ca'`.
 
-## Comandos
+## Unitarios y cobertura
+
+`npm test` ejecuta todos los tests de `src/**/*.test.{ts,tsx}` y
+`tests/unit/**/*.test.{ts,tsx}` con Vitest. `npm run test:unit` es un alias del
+mismo comando. Los tests nuevos usan imports explícitos desde `vitest`.
+Se conservan las aserciones de `node:assert/strict` existentes.
+
+`server-only` tiene un alias a `tests/helpers/server-only.ts` exclusivamente en
+Vitest. La protección de Next en producción sigue vigente y las suites estáticas
+de fronteras servidor/cliente siguen ejecutándose.
+
+`npm run test:coverage` (también `test:coverage:unit`) usa únicamente V8 de Vitest.
+El reporte queda en `coverage/index.html` y `coverage/coverage-summary.json`.
+Incluye archivos TS/TSX de `src` sin ejecutar y excluye los tests. Los componentes
+históricos evaluados con `transpileModule/new Function` no tienen atribución
+completa al TSX original. SQL y E2E no se suman a estos porcentajes.
+
+`npm run typecheck` ejecuta `next typegen && tsc --noEmit`: los tipos de rutas y
+layouts se generan antes de comprobar TypeScript. `*.tsbuildinfo` ya está ignorado
+y no forma parte del repositorio.
+
+## Navegador: una configuración, siete proyectos
+
+Todas las suites usan `playwright.config.ts`. En sus servidores de desarrollo,
+`NEXT_TEST_DIST_DIR` desactiva `serverComponentsHmrCache`: los fixtures y la base
+cambian entre pasos y una recarga HMR no debe reutilizar respuestas viejas. La
+configuración de producción conserva su comportamiento. Se ejecuta una suite por invocación,
+porque las APIs de fixtures de `e2e` y `forecast` usan el mismo puerto y los modos
+de importación requieren entornos distintos. Sin `--project` se elige `e2e`.
+`npx playwright test --list` enumera los siete proyectos sin iniciar servicios.
 
 | Comando | Alcance |
 | --- | --- |
-| `npm test` | Suite Node en `src/**/*.test.ts` |
-| `npm run test:unit` | Suite Vitest en `tests/unit` |
-| `npm run test:backend` | Las dos suites de código anteriores |
-| `npm run test:coverage` | Cobertura V8/c8 de la suite Node, sobre todos los archivos TS/TSX de `src` |
-| `npm run test:coverage:unit` | Reporte independiente de la suite Vitest |
-| `npm run test:e2e` | Cuatro pruebas Chromium con servicios HTTP locales de fixtures |
-| `npm run test:demo` | Recorrido visual del chofer en Chromium visible |
-| `npm run test:all` | Las dos suites de código y la suite de navegador |
+| `npm run test:e2e` | `tests/e2e`, salvo pronósticos; API HTTP de fixtures |
+| `npm run test:demo` | Entrega del chofer, visible, QR real y pausas de presentación |
+| `npm run test:e2e:forecast` | Pronósticos con su API HTTP de fixtures |
+| `npm run test:e2e:plan-changes` | Cambios de plan contra Supabase local |
+| `npm run test:e2e:stock-import` | Importación directa sin ERP contra Supabase local |
+| `npm run test:e2e:stock-import-erp` | Importación con mock ERP contra Supabase local |
+| `npm run test:e2e:subscription` | Suscripciones contra Supabase local |
+| `npm run test:all` | Unitarios y proyecto `e2e` |
 
-El reporte principal queda en `coverage/backend/index.html` y los números en
-`coverage/backend/coverage-summary.json`. El reporte Vitest queda en `coverage/unit/index.html`.
-Los porcentajes de ambos reportes no se suman ni se promedian: usan ejecuciones y
-transformaciones diferentes. El reporte principal conserva la medición de la suite
-existente de 186 pruebas; las 44 pruebas Vitest se informan separadamente.
+También se admite `npx playwright test --project=<nombre>`.
+`tests/e2e` valida navegación, cookies y acciones contra APIs simuladas:
+no demuestra RLS ni RPC reales. `tests/local` requiere Docker y `npx supabase start`;
+consulta las credenciales del stack local y rechaza una URL distinta de
+`http://127.0.0.1:54321`. Crea y elimina datos sintéticos. Una interrupción puede
+dejar fixtures que requieran limpieza local.
 
-## Demo breve sugerida (4–6 minutos)
+Los puertos 3100/54329 son para fixtures HTTP y 3102 para las suites con Supabase
+real local. No se reutilizan servidores externos. Los fallos conservan trace,
+video y captura en `test-results`; `npx playwright show-report` abre el reporte.
+La demo conserva video incluso cuando aprueba.
 
-1. Ejecutar `npm run test:backend` y mostrar las 186 + 44 pruebas aprobadas.
-2. Abrir `src/lib/erp-outbox/processor.test.ts`: explicar idempotencia y errores/reintentos.
-3. Abrir `tests/unit/expiration-rules.test.ts`: mostrar casos en los límites de vencimiento
-   y la estructura arrange/act/assert de Vitest.
-4. Ejecutar `npm run test:demo`: login del chofer, orden asignada, QR detectado por ZXing,
-   confirmación, cierre y desaparición de pendientes. `test.step` describe las fases.
-   La demo usa `playwright.demo.config.ts` con `slowMo: 1200` (1,2 segundos de demora
-   en las operaciones del navegador). Para cambiar el ritmo, ajustar ese valor en
-   milisegundos. `npm run test:e2e` conserva la velocidad normal.
-   Además, se detiene cuatro segundos en las pantallas clave y ocho al final;
-   conserva el video aun cuando el test aprueba, dentro de `test-results`.
-5. Mostrar el reporte HTML y explicar el porcentaje de líneas; señalar páginas sin cobertura
-   y proponer cubrir progresivamente acciones y consultas críticas antes de fijar una meta.
+## CI
 
-## Alcance real del recorrido visual
+`.github/workflows/ci.yml` corre en PR a `develop`/`main`, en push a esas ramas
+y a `codex/persona-1-*`, y manualmente, con Node 24:
+instalación reproducible, lint, tipos, todos los unitarios y build. Solo usa
+variables falsas de Supabase. El check se llama `CI`.
 
-Playwright levanta Next en `127.0.0.1:3100` y un servicio HTTP de fixtures en
-`127.0.0.1:54329`. Ambos puertos deben estar libres; no reutiliza servidores externos.
-El servicio permite probar cookies, navegación, Server Components, Server Actions y
-revalidación sin credenciales reales. Solo existe como proceso de test y nunca se
-importa desde producción. Los endpoints no implementados fallan con HTTP 501.
+Antes de lint también corre `npm run check:migrations`: versiones SQL duplicadas
+o nombres sin versión hacen fallar CI antes de intentar desplegar. Se verificó
+con dos archivos de prueba que compartían `20261122100000`.
 
-La cámara sintética entrega imágenes de QR al lector ZXing real: no reemplaza el
-lector ni llama directamente a su callback. La prueba verifica una única confirmación,
-el progreso completo y la salida de la entrega de la lista pendiente.
-Esto valida la integración de la aplicación con una API simulada; no demuestra RLS,
-la RPC real de entrega ni funcionamiento con una cámara física.
+Cata activó el ruleset que exige PR y el check CI en main/develop, verificado por
+API. Crear el workflow no configura por sí solo esa protección. La ejecución
+[45105103269](https://github.com/cataciucci24/TrazFlow-G8/actions/runs/45105103269)
+del commit `96e0b5a` terminó correctamente en aproximadamente un minuto. La
+ejecución del PR final debe consultarse para verificar su propio commit.
 
-El login comprueba HTTP 400, el código `invalid_credentials` y las credenciales de prueba
-enviadas. Otro caso aborta la conexión y exige un mensaje distinto. El login actual usa
-Supabase desde el navegador; por eso la interceptación de Playwright es válida.
+Los E2E quedan fuera del check obligatorio: las suites locales necesitan Docker,
+migraciones y datos de prueba; las de fixtures verifican otra capa. Se ejecutan
+por separado antes de entregar los flujos afectados. No se afirma un tiempo en
+Actions hasta medirlo allí.
 
-Los fallos conservan captura, video y trace en `test-results`. El reporte HTML de
-Playwright queda en `playwright-report`; abrirlo con `npx playwright show-report`.
+## Demo de calidad
 
-## Interpretación de cobertura
+No ejecutar un build mientras corre Playwright: Next limpia `.next` y puede
+borrar los directorios de los servidores de prueba. Ejecutar build y suites
+de navegador en secuencia.
 
-Medición inicial: líneas/sentencias 21,45% (2724/12699), funciones 43,77% (116/265),
-ramas 74,72% (618/827). Los archivos sin ejecutar están incluidos.
-No significa que el 21,45% de las historias esté aprobado ni que el resto tenga errores.
-V8 cuenta ramas observables y asigna rangos sintéticos a archivos sin ejecutar;
-ese 74,72% no equivale a cubrir tres cuartos de todas las decisiones de negocio.
-Los componentes evaluados mediante transpileModule/new Function no tienen atribución
-completa a su TSX original. Los E2E y SQL no se agregan a estos porcentajes.
+1. Ejecutar `npm test` y mostrar el total real que informa Vitest.
+2. Mostrar idempotencia/reintentos en `src/lib/erp-outbox/processor.test.ts`.
+3. Mostrar reglas de negocio en `tests/unit/expiration-rules.test.ts`.
+4. Ejecutar `npm run test:demo`: chofer, QR, confirmación y salida de pendientes.
+5. Abrir cobertura y explicar las limitaciones anteriores.
 
 ## SQL
 
-Usar una base local o descartable; nunca correr fixtures sobre el proyecto compartido.
-Iniciar Docker Desktop y ejecutar `npx supabase start`, que aplica las migraciones a
-la base local nueva. No usar `db reset` sobre datos que se necesiten conservar.
-Las suites son scripts con aserciones y rollback, no suites pgTAP.
+Las suites de `supabase/tests` usan aserciones y rollback, no pgTAP. Ejecutarlas
+solo sobre una base local o descartable. El seed local vive en
+`supabase/seeds/001_demo.sql`; `supabase/config.toml` carga `./seeds/*.sql` en orden.
+Nunca ejecutar los seeds de demo contra la nube.
 
-En PowerShell, para la suite de chofer:
+`npm run test:sql` ejecuta las 35 suites locales reproducibles contra el contenedor
+Supabase identificado por `project_id` en config.toml. No acepta conexiones remotas.
+Excluye explícitamente el fixture y los cuatro archivos `*_cloud_state_checks.sql`:
+necesitan la réplica histórica y el orden de migraciones indicado en sus encabezados.
+Un test sin rollback se rechaza; cualquier fallo hace terminar el comando en rojo.
 
 ```powershell
 Get-Content -Raw supabase/tests/us_erp01_ops07_driver_delivery.sql | docker exec -i supabase_db_TrazFlow-G8 psql -U postgres -d postgres -v ON_ERROR_STOP=1
 if ($LASTEXITCODE -ne 0) { throw 'Falló la suite SQL' }
 ```
 
-Algunas suites históricas mencionan roles retirados y pueden necesitar actualización
-de fixtures. Conservar el error y distinguir un fixture desactualizado de una regresión.
-Aplicar migraciones correctamente no demuestra por sí solo que pasen las pruebas SQL.
-
-## Resultado de esta revisión
-
-- Node: 186/186 aprobadas; Vitest: 44/44 aprobadas.
-- Chromium: 4/4 aprobadas, incluido el recorrido de chofer con QR.
-- TypeScript y ESLint: aprobados.
-- SQL: no ejecutado. Docker Desktop inició, pero al descargar Supabase su almacenamiento
-  pasó a solo lectura y el disco C quedó sin espacio. Se detuvo la descarga.
-- Build: no completado por `ENOSPC` (sin espacio). Se eliminó únicamente la caché
-  regenerable `.next/cache` para recuperar espacio; no se eliminaron datos ni código.
-
-Liberar espacio y recuperar el funcionamiento de Docker es requisito para continuar
-la validación SQL y repetir el build. No se hicieron cambios en la base remota.
+Algunas suites históricas pueden necesitar actualizar fixtures de roles retirados.
+Aplicar migraciones no demuestra que pasen las pruebas SQL.

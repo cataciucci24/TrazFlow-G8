@@ -6,6 +6,7 @@ const orderId = '20000000-0000-4000-8000-000000000001';
 const palletId = '30000000-0000-4000-8000-000000000001';
 const user = { id: driverId, email: 'chofer@trazflow.test', aud: 'authenticated', role: 'authenticated', app_metadata: {}, user_metadata: {}, created_at: '2026-01-01T00:00:00Z' };
 let delivered = false;
+let mixed = false;
 let confirmations = 0;
 let activeRole = 'driver_operator';
 let validated = false;
@@ -26,6 +27,10 @@ const roleEmails = { 'chofer@trazflow.test': 'driver_operator', 'deposito@trazfl
 const product = { id: 'product-demo', name: 'Producto Demo con descripción extendida para comprobar el diseño en celular', sku: 'SKU-DEMO', unit_of_measure: 'cajas' };
 const batch = { id: 'batch-demo', batch_number: 'LOTE-DEMO', expiration_date: '2099-12-31', source_system: 'erp', products: product };
 const pallet = { id: palletId, qr_code: 'PAL-DEMO-001', status: 'assigned', current_location: 'Depósito central — Sector de preparación de pedidos', warehouse_code: 'CENTRAL', quantity: 10, created_at: '2026-10-25T12:00:00Z', source_system: 'trazflow', external_id: null, synced_at: null, batches: batch, traceability_events: [{ count: 1 }] };
+const palletContent = { item_id: 'item-demo', pallet_id: palletId, company_id: 'company-demo', batch_id: batch.id,
+  batch_number: batch.batch_number, expiration_date: batch.expiration_date, product_id: product.id,
+  product_name: product.name, product_sku: product.sku, unit_of_measure: product.unit_of_measure,
+  quantity: pallet.quantity, lot_source_system: batch.source_system };
 const part = value => Buffer.from(JSON.stringify(value)).toString('base64url');
 const token = `${part({ alg: 'HS256', typ: 'JWT' })}.${part({ sub: driverId, aud: 'authenticated', role: 'authenticated', exp: 4102444800 })}.fixture`;
 createServer(async (req, res) => {
@@ -39,6 +44,8 @@ createServer(async (req, res) => {
   const body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString()) : {};
   const send = (data, status = 200) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(data)); };
   if (url.pathname === '/health') return send({ ok: true });
+  if (url.pathname === '/test/reset') mixed = false;
+  if (url.pathname === '/test/mixed') { mixed = true; return send({ ok: true }); }
   if (url.pathname === '/test/usage') { planUsage = body.usage ?? planUsage; usageUnavailable = Boolean(body.unavailable); return send({ok: true}); }
   if (url.pathname === '/rest/v1/rpc/get_company_plan_usage') return usageUnavailable ? send({message: 'unavailable'}, 500) : send([planUsage]);
   if (url.pathname === '/test/reset') { planUsage = { operators: 0, pallets: 0, month_start: '2026-10-01', pallets_complete: true }; usageUnavailable = false; delivered = false; confirmations = 0; validated = false; activeRole = 'driver_operator'; companyPlanCode = null; plansUnavailable = false; catalogPlans = subscriptionPlans; planMutations = 0; companyPlanUnavailable = false; catalogUnavailable = false; return send({ ok: true }); }
@@ -63,17 +70,36 @@ createServer(async (req, res) => {
     const profile = { id: driverId, company_id: 'company-demo', name: 'Operador Demo', email: user.email, role: activeRole, revoked_at: null };
     return send(url.searchParams.has('role') ? [profile] : profile);
   }
+  if (url.pathname === '/rest/v1/distributors') return send([{ id: '40000000-0000-4000-8000-000000000001', name: 'Destinatario Demo' }]);
   if (url.pathname === '/rest/v1/dispatch_orders') {
-    const order = { id: orderId, driver_id: driverId, distributor_id: 'recipient-demo', status: delivered ? 'delivered' : activeRole === 'driver_operator' ? 'confirmed' : 'draft', source_system: 'trazflow', external_id: null, synced_at: null, estimated_dispatch_date: '2026-10-25', created_at: '2026-10-25T12:00:00Z', notes: 'Pedido de prueba con observaciones para comprobar que todo el contenido siga visible en una pantalla pequeña.', distributors: { name: 'Destinatario Demo' }, driver: { name: 'Chofer Demo' }, order_pallets: [{ validated_at: validated ? '2026-10-25T12:00:00Z' : null, delivery_outcome: delivered ? 'delivered' : null }] };
+    const order = { id: orderId, driver_id: driverId, distributor_id: '40000000-0000-4000-8000-000000000001', status: delivered ? 'delivered' : activeRole === 'driver_operator' ? 'confirmed' : 'draft', source_system: 'trazflow', external_id: null, synced_at: null, estimated_dispatch_date: '2026-10-25', created_at: '2026-10-25T12:00:00Z', notes: 'Pedido de prueba con observaciones para comprobar que todo el contenido siga visible en una pantalla pequeña.', distributors: { name: 'Destinatario Demo' }, driver: { name: 'Chofer Demo' }, order_pallets: [{ validated_at: validated ? '2026-10-25T12:00:00Z' : null, delivery_outcome: delivered ? 'delivered' : null }] };
+    const statusFilter = url.searchParams.get('status');
+    const distributorFilter = url.searchParams.get('distributor_id');
+    const matchesStatus = !statusFilter || statusFilter === 'eq.' + order.status
+      || (statusFilter.startsWith('in.(') && statusFilter.slice(4, -1).split(',').map(value => value.replaceAll('"', '')).includes(order.status));
+    if (!matchesStatus || (distributorFilter && distributorFilter !== 'eq.' + order.distributor_id)) return send([]);
     return send(url.searchParams.has('id') ? order : delivered ? [] : [order]);
   }
   if (url.pathname === '/rest/v1/pallets') return send([pallet]);
+  if (url.pathname === '/rest/v1/pallet_contents') return send(mixed ? [palletContent, { ...palletContent,
+    item_id: 'item-demo-2', batch_id: 'batch-demo-2', batch_number: 'LOTE-2', product_id: 'product-demo-2',
+    product_name: 'Queso mixto', product_sku: 'QSO-2', quantity: 2.5, unit_of_measure: 'kilogramos' }] : [palletContent]);
+  if (url.pathname === '/rest/v1/dispatch_notes') return send(mixed ? {
+    id: 'note-demo', order_id: orderId, number: 1, issued_at: '2026-11-23T12:00:00Z', content: {
+      issuer: { name: 'TrazFlow Demo' }, recipient: { name: 'Destinatario Demo' }, lines: [
+        { palletCode: pallet.qr_code, productName: 'Arroz', productSku: 'ARZ-1', lotNumber: 'L1', quantity: 10, unit: 'cajas' },
+        { palletCode: pallet.qr_code, productName: 'Queso mixto', productSku: 'QSO-2', lotNumber: 'L2', quantity: 2.5, unit: 'kilogramos' },
+      ],
+    },
+  } : null);
   if (url.pathname === '/rest/v1/products') return send([product]);
   if (url.pathname === '/rest/v1/batches') return send([batch]);
   if (url.pathname === '/rest/v1/warehouses') return send([{ code: 'CENTRAL', name: 'Depósito central', source_system: 'erp', active: true, external_id: 'CENTRAL', synced_at: null }]);
-  if (url.pathname === '/rest/v1/order_pallets') return send([{ pallet_id: palletId, pallets: pallet, validated_at: validated ? '2026-10-25T12:00:00Z' : null, validated_by: validated ? driverId : null }]);
+  if (url.pathname === '/rest/v1/order_pallets') return send([{ order_id: orderId, pallet_id: palletId, pallets: pallet,
+    expected_items: [{ productId: product.id, batchId: batch.id, quantity: pallet.quantity }],
+    validated_at: validated ? '2026-10-25T12:00:00Z' : null, validated_by: validated ? driverId : null }]);
   if (url.pathname === '/rest/v1/order_notifications') return send([{ id: 'notice-demo', event_type: 'dispatch_wrong_pallet', description: 'Un pallet escaneado no corresponde a esta orden.', pallet_id: palletId, created_at: '2026-10-25T12:00:00Z' }]);
-  if (['order_delivery_receipts', 'traceability_events', 'distributor_batch_stocks', 'distributor_product_stocks', 'dispatch_order_lines'].some(table => url.pathname === `/rest/v1/${table}`)) return send([]);
+  if (['movements', 'order_delivery_receipts', 'traceability_events', 'distributor_batch_stocks', 'distributor_product_stocks', 'dispatch_order_lines'].some(table => url.pathname === `/rest/v1/${table}`)) return send([]);
   if (url.pathname === '/rest/v1/erp_sync_runs' || url.pathname === '/rest/v1/erp_company_settings') return send(null);
   if (url.pathname === '/rest/v1/rpc/get_expiration_thresholds') return send([{ critical_days: 30, caution_days: 60, upcoming_days: 90 }]);
   if (url.pathname === '/rest/v1/rpc/erp_stock_overview') return send([]);
@@ -81,8 +107,12 @@ createServer(async (req, res) => {
   if (url.pathname === '/rest/v1/rpc/erp_integration_summary') return send([{ pending_count: 1, unreported_count: 1 }]);
   if (url.pathname === '/rest/v1/rpc/erp_dispatched_unreported') return send([{ order_id: orderId, order_external_id: 'ERP-ORDEN-DEMO-001', order_status: 'confirmed', confirmed_at: '2026-10-25T12:00:00Z', distributor_name: 'Destinatario Demo', event_id: '40000000-0000-4000-8000-000000000001', event_status: 'failed', attempts: 1, last_error_code: 'timeout', next_attempt_at: null, total_count: 1 }]);
   if (url.pathname === '/rest/v1/rpc/erp_integration_activity') return send([{ kind: 'dispatch_confirmed', id: '40000000-0000-4000-8000-000000000001', status: 'failed', occurred_at: '2026-10-25T12:00:00Z', finished_at: null, attempts: 1, next_attempt_at: null, error_code: 'timeout', error_message: 'El ERP no respondió a tiempo. El reporte queda pendiente para el siguiente intento.', error_count: 1, order_id: orderId, order_external_id: 'ERP-ORDEN-DEMO-001', pallet_count: 1, erp_reference: null, provider: 'mock', total_count: 1 }]);
-  if (url.pathname === '/rest/v1/rpc/validate_order_pallet') {
-    if (body.p_order_id !== orderId || body.p_qr_code !== pallet.qr_code) return send({ message: 'Unexpected validation input' }, 400);
+  if (url.pathname === '/rest/v1/rpc/erp_outbox_claim') return send([]);
+  if (url.pathname === '/rest/v1/rpc/validate_order_pallet_items') {
+    if (body.p_order_id !== orderId || body.p_qr_code !== pallet.qr_code ||
+      JSON.stringify(body.p_items) !== JSON.stringify([{ productSku: product.sku, batchNumber: batch.batch_number, quantity: pallet.quantity }])) {
+      return send({ message: 'Unexpected validation items' }, 400);
+    }
     validated = true;
     return send([{ outcome: 'validated', pallet_id: palletId, qr_code: pallet.qr_code, product_name: product.name, product_sku: product.sku, batch_number: batch.batch_number, validated_at: '2026-10-25T12:00:00Z' }]);
   }
@@ -93,8 +123,11 @@ createServer(async (req, res) => {
     last_event_type: delivered ? 'delivery_confirmed' : validated ? 'qr_scan' : activeRole === 'driver_operator' ? 'dispatch_confirmed' : 'location_assigned', last_event_at: '2026-10-25T12:00:00Z',
     actor_name: delivered ? 'Chofer Demo' : 'Operador Demo', actor_role: delivered ? 'driver_operator' : 'warehouse_operator',
   }] : []);
-  if (url.pathname === '/rest/v1/rpc/confirm_delivery_pallet') {
-    if (body.p_order_id !== orderId || body.p_qr_code !== 'PAL-DEMO-001' || body.p_discrepancy_type !== null) return send({ message: 'Unexpected delivery input' }, 400);
+  if (url.pathname === '/rest/v1/rpc/confirm_delivery_pallet_items') {
+    if (body.p_order_id !== orderId || body.p_qr_code !== 'PAL-DEMO-001' || body.p_discrepancy_type !== null ||
+      JSON.stringify(body.p_items) !== JSON.stringify([{ productSku: product.sku, batchNumber: batch.batch_number, quantity: pallet.quantity }])) {
+      return send({ message: 'Unexpected delivery items' }, 400);
+    }
     confirmations++;
     const outcome = delivered ? 'already_processed' : 'delivered';
     delivered = true;

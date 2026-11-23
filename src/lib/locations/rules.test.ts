@@ -1,5 +1,5 @@
 ﻿import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { normalizeLocationCode, validLocationCode, findScannedLocation, locationQr, canLocatePallet } from "./rules.ts";
 test("códigos de ubicación estables, normalizados y acotados", () => {
   assert.equal(normalizeLocationCode(" a-01_2 "), "A-01_2");

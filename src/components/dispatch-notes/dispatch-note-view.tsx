@@ -1,5 +1,5 @@
 import { DispatchNoteQr } from "@/components/dispatch-notes/dispatch-note-qr";
-import { dispatchNoteTotals, formatDispatchNoteNumber, type DispatchNote } from "@/lib/dispatch-notes/types";
+import { dispatchNotePalletCount, dispatchNoteTotals, formatDispatchNoteNumber, type DispatchNote } from "@/lib/dispatch-notes/types";
 
 const DATE_TIME = new Intl.DateTimeFormat("es-AR", { dateStyle: "short", timeStyle: "short", timeZone: "America/Argentina/Buenos_Aires" });
 const DATE = new Intl.DateTimeFormat("es-AR", { dateStyle: "short", timeZone: "UTC" });
@@ -10,6 +10,7 @@ const NUMBER = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 2 });
  * imprime solo este bloque (.print-root). Sin CAI ni CAE: no tiene validez fiscal.
  */
 export function DispatchNoteView({ note }: { note: DispatchNote }) {
+  const palletCount = dispatchNotePalletCount(note.lines);
   const number = formatDispatchNoteNumber(note.number);
   const totals = note.lines.length ? ` · ${dispatchNoteTotals(note.lines)}` : "";
   return (
@@ -35,10 +36,10 @@ export function DispatchNoteView({ note }: { note: DispatchNote }) {
         )}
       </dl>
 
-      {/* Pantallas angostas: una tarjeta por pallet. */}
+      {/* Pantallas angostas: una tarjeta por ítem del pallet. */}
       <ul className="space-y-3 sm:hidden print:hidden" aria-label={`Pallets del remito ${number}`}>
         {note.lines.map((line) => (
-          <li key={line.palletCode} className="space-y-2 rounded-xl border border-stone-200 p-3">
+          <li key={`${line.palletCode}:${line.productSku}:${line.lotNumber}`} className="space-y-2 rounded-xl border border-stone-200 p-3">
             <p className="break-all font-mono text-xs text-slate-950">{line.palletCode}</p>
             <p className="font-semibold text-slate-950">{line.productName} <span className="font-mono text-xs font-normal text-stone-500">{line.productSku}</span></p>
             <dl className="grid grid-cols-3 gap-2 text-xs">
@@ -67,7 +68,7 @@ export function DispatchNoteView({ note }: { note: DispatchNote }) {
           </thead>
           <tbody>
             {note.lines.map((line) => (
-              <tr key={line.palletCode} className="border-t border-stone-200 align-top">
+              <tr key={`${line.palletCode}:${line.productSku}:${line.lotNumber}`} className="border-t border-stone-200 align-top">
                 <td className="break-all px-3 py-2 font-mono text-xs">{line.palletCode}</td>
                 <td className="break-words px-3 py-2">{line.productName}<span className="block break-all font-mono text-xs text-stone-500">{line.productSku}</span></td>
                 <td className="break-all px-3 py-2 font-mono text-xs">{line.lotNumber}</td>
@@ -80,7 +81,8 @@ export function DispatchNoteView({ note }: { note: DispatchNote }) {
       </div>
 
       <p className="text-right font-semibold text-slate-950">
-        {note.lines.length} {note.lines.length === 1 ? "pallet" : "pallets"}{totals}
+        {palletCount} {palletCount === 1 ? "pallet" : "pallets"}
+        {note.lines.length !== palletCount ? ` · ${note.lines.length} ítems` : ""}{totals}
       </p>
 
       <footer className="space-y-1 border-t border-stone-200 pt-4 text-xs text-stone-500">

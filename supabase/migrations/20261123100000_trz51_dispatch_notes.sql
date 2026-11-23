@@ -60,13 +60,17 @@ returns jsonb language sql stable security definer set search_path = '' as $$
           'productSku', product.sku,
           'lotNumber', batch.batch_number,
           'expirationDate', batch.expiration_date,
-          'quantity', pallet.quantity,
+          'quantity', item.quantity,
           'unit', product.unit_of_measure
         ) order by product.name, batch.batch_number, pallet.qr_code)
       from public.order_pallets relation
       join public.pallets pallet on pallet.id = relation.pallet_id
-      join public.batches batch on batch.id = pallet.batch_id
-      join public.products product on product.id = batch.product_id
+      -- La orden conserva el contenido del despacho aunque el pallet reingrese.
+      cross join lateral jsonb_to_recordset(relation.expected_items)
+        item("productId" uuid, "batchId" uuid, quantity numeric)
+      join public.batches batch on batch.id = item."batchId"
+      join public.products product on product.id = item."productId"
+        and product.id = batch.product_id and product.company_id = orders.company_id
       where relation.order_id = orders.id and relation.expected = true
     ), '[]'::jsonb)
   )

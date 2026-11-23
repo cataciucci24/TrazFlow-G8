@@ -89,6 +89,12 @@ test("depósito valida por código y mantiene escaneo y confirmación al alcance
   await expect(confirm).toBeDisabled();
   await page.getByLabel("Código del pallet").fill("PAL-DEMO-001");
   await page.getByRole("button", { name: "Validar", exact: true }).click();
+  const contentDialog = page.getByRole("dialog", { name: "Validar contenido del pallet", exact: true });
+  await expect(contentDialog).toBeVisible();
+  await expect(contentDialog.getByLabel("SKU", { exact: true })).toHaveValue("SKU-DEMO");
+  await expect(contentDialog.getByLabel("Lote", { exact: true })).toHaveValue("LOTE-DEMO");
+  await expect(contentDialog.getByLabel("Cantidad", { exact: true })).toHaveValue("10");
+  await contentDialog.getByRole("button", { name: "Comparar y confirmar", exact: true }).click();
   await expect(page.locator(".feedback-success").filter({ hasText: "Pallet validado correctamente." })).toBeVisible();
   const details = page.getByRole("region", { name: "Ficha del pallet escaneado" });
   await expect(details.getByText("Validación de carga", { exact: true })).toBeVisible();

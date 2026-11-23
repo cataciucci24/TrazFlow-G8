@@ -1,7 +1,8 @@
 import type { ProductUnit } from "@/lib/pallets/units";
 import { normalizePalletStatus, type StoredPalletStatus } from "@/lib/pallets/status";
 import { createClient } from "@/lib/supabase/server";
-import type { Pallet } from "@/lib/types";
+import { attachPalletContents } from "@/lib/pallets/contents";
+import { mapPalletRow, PALLET_SELECT, type RawPalletRow } from "@/lib/pallets/mapping";
 import type {
   LotPallet,
   LotTraceability,
@@ -9,26 +10,6 @@ import type {
   PalletTraceability,
 } from "@/lib/traceability/types";
 import { buildTimeline, type TimelineEntry, type TimelineEventRow } from "@/lib/traceability/timeline";
-
-type RelatedProduct = {
-  name: string;
-  sku: string;
-  unit_of_measure: ProductUnit;
-};
-
-type RelatedBatch = {
-  batch_number: string;
-  products: RelatedProduct | RelatedProduct[] | null;
-};
-
-type RawPalletRow = {
-  id: string;
-  qr_code: string;
-  status: StoredPalletStatus;
-  current_location: string | null;
-  quantity: number | null;
-  batches: RelatedBatch | RelatedBatch[] | null;
-};
 
 type RawMovementRow = {
   id: string;
@@ -38,28 +19,6 @@ type RawMovementRow = {
   resulting_status: StoredPalletStatus;
   created_at: string;
 };
-
-function mapPallet(row: RawPalletRow): Pallet {
-  const batch = Array.isArray(row.batches) ? row.batches[0] : row.batches;
-  const product = batch
-    ? Array.isArray(batch.products)
-      ? batch.products[0]
-      : batch.products
-    : null;
-
-  return {
-    id: row.id,
-    qrCode: row.qr_code,
-    status: normalizePalletStatus(row.status),
-    currentLocation: row.current_location,
-    productName: product?.name ?? "—",
-    productSku: product?.sku ?? "—",
-    batchNumber: batch?.batch_number ?? "—",
-    quantity: row.quantity,
-    // batches.product_id es obligatorio: el producto solo falta si la fila embebida no llegó.
-    unitOfMeasure: product?.unit_of_measure ?? "unidades",
-  };
-}
 
 function mapMovement(row: RawMovementRow): PalletMovement {
   return {
@@ -81,7 +40,7 @@ export async function getPalletTraceability(
   const { data: palletData, error: palletError } = await supabase
     .from("pallets")
     .select(
-      "id, qr_code, status, current_location, quantity, batches ( batch_number, products ( name, sku, unit_of_measure ) )",
+      PALLET_SELECT,
     )
     .eq("qr_code", qrCode)
     .eq("company_id", companyId)
@@ -96,7 +55,8 @@ export async function getPalletTraceability(
 
   if (!palletData) return null;
 
-  const pallet = mapPallet(palletData as unknown as RawPalletRow);
+  const [row] = await attachPalletContents(supabase, [palletData as unknown as RawPalletRow]);
+  const pallet = mapPalletRow(row);
   const { data: movementData, error: movementError } = await supabase
     .from("movements")
     .select(

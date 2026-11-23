@@ -1,10 +1,30 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { decodeCsv, parseCsv } from "./csv.ts";
 import { MAX_IMPORT_ROWS, parseImportDate, parseImportQuantity, toRawRows, validateRows, type RawImportRow } from "./rows.ts";
 import { buildImportTemplate, declaredZipSize, parseXlsx } from "./xlsx.ts";
 
 const HEADER = "Producto;SKU;Unidad;Lote;Vencimiento;Depósito;Cantidad";
+
+test("CSV rechaza comillas incompletas o caracteres después de cerrarlas", () => {
+  for (const csv of ['a,b\n1,"2', 'a,b\n1,"2"x', 'a,b\n1,2"3'])
+    assert.throws(() => parseCsv(csv), SyntaxError);
+});
+
+test("CSV conserva saltos internos, comillas escapadas y la fila física siguiente", () => {
+  assert.deepEqual(parseCsv('a;b\r\n"uno\ndos";"tres""cuatro"\r\nfin;5'), [
+    { rowNumber: 1, cells: ["a", "b"] },
+    { rowNumber: 2, cells: ["uno\ndos", 'tres"cuatro'] },
+    { rowNumber: 4, cells: ["fin", "5"] },
+  ]);
+});
+
+test("CSV con filas vacías antes del encabezado conserva el separador y número de fila", () => {
+  const result = toRawRows(parseCsv(`\r\n  \r\n${HEADER}\r\nP;S;cajas;L;2099-01-01;D;1`));
+  assert.ok("rows" in result);
+  assert.equal(result.rows[0].rowNumber, 4);
+  assert.equal(result.rows[0].values.quantity, "1");
+});
 const raw = (over: Partial<RawImportRow["values"]> = {}, rowNumber = 2): RawImportRow => ({
   rowNumber,
   values: { product: "Aceite", sku: "ACE-500", unit: "cajas", lot: "L1", expiration: "31/12/2027", warehouse: "dep-01", quantity: "10", ...over },
