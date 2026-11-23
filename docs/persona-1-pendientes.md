@@ -22,11 +22,23 @@ El PR de pallets #87 de Nai se integró desde develop: lecturas por `pallet_cont
 pallets mixtos y reingreso. Los fixtures E2E se adaptaron al contenido compartido y
 al snapshot `expected_items` de cada orden, sin volver al formato escalar antiguo.
 
+También se incorporó main en `bc481a2` (#86 de Juani). La migración de remitos
+colisionaba con una versión ya aplicada: se verificó Supabase mediante SELECT y
+se renumeró solo el archivo no aplicado a `20261123100000_trz51_dispatch_notes.sql`.
+El remito se adaptó a los snapshots por ítem y conserva el conteo de pallets
+físicos. Ver [integración y despliegue de remitos](remitos.md).
+
 ## TRZ-119: acción de Cata en GitHub
 
-La conexión de GitHub no tiene administración. Consultar protección de main y
-develop respondió 403, por lo que no se afirma que esté activada o desactivada.
+La cuenta Git tiene escritura, sin administración. Consultar protección detallada
+respondió 403; el metadata de ramas devolvió `protected: false` para main y develop
+en esta auditoría, y Ámbar confirmó que Cata todavía no lo había configurado.
 El YAML no configura protección por sí mismo.
+
+Se comprobó CI rojo y luego verde con el [PR temporal #89](https://github.com/cataciucci24/TrazFlow-G8/pull/89),
+cerrado al terminar y sin merge. Un test deliberadamente falso falló en el paso
+`npm test`; al retirarlo, CI aprobó. Esto prueba detección, no el bloqueo del merge
+por una protección todavía pendiente.
 
 Cata debe configurar ambas ramas para exigir PR y el check `CI`, y comprobar que
 un PR rojo queda bloqueado y que uno verde puede aprobarse. La ejecución del

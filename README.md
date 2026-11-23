@@ -1,6 +1,6 @@
 # TrazFlow
 
-[![CI](https://github.com/cataciucci24/TrazFlow-G8/actions/workflows/ci.yml/badge.svg)](https://github.com/cataciucci24/TrazFlow-G8/actions/workflows/ci.yml)
+[![CI](https://github.com/cataciucci24/TrazFlow-G8/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/cataciucci24/TrazFlow-G8/actions/workflows/ci.yml?query=branch%3Adevelop)
 
 TrazFlow tracks the physical flow of pallets from warehouse preparation to delivery. It connects ERP orders and stock with QR scanning, dispatch validation and an auditable history.
 

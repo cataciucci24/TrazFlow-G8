@@ -2,8 +2,8 @@
 
 Rama final: `codex/persona-1-verificacion-final`.
 Worktree: `C:\Users\ambar\TrazFlow-G8-persona-1`.
-Base integrada: `origin/develop` en `08a076d`, incluidos los PR #83 y #85 de Odoo
-y #87 de pallets mixtos/reingreso. Integración realizada el 23/11/2026.
+Bases integradas: `origin/develop` en `08a076d` (Odoo y pallets #87) y `origin/main`
+en `bc481a2` (trazabilidad/remitos #86). Integración realizada el 23/11/2026.
 El trabajo original de `codex/persona-1-calidad-infra` se conserva en el historial.
 
 ## Tests unitarios y contrato ERP — TRZ-122 / TRZ-114
@@ -13,7 +13,7 @@ de Odoo. Se conserva `node:assert/strict`; se eliminaron el runner Node, su hook
 server-only y c8. Hay una única cobertura V8. `server-only` tiene un alias vacío
 solo en tests; las pruebas estáticas de fronteras cliente/servidor siguen activas.
 
-Resultado actualizado: **78 archivos, 532 tests aprobados, 6 omitidos con motivo, sin todo**.
+Resultado actualizado: **80 archivos, 556 tests aprobados, 6 omitidos con motivo, sin todo**.
 Los 417 tests originales pasaron tras la migración; los adicionales corresponden
 a importación, filtros, contrato compartido, Odoo y contenido de pallets integrado desde develop.
 
@@ -39,7 +39,7 @@ las filas inválidas no lleguen a la RPC en modo manual ni ERP. Se conserva la
 política existente de procesar solo las filas válidas, sin inventar otra regla.
 
 `src/lib/stock-import/rows.ts`: **100% de líneas, ramas y funciones**.
-La cobertura global actual del proyecto es 26,58% de líneas; no debe confundirse con
+La cobertura global actual del proyecto es 27,02% de líneas; no debe confundirse con
 la cobertura específica de reglas ni con el porcentaje de historias terminadas.
 
 `supabase/tests/ush1_stock_import.sql` pasó contra PostgreSQL local y terminó con
@@ -124,26 +124,25 @@ sin red: prueba sintaxis, no DNS, certificados ni conectividad al ERP real.
 
 | Proyecto | Aprobados | Fallos | Flaky |
 | --- | ---: | ---: | ---: |
-| e2e | 21 | 0 | 0 |
+| e2e | 23 | 0 | 0 |
 | forecast | 3 | 0 | 0 |
-| stock-import | 4 | 0 | 0 |
+| stock-import | 5 | 0 | 0 |
 | stock-import-erp | 1 | 0 | 0 |
 | plan-changes | 6 | 0 | 0 |
 | subscription | 2 | 0 | 0 |
 | demo | 2 | 0 | 0 |
 
-**Total: 39 aprobados.** Incluye importación real local de 5.000 filas, importación
+**Total: 42 aprobados.** Incluye importación real local de 5.000 filas, importación
 con outbox y ERP simulado, filtros, permisos, cambios de plan, suscripciones y QR.
 La demo se ejecutó con su proyecto y ritmo de presentación en navegador headless.
 Las pruebas de APIs simuladas no se presentan como pruebas de ERP remotos reales.
 
-Después de integrar #87 se verificaron los 21 casos de E2E por bloques: ocho de
-cuenta/planes, siete de entrega y pantallas adaptables, y seis de login, filtros
-y uso. Los bloques afectados se repitieron tras adaptar los fixtures a
-`pallet_contents`, `expected_items` y las RPC de validación/recepción por ítem.
-Esas RPC simuladas comprueban el SKU, lote y cantidad enviados. Pronósticos y los
-otros cinco proyectos completaron sus ejecuciones enteras. Se renovó y revisó
-visualmente la captura del README. Lint, tipos y build también aprobaron con #87.
+La auditoría final integra #86 y #87 y ejecuta los siete proyectos completos.
+Los fixtures usan `pallet_contents`, `expected_items` y las RPC de validación/
+recepción por ítem. Las RPC simuladas comprueban SKU, lote y cantidad. Los dos
+casos añadidos verifican en móvil la trazabilidad mixta y su remito. La importación
+incluye CSV truncado, unidad inválida y kilos grandes con líneas iniciales vacías.
+Se renovó y revisó visualmente la captura del README. Lint, tipos y build aprobaron.
 
 ## Avance de infraestructura posterior al push de verificación
 
@@ -156,3 +155,40 @@ on-failure de nueve contenedores; un segundo reinicio comprobó arranque automá
 IP conservada, TLS válido, firewall persistido y lecturas con ErpNextClient real.
 El archivo temporal de entrega se retiró. La interfaz de Vercel no se inspeccionó
 en esta prueba. Ver [estado de HTTPS](trz118-https-estado.md).
+
+## Auditoría de casos borde e integración de ramas
+
+Se reprodujeron y corrigieron errores reales antes de la entrega:
+
+- `constructor` y `__proto__` podían resolverse como unidades por herencia de
+  Object; importación y mapeo ERP ahora aceptan solo aliases propios.
+- UUID en mayúsculas se normalizan para no perder la selección de distribuidora.
+- CSV con comillas incompletas se rechaza antes de llamar a la base; filas vacías
+  iniciales conservan el separador y la numeración física.
+- Kilos grandes con dos decimales ya no se rechazan por error binario; la precisión
+  del texto original evita aceptar decimales que Number redondearía silenciosamente.
+- Tandas fallidas quedan sin procesar y reintentables; el rechazo de permisos no
+  programa envíos. La prueba SQL de actores ajenos limpió su JWT administrativo
+  para construir el fixture que realmente pretendía comprobar.
+
+Se comprobó CI remoto rojo con una regresión intencional en el PR temporal #89:
+[ejecución fallida](https://github.com/cataciucci24/TrazFlow-G8/actions/runs/45110002403).
+Al retirar la regresión, volvió a
+[verde](https://github.com/cataciucci24/TrazFlow-G8/actions/runs/45110318050).
+Ese PR quedó cerrado, sin merge. La protección de ramas sigue siendo acción de Cata.
+
+Al comparar main y develop se detectó que remitos y pallet_contents compartían
+versión SQL. SELECT en Supabase confirmó que solo pallet_contents estaba aplicada.
+Se conservó ese historial y se renumeró exclusivamente remitos, aún pendiente,
+a `20261123100000`. El CI ahora rechaza colisiones mediante `check:migrations`.
+La integración conserva contenido mixto, línea de tiempo, remito inmutable e
+idempotente, conteo de pallets físicos y separación por unidad. Ver [remitos](remitos.md).
+
+`npm run test:sql` aprueba las 35 suites locales reproducibles. Los cuatro checks
+de snapshots históricos y su fixture tienen requisitos separados y se excluyen
+explícitamente: no se presentan como aprobados contra la base de demo.
+
+Se verificó además una instalación limpia exclusivamente local: las 74 migraciones
+y `supabase/seeds/001_demo.sql` se aplicaron desde cero, quedaron tres usuarios
+demo y una empresa, y se repitieron las 35 suites SQL con éxito. La base compartida
+solo se consultó con SELECT; no se modificaron su esquema ni su historial.

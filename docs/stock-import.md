@@ -19,8 +19,8 @@ Límites: 5.000 filas y 4 MB. Una falla general deja filas «sin procesar»; rei
 
 La precisión se verifica sobre el texto original: no se redondean decimales
 sobrantes para volver válida una fila. Los ceros finales son equivalentes
-(`1,2300 kg` equivale a `1,23 kg`). Los importes grandes con dos decimales siguen
-siendo válidos hasta el tope, sin rechazos por representación binaria.
+(`1,2300 kg` equivale a `1,23 kg`). Las cantidades grandes con dos decimales siguen
+siendo válidas hasta el tope, sin rechazos por representación binaria.
 
 Esa última regla evita duplicar stock al subir dos veces un archivo. Por eso esta pantalla sirve para la carga inicial y no para reponer un lote existente.
 
