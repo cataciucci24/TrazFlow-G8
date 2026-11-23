@@ -12,6 +12,9 @@ export async function createPalletWithItems(items: PalletItemInput[], warehouseC
   const profile = await requireUserProfile();
   if (!hasRole(profile, "logistics_manager", "warehouse_operator")) return { error: "No tenés permisos para armar pallets.", success: null };
   if (!validPalletItems(items)) return { error: "Ingresá entre 1 y 100 lotes distintos con cantidades positivas y hasta dos decimales.", success: null };
+  if (typeof warehouseCode !== "string" || warehouseCode.trim().length > 40) {
+    return { error: "Elegí un depósito válido.", success: null };
+  }
   const db = await createClient();
   if (await isErpEnabled(profile.companyId)) {
     const { data, error } = await db.from("batches").select("id, source_system")

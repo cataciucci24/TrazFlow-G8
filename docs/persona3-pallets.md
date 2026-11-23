@@ -68,7 +68,9 @@ Persona 2 debe confirmar, después del trabajo de persona 5 en outbox/config/pan
 
 Aplicar las migraciones nuevas en orden, antes de desplegar la aplicación. La de ola 0 es `20261122100000_pallet_contents.sql`. Las de TRZ-111 son `20261122110000_mixed_pallet_items.sql` y `20261122110100_pallet_item_checks.sql`. El evento de reingreso se agrega en `20261122120000_pallet_return_event.sql`, separado de su uso en `20261122120100_pallet_return.sql` porque PostgreSQL exige confirmar el valor del enum antes de usarlo.
 
-No se aplicaron cambios a Supabase remoto. No se cambiaron configuración de seeds, scripts de package.json ni configuración de tests, que pertenecen a persona 1.
+Las cinco migraciones se aplicaron el 22/11/2026 al proyecto remoto `prhsdpghhsjcmvlgtxgr` (TrazFlow, rama `main`, etiquetada `Production` en Supabase), con autorización explícita del usuario para esa base exacta. Se ejecutaron por separado y se registraron en `supabase_migrations.schema_migrations`, dentro de la misma transacción de cada migración. No se cargaron seeds ni datos de prueba. No se cambiaron configuración de seeds, scripts de package.json ni configuración de tests, que pertenecen a persona 1.
+
+La verificación remota posterior confirmó cinco versiones registradas, los 10 pallets existentes conservados con 10 ítems, cero pallets sin ítems, cero diferencias entre lote/cantidad originales y contenido migrado, cero asociaciones sin snapshot, las cuatro RPC nuevas disponibles, RLS de ítems activo y las funciones internas sin permiso de ejecución para `authenticated`. Se solicitó la recarga del esquema de PostgREST.
 
 Validación realizada:
 
@@ -88,8 +90,26 @@ psql "$LOCAL_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/trz111_mixed_pal
 
 Usar una base local migrada: el archivo crea fixtures dentro de una transacción y hace rollback. Verifica permisos, aislamiento entre empresas, stock ERP del ítem secundario, reversión del armado fallido, comparación por ítem, invalidación de una validación obsoleta, recepción con diferencia, reingreso idempotente y reasignación sin borrar la entrega anterior.
 
-No se probaron cámara/impresión en un navegador ni el despliegue real de PostgREST/Supabase. Las pruebas embebidas no reemplazan una prueba de concurrencia con dos sesiones independientes; el tope reutiliza los locks de `erp_stock_balances` y el armado toma los lotes en orden de UUID.
+Se verificaron las migraciones y sus estructuras en Supabase remoto. Al validar la entrega inicial quedaban pendientes los flujos de la aplicación en navegador; la revisión posterior se detalla abajo. Las pruebas embebidas no reemplazan una prueba de concurrencia con dos sesiones independientes; el tope reutiliza los locks de `erp_stock_balances` y el armado toma los lotes en orden de UUID.
 
 Se corrigió una línea de portabilidad en `src/lib/erp-sync/server-boundary.test.ts`: la comprobación de límites de servidor normaliza los separadores de rutas Windows antes de aplicar la expresión regular. No cambia la regla de seguridad ni la configuración de tests; persona 1 puede conservar esa normalización al migrarlo a Vitest.
 
-Aviso para persona 1: el build informa una alerta de seguridad para la versión instalada de Next.js; coordinar la actualización fuera de esta entrega de pallets.
+El aviso de seguridad anterior correspondía a la versión instalada al validar la entrega inicial. Persona 1 ya actualizó Next.js a 16.4.6 en `develop`.
+
+## Revisión de cierre del 23/11/2026
+
+La entrega inicial de persona 3 ya está integrada en `develop` mediante la PR #87. La revisión continúa en `codex/persona3-cierre`, creada desde `origin/develop` (`abc95ad`), con cambios limitados a pallets y su documentación.
+
+Se corrigieron validaciones de las acciones de armado y reingreso: depósitos, QR y motivos con tipos incorrectos devuelven un error controlado antes de escribir; el depósito respeta su límite de 40 caracteres. La validación de cantidades reutiliza la regla compartida de unidades, evitando rechazar kilos grandes con dos decimales por precisión binaria, y rechaza arrays con posiciones vacías. Se agregaron 29 casos de prueba en archivos de persona 3, incluidos permisos, lotes ERP de la empresa, fallos de stock, reingreso idempotente y respuestas de error sin éxito falso.
+
+Verificación actual: `npm test` aprobó 588 pruebas, con 6 omitidas por la suite existente; TypeScript, ESLint, build de producción y la comprobación de versiones únicas de las 75 migraciones aprobaron. Playwright aprobó 9 pruebas de `driver-delivery`, `responsive-dashboard` y `main-integration`: recepción por QR, validación de despacho, contenido mixto en trazabilidad/remito y pantallas entre 320 y 1280 px. Se usaron los fixtures locales existentes; no se probó el recorrido mixto completo contra la base remota, una cámara física ni una impresora. Estas correcciones no requieren otra migración ni modifican la base remota.
+
+### Pedidos concretos al equipo para cerrar la ola 2
+
+- **Persona 2:** acordar la identidad de cada línea de ítem, permitir repetir `palletCode` entre líneas del mismo pallet y definir la versión del contrato §5. Confirmar soporte de esas líneas en los adaptadores y sus validadores para despacho y entrega. Hoy el contrato sigue en versión 1, su validador rechaza `palletCode` repetido y los métodos de despacho/entrega de Odoo siguen sin implementación.
+- **Persona 5:** integrar primero TRZ-112 y avisar qué interfaz queda para empresa/configuración y productores del outbox. Persona 3 debe construir el payload por ítem sobre esa separación, respetando los snapshots de la orden, sin competir por los mismos archivos.
+- **Persona 1, para ampliar la prueba automática del flujo completo:** los fixtures compartidos de navegador necesitan implementar `create_pallet_with_items` y `return_pallet_to_warehouse`, además de órdenes con varios ítems esperados/detectados en despacho y recepción. El servidor actual permite verificar pantallas y trazabilidad mixtas, pero no toda la cadena armado → despacho → recepción → reingreso. No se modificó ese script compartido desde persona 3.
+
+Personas 4, 6 y 7 no bloquean este cierre. El reingreso deja el pallet sin posición para ubicarlo por el flujo existente; trazabilidad/remitos pueden consumir `contents.ts` y los snapshots de las órdenes; el QR conserva su identidad actual.
+
+Mientras falten las dependencias de personas 2 y 5 se mantiene el rechazo `TM111` al despacho mixto por ERP. La siguiente entrega de persona 3 debe cambiar el payload, ajustar el contrato coordinado, probar los consumidores y recién entonces retirar esa restricción.
