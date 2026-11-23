@@ -1,3 +1,4 @@
+import { attachExpectedPalletContents, type ExpectedPalletRelation } from "../pallets/contents";
 import { createClient } from "@/lib/supabase/server";
 import { filterActiveDispatchDiscrepancies } from "@/lib/pallet-validation/discrepancies";
 import {
@@ -28,7 +29,11 @@ export async function getOrderPalletValidations(
     );
   }
 
-  return mapOrderPalletValidations((data ?? []) as unknown as RawOrderPallet[]);
+  const rows = await attachExpectedPalletContents(supabase, (data ?? []) as unknown as (RawOrderPallet & ExpectedPalletRelation)[]);
+  return mapOrderPalletValidations(rows.map((row) => {
+    const pallet = Array.isArray(row.pallets) ? row.pallets[0] : row.pallets;
+    return { ...row, pallets: pallet ? { ...pallet, contents: row.contents } : null };
+  }));
 }
 
 type RawDispatchDiscrepancy = {
@@ -54,7 +59,7 @@ export async function getOrderDispatchDiscrepancies(
       .eq("order_id", orderId)
       .in("event_type", ["dispatch_discrepancy", "pallet_associated", "pallet_dissociated"])
       .order("created_at", { ascending: true }),
-    supabase.from("order_pallets").select("pallet_id").eq("order_id", orderId),
+    supabase.from("order_pallets").select("pallet_id, validated_at").eq("order_id", orderId),
   ]);
 
   const error = eventsResult.error ?? orderPalletsResult.error;
@@ -81,5 +86,7 @@ export async function getOrderDispatchDiscrepancies(
     .filter((row) => row.event_type !== "dispatch_discrepancy")
     .map((row) => ({ palletId: row.pallet_id, createdAt: row.created_at }));
 
-  return filterActiveDispatchDiscrepancies(discrepancies, orderPalletIds, compositionChanges);
+  const contentMismatches = discrepancies.filter((item) => item.type === "content_mismatch" &&
+    (orderPalletsResult.data ?? []).some((row) => row.pallet_id === item.palletId && !row.validated_at));
+  return [...filterActiveDispatchDiscrepancies(discrepancies.filter((item) => item.type !== "content_mismatch"), orderPalletIds, compositionChanges), ...contentMismatches];
 }

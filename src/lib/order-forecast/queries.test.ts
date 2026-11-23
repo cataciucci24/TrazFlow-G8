@@ -29,6 +29,7 @@ function harness(role = "logistics_manager") {
       };
       return query;
     } }) };
+    if (name === "../pallets/contents") return require("../pallets/contents.ts");
     if (name === "./forecast") return require("./forecast.ts");
     return require(name);
   }, compiled, compiled.exports);
@@ -46,8 +47,7 @@ test("rechaza roles no logísticos antes de consultar la base", async () => {
 
 test("filtra empresa en todas las fuentes y despachos confirmados con fecha real", async () => {
   const h = harness(); await h.call();
-  for (const [table, field] of [["distributors", "company_id"], ["dispatch_orders", "company_id"], ["order_pallets", "dispatch_orders.company_id"],
-    ["order_pallets", "pallets.company_id"], ["order_pallets", "pallets.batches.products.company_id"]]) {
+  for (const [table, field] of [["distributors", "company_id"], ["dispatch_orders", "company_id"], ["order_pallets", "dispatch_orders.company_id"]]) {
     assert.ok(h.calls.some((call) => call.table === table && call.method === "eq" && call.args[0] === field && call.args[1] === "company"), field);
   }
   assert.ok(h.calls.some((call) => call.table === "order_pallets" && call.method === "eq" && call.args[0] === "expected" && call.args[1] === true));
@@ -67,7 +67,8 @@ test("mapea relaciones objeto/array y un error de base no parece historial vací
   const h = harness();
   h.set("distributors", [{ id: "c1", name: "Cliente" }]);
   h.set("dispatch_orders", [{ id: "o1", distributor_id: "c1", confirmed_at: "2026-01-01T15:00:00Z", status: "delivered" }]);
-  h.set("order_pallets", [{ order_id: "o1", pallets: [{ quantity: 2.5, batches: [{ products: [{ id: "p1", name: "Arroz", sku: "ARR", unit_of_measure: "kilogramos" }] }] }] }]);
+  h.set("order_pallets", [{ order_id: "o1", pallet_id: "pal1", expected_items: [{ productId: "p1", batchId: "b1", quantity: 2.5 }] }]);
+  h.set("batches", [{ id: "b1", company_id: "company", batch_number: "L1", expiration_date: null, source_system: "trazflow", products: [{ id: "p1", name: "Arroz", sku: "ARR", unit_of_measure: "kilogramos" }] }]);
   const { forecasts } = await h.call();
   assert.equal(forecasts[0].products[0].averageQuantity, 2.5);
   assert.equal(forecasts[0].products[0].unit, "kilogramos");

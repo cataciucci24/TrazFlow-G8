@@ -64,7 +64,7 @@ test("TRZ-104: los módulos de los cron importan server-only y solo los usan los
   }
   const users = /from\s+["'](?:@\/lib\/supabase\/service|@\/lib\/cron\/[\w-]+)["']/;
   for (const path of sourceFiles(SRC)) {
-    const name = relative(SRC, path);
+    const name = relative(SRC, path).replaceAll("\\", "/");
     if (!users.test(readFileSync(path, "utf8"))) continue;
     assert.match(name, /^app\/api\/cron\/[\w-]+\/route\.ts$/, `${name} usa service_role o un cron fuera de /api/cron`);
   }

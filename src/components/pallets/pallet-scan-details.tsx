@@ -30,6 +30,7 @@ export function PalletScanDetails({ qrCode }: { qrCode: string }) {
       <button type="button" className="button-secondary button-sm" onClick={() => { setResult(null); setAttempt((value) => value + 1); }}>Reintentar consulta</button>
     </div>}
     {pallet && <>
+      {pallet.items && <ul className="space-y-1" aria-label="Contenido del pallet mixto">{pallet.items.map((item, index) => <li key={index}>{item.product_name} ({item.product_sku}) · Lote {item.batch_number} · {item.quantity ?? "—"} {item.unit_of_measure}</li>)}</ul>}
       <dl className="grid min-w-0 gap-3 sm:grid-cols-2">
         <div className="min-w-0"><dt className="text-stone-500">Producto</dt><dd className="break-words font-medium">{pallet.product_name} ({pallet.product_sku})</dd></div>
         <div className="min-w-0"><dt className="text-stone-500">Lote</dt><dd className="break-all font-medium">{pallet.batch_number}</dd></div>

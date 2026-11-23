@@ -1,3 +1,4 @@
+import type { PalletContent } from "./pallets/contents";
 import type { ErpOrigin } from "@/lib/erp-sync/types";
 import type { ProductUnit } from "@/lib/pallets/units";
 import type { PalletLocation } from "@/lib/locations/format";
@@ -132,6 +133,8 @@ export type Lot = {
 
 /** Pallet con la info de producto/lote necesaria para identificarlo en pantalla. */
 export type Pallet = {
+  /** Contenido canónico; los campos escalares se conservan durante la ola 0. */
+  contents?: PalletContent[];
   id: string;
   qrCode: string;
   status: PalletStatus;

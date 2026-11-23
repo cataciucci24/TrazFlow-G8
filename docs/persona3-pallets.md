@@ -1,0 +1,95 @@
+# Persona 3: contenido, pallets mixtos y reingreso
+
+## Estado de la entrega
+
+- Ola 0: vista `pallet_contents`, interfaz compartida y adaptación de las lecturas existentes.
+- TRZ-111, ola 1: tabla de ítems, migración de los pallets existentes, armado atómico, stock ERP por ítem, validación de despacho y recepción por ítem, inventario, consultas por lote y un QR por pallet.
+- TRZ-24: reingreso completo por logística, escaneando o ingresando el QR, con motivo obligatorio y auditoría. Un reenvío usa otra orden.
+- Ola 2 pendiente de personas 2 y 5: adaptar contrato ERP §5 y productores/consumidores del outbox para informar una línea por ítem. No se modificaron `src/lib/erp`, configuración por empresa ni el contrato publicado.
+
+## Interfaz para el equipo
+
+Toda lectura de contenido desde la aplicación pasa por `src/lib/pallets/contents.ts`:
+
+```ts
+const contentsByPallet = await getPalletContents(db, palletIds, companyId);
+const palletsWithContents = await attachPalletContents(db, palletHeaders);
+const relationsWithContents = await attachExpectedPalletContents(db, orderRelations);
+```
+
+`getPalletContents` devuelve un `Map<palletId, PalletContent[]>`. Deduplica IDs, divide consultas en grupos de 100 y pagina de a 500 ítems. Las consultas usan el cliente autenticado y respetan RLS. Un error de consulta se propaga; no se disfraza de contenido vacío.
+
+`attachExpectedPalletContents` usa `order_pallets.expected_items`, con identidades y cantidades de esa orden. Se usa en el detalle de órdenes y los pronósticos para que reingresar o editar un pallet no cambie cantidades históricas. La descripción del producto/lote sigue siendo la del catálogo vigente.
+
+No leer el contenido desde `pallets.batch_id` o `pallets.quantity`: esas columnas quedan como puente del primer ítem para los flujos monolote existentes. No representan todo el pallet ni una cantidad total. La fuente actual es `pallet_items` a través de `pallet_contents`. Las RPC de lectores QR, entregas y trazabilidad también fueron adaptadas; las RPC de escritura conservan controles transaccionales en la base.
+
+`Pallet.contents` contiene los ítems. Los campos escalares de `Pallet` permanecen por compatibilidad: en mixtos, `productName` indica que es mixto y `quantity` es `null`. Usar los ítems para sumar cantidades **por unidad**, buscar productos/lotes o mostrar detalle. `itemId` es opaco: no asumir que coincide con el ID del pallet. El QR sigue siendo exclusivamente `pallet.qrCode`.
+
+Para persona 6: la consulta `get_lot_traceability` incluye los ítems secundarios de un mixto. Los eventos de recepción guardan `expected_items`, `detected_items` y `normalized_items`; los de reingreso guardan motivo, estado anterior, depósito y contenido completo. No reemplazar el historial al construir las nuevas líneas de tiempo.
+
+## Uso
+
+### Armado
+
+Logística: **Pallets → Armar pallet mixto**. Depósito: **Armar pallet** en el menú. La ruta es `/dashboard/pallets/armar`.
+
+El formulario permite entre 1 y 100 ítems, de uno o varios productos/lotes, en el mismo depósito. No permite repetir un lote; se debe consolidar su cantidad en un ítem. La unidad viene del producto: unidades/cajas enteras, kilogramos con hasta dos decimales. Se usan lotes ya existentes; su alta conserva el flujo actual. La empresa con ERP utiliza lotes sincronizados y la base aplica el saldo de cada lote/depósito. Si falla un ítem, se revierte el pallet completo.
+
+Los pallets anteriores se migran a un ítem, conservando QR, estado y cantidades desconocidas (`null`). El puente mantiene funcionando las altas y ediciones monolote existentes. El formulario de edición monolote no modifica pallets mixtos.
+
+### Despacho y recepción
+
+Cada asociación a una orden toma una copia de los ítems esperados. Al escanear se muestran producto/lote/cantidad esperados y se confirma lo detectado, pudiendo corregir SKU, lote y cantidad, quitar faltantes o agregar sobrantes. La comparación usa producto/lote/cantidad, independientemente del orden de las filas.
+
+En despacho, una diferencia deja el pallet pendiente; si estaba validado, invalida esa validación. Hay que corregir y volver a escanear antes de confirmar. En recepción, el chofer registra las cantidades detectadas y la diferencia queda persistida como `content_mismatch`, con estado de entrega con diferencia. Los reintentos no duplican el procesamiento.
+
+Las firmas anteriores de `validate_order_pallet` y `confirm_delivery_pallet` conservan compatibilidad con un ítem. Para mixtos exigen el contenido explícito mediante `validate_order_pallet_items` y `confirm_delivery_pallet_items`. Las funciones internas no tienen permiso de ejecución desde la API. Las antiguas RPC de recepción del operador de distribuidor ya fueron eliminadas por las migraciones previas; el flujo vigente pertenece al chofer asignado.
+
+### Reingreso
+
+Logística: **Pallets → Reingresar pallet**. Solo `logistics_manager` activo de la empresa puede ejecutarlo. Requiere QR y motivo no vacío, de hasta 1.000 caracteres.
+
+Se aceptan `delivered` y `delivery_discrepancy`, y `received` histórico. Se registra la devolución **completa del contenido del pallet**, sin modificar cantidades ni borrar asociaciones, recepciones o movimientos anteriores. No es un flujo de devoluciones parciales ni de ajuste de diferencias de stock. La orden anterior conserva su contenido esperado/detectado. Un reintento estando en depósito no duplica auditoría.
+
+El pallet vuelve a `in_warehouse`, al depósito original activo y sin posición física asignada. Se ubica después por el flujo existente de ubicaciones. Aparece nuevamente entre los disponibles para asociar a otra orden. Con lotes ERP se conserva el tope por saldo: el ERP debe reflejar el stock devuelto antes de admitirlo en depósito; la RPC no inventa saldo ERP ni realiza transferencias entre depósitos.
+
+## Dependencia de ola 2
+
+Mientras el contrato y los adaptadores no soporten varias líneas con el mismo `palletCode`, se rechaza asociar/confirmar mixtos en órdenes con `external_id` ERP (`TM111`). Esto impide publicar únicamente el primer ítem. Se pueden armar mixtos contra saldos ERP, pero su despacho mediante una orden ERP queda pendiente de la integración acordada. Las órdenes manuales usan el flujo completo de mixtos; las órdenes ERP monolote siguen funcionando.
+
+Persona 2 debe confirmar, después del trabajo de persona 5 en outbox/config/panel:
+
+1. Identidad de líneas, repetición de `palletCode` y versión del contrato (§5).
+2. Payloads de despacho, carga/reversión de Pick List y entrega, con una línea por ítem y copias históricas de la orden.
+3. Validaciones y consumidores del adaptador; idempotencia y reintentos.
+4. Remover `trg_guard_mixed_erp_order` y la rama ERP de `guard_dispatch_content` solo cuando esos cambios estén integrados y probados. Conservar los controles de comparación de contenido.
+
+## Migraciones y verificación
+
+Aplicar las migraciones nuevas en orden, antes de desplegar la aplicación. La de ola 0 es `20261122100000_pallet_contents.sql`. Las de TRZ-111 son `20261122110000_mixed_pallet_items.sql` y `20261122110100_pallet_item_checks.sql`. El evento de reingreso se agrega en `20261122120000_pallet_return_event.sql`, separado de su uso en `20261122120100_pallet_return.sql` porque PostgreSQL exige confirmar el valor del enum antes de usarlo.
+
+No se aplicaron cambios a Supabase remoto. No se cambiaron configuración de seeds, scripts de package.json ni configuración de tests, que pertenecen a persona 1.
+
+Validación realizada:
+
+- TypeScript: `npx tsc --noEmit --incremental false`.
+- Vitest: `npm run test:unit`, con tests nuevos en `tests/unit/pallet-contents.test.ts` para respetar la configuración actual.
+- Build de producción y ESLint.
+- 70 migraciones de la aplicación cargadas en PostgreSQL embebido (PGlite temporal), con stubs de los esquemas de plataforma `auth`/`storage`. Se omitieron las tres migraciones de cron/pg_net ajenas al cambio y la instalación de pgcrypto; `gen_random_uuid()` está disponible en el motor.
+- Diez archivos SQL aprobados: `trz111_mixed_pallets_and_return`, `trz100_dispatch_quantity_match`, `trz100_erp_stock_balances`, `trz100_assigned_pallet_quantity`, `us_erp01_ops07_driver_delivery`, `us13_lot_traceability`, `us3_pallet_validation`, `us5_confirm_dispatch`, `trz99_dissociate_state`, `ush1_stock_import`.
+
+Resultado: 396/396 tests de Node, 52/52 tests de Vitest, TypeScript y ESLint aprobados. También se verificó el backfill creando un pallet antes de las migraciones nuevas y comprobando que conserva QR, lote y cantidad desconocida. El build de producción terminó correctamente; mantiene el aviso de seguridad de Next.js indicado al final.
+
+La prueba nueva se ejecuta también en Supabase local con:
+
+```sh
+psql "$LOCAL_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/trz111_mixed_pallets_and_return.sql
+```
+
+Usar una base local migrada: el archivo crea fixtures dentro de una transacción y hace rollback. Verifica permisos, aislamiento entre empresas, stock ERP del ítem secundario, reversión del armado fallido, comparación por ítem, invalidación de una validación obsoleta, recepción con diferencia, reingreso idempotente y reasignación sin borrar la entrega anterior.
+
+No se probaron cámara/impresión en un navegador ni el despliegue real de PostgREST/Supabase. Las pruebas embebidas no reemplazan una prueba de concurrencia con dos sesiones independientes; el tope reutiliza los locks de `erp_stock_balances` y el armado toma los lotes en orden de UUID.
+
+Se corrigió una línea de portabilidad en `src/lib/erp-sync/server-boundary.test.ts`: la comprobación de límites de servidor normaliza los separadores de rutas Windows antes de aplicar la expresión regular. No cambia la regla de seguridad ni la configuración de tests; persona 1 puede conservar esa normalización al migrarlo a Vitest.
+
+Aviso para persona 1: el build informa una alerta de seguridad para la versión instalada de Next.js; coordinar la actualización fuera de esta entrega de pallets.

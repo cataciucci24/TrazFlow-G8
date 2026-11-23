@@ -13,8 +13,8 @@ export function palletLabelContent(pallet: Pallet) {
     qrValue: pallet.qrCode,
     readableCode: pallet.qrCode,
     product: pallet.productName,
-    batch: pallet.batchNumber,
+    batch: (pallet.contents?.length ?? 0) > 1 ? `${pallet.contents!.length} ítems · varios lotes` : pallet.batchNumber,
     quantity: pallet.quantity,
-    unit: pallet.unitOfMeasure,
+    unit: (pallet.contents?.length ?? 0) > 1 ? "Ver contenido al escanear" : pallet.unitOfMeasure,
   };
 }

@@ -1,3 +1,4 @@
+import { attachExpectedPalletContents, type ExpectedPalletRelation } from "@/lib/pallets/contents";
 import { compareOrderLines, type OrderProductComparison } from "@/lib/orders/lines";
 import type { ProductUnit } from "@/lib/pallets/units";
 import { createClient } from "@/lib/supabase/server";
@@ -46,12 +47,7 @@ export async function getDispatchOrderDetail(
 
 type RawLineProduct = { id: string; name: string; sku: string; unit_of_measure: ProductUnit };
 type RawLine = { quantity: number; products: RawLineProduct | RawLineProduct[] | null };
-type RawOrderPallet = {
-  pallets: {
-    quantity: number | null;
-    batches: { products: RawLineProduct | RawLineProduct[] | null } | { products: RawLineProduct | RawLineProduct[] | null }[] | null;
-  } | null;
-};
+type RawOrderPallet = ExpectedPalletRelation;
 
 function one<T>(value: T | T[] | null): T | null {
   return Array.isArray(value) ? value[0] ?? null : value;
@@ -66,7 +62,7 @@ export async function getOrderLinesComparison(orderId: string): Promise<{ hasLin
   const [lines, pallets] = await Promise.all([
     supabase.from("dispatch_order_lines").select("quantity, products ( id, name, sku, unit_of_measure )").eq("order_id", orderId),
     supabase.from("order_pallets")
-      .select("pallets ( quantity, batches ( products ( id, name, sku, unit_of_measure ) ) )")
+      .select("pallet_id, expected_items")
       .eq("order_id", orderId)
       .eq("expected", true),
   ]);
@@ -84,10 +80,10 @@ export async function getOrderLinesComparison(orderId: string): Promise<{ hasLin
     const product = one(line.products);
     return product ? [{ ...toInput(product, line.quantity), quantity: Number(line.quantity) }] : [];
   });
-  const palletInputs = ((pallets.data ?? []) as unknown as RawOrderPallet[]).flatMap((row) => {
-    const pallet = Array.isArray(row.pallets) ? row.pallets[0] : row.pallets;
-    const product = pallet ? one(one(pallet.batches)?.products ?? null) : null;
-    return pallet && product ? [toInput(product, pallet.quantity === null ? null : Number(pallet.quantity))] : [];
-  });
+  const contents = await attachExpectedPalletContents(supabase, (pallets.data ?? []) as RawOrderPallet[]);
+  const palletInputs = contents.flatMap((row) => row.contents.map((item) => ({
+    productId: item.productId, productName: item.productName, productSku: item.productSku,
+    unitOfMeasure: item.unitOfMeasure, quantity: item.quantity,
+  })));
   return { hasLines: lineInputs.length > 0, rows: compareOrderLines(lineInputs, palletInputs) };
 }
