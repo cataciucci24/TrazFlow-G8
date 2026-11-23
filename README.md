@@ -24,6 +24,8 @@ Pallet labels can be printed individually or in batches from the pallet list. Th
 
 Pallets may contain several product lots under one QR. Quantities are validated per item and unit. Logistics can return a delivered pallet to its warehouse with a mandatory reason; its delivery history remains available. See [mixed pallets and returns](docs/persona3-pallets.md). Reporting mixed contents to the ERP remains dependent on the adapter/outbox work described there.
 
+Logistics and warehouse staff can view and print a digital dispatch note after dispatch. It freezes the order's item contents, including mixed pallets, and keeps totals separated by unit. Pallet traceability uses a unified chronological timeline. See [dispatch notes and deployment](docs/remitos.md).
+
 Database changes are applied with the Supabase migrations. Existing `distributor_operator` users must be transitioned explicitly by following [`docs/transicion-choferes.md`](docs/transicion-choferes.md).
 
 ## ERP integration

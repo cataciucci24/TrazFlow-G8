@@ -66,6 +66,10 @@ y a `codex/persona-1-*`, y manualmente, con Node 24:
 instalación reproducible, lint, tipos, todos los unitarios y build. Solo usa
 variables falsas de Supabase. El check se llama `CI`.
 
+Antes de lint también corre `npm run check:migrations`: versiones SQL duplicadas
+o nombres sin versión hacen fallar CI antes de intentar desplegar. Se verificó
+con dos archivos de prueba que compartían `20261122100000`.
+
 La dueña del repo debe exigir ese check en las reglas de protección de ambas
 ramas. Crear el workflow no configura por sí solo la protección. La ejecución
 [45105103269](https://github.com/cataciucci24/TrazFlow-G8/actions/runs/45105103269)

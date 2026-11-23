@@ -6,6 +6,7 @@ const orderId = '20000000-0000-4000-8000-000000000001';
 const palletId = '30000000-0000-4000-8000-000000000001';
 const user = { id: driverId, email: 'chofer@trazflow.test', aud: 'authenticated', role: 'authenticated', app_metadata: {}, user_metadata: {}, created_at: '2026-01-01T00:00:00Z' };
 let delivered = false;
+let mixed = false;
 let confirmations = 0;
 let activeRole = 'driver_operator';
 let validated = false;
@@ -43,6 +44,8 @@ createServer(async (req, res) => {
   const body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString()) : {};
   const send = (data, status = 200) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(data)); };
   if (url.pathname === '/health') return send({ ok: true });
+  if (url.pathname === '/test/reset') mixed = false;
+  if (url.pathname === '/test/mixed') { mixed = true; return send({ ok: true }); }
   if (url.pathname === '/test/usage') { planUsage = body.usage ?? planUsage; usageUnavailable = Boolean(body.unavailable); return send({ok: true}); }
   if (url.pathname === '/rest/v1/rpc/get_company_plan_usage') return usageUnavailable ? send({message: 'unavailable'}, 500) : send([planUsage]);
   if (url.pathname === '/test/reset') { planUsage = { operators: 0, pallets: 0, month_start: '2026-10-01', pallets_complete: true }; usageUnavailable = false; delivered = false; confirmations = 0; validated = false; activeRole = 'driver_operator'; companyPlanCode = null; plansUnavailable = false; catalogPlans = subscriptionPlans; planMutations = 0; companyPlanUnavailable = false; catalogUnavailable = false; return send({ ok: true }); }
@@ -78,15 +81,25 @@ createServer(async (req, res) => {
     return send(url.searchParams.has('id') ? order : delivered ? [] : [order]);
   }
   if (url.pathname === '/rest/v1/pallets') return send([pallet]);
-  if (url.pathname === '/rest/v1/pallet_contents') return send([palletContent]);
+  if (url.pathname === '/rest/v1/pallet_contents') return send(mixed ? [palletContent, { ...palletContent,
+    item_id: 'item-demo-2', batch_id: 'batch-demo-2', batch_number: 'LOTE-2', product_id: 'product-demo-2',
+    product_name: 'Queso mixto', product_sku: 'QSO-2', quantity: 2.5, unit_of_measure: 'kilogramos' }] : [palletContent]);
+  if (url.pathname === '/rest/v1/dispatch_notes') return send(mixed ? {
+    id: 'note-demo', order_id: orderId, number: 1, issued_at: '2026-11-23T12:00:00Z', content: {
+      issuer: { name: 'TrazFlow Demo' }, recipient: { name: 'Destinatario Demo' }, lines: [
+        { palletCode: pallet.qr_code, productName: 'Arroz', productSku: 'ARZ-1', lotNumber: 'L1', quantity: 10, unit: 'cajas' },
+        { palletCode: pallet.qr_code, productName: 'Queso mixto', productSku: 'QSO-2', lotNumber: 'L2', quantity: 2.5, unit: 'kilogramos' },
+      ],
+    },
+  } : null);
   if (url.pathname === '/rest/v1/products') return send([product]);
   if (url.pathname === '/rest/v1/batches') return send([batch]);
   if (url.pathname === '/rest/v1/warehouses') return send([{ code: 'CENTRAL', name: 'Depósito central', source_system: 'erp', active: true, external_id: 'CENTRAL', synced_at: null }]);
-  if (url.pathname === '/rest/v1/order_pallets') return send([{ pallet_id: palletId, pallets: pallet,
+  if (url.pathname === '/rest/v1/order_pallets') return send([{ order_id: orderId, pallet_id: palletId, pallets: pallet,
     expected_items: [{ productId: product.id, batchId: batch.id, quantity: pallet.quantity }],
     validated_at: validated ? '2026-10-25T12:00:00Z' : null, validated_by: validated ? driverId : null }]);
   if (url.pathname === '/rest/v1/order_notifications') return send([{ id: 'notice-demo', event_type: 'dispatch_wrong_pallet', description: 'Un pallet escaneado no corresponde a esta orden.', pallet_id: palletId, created_at: '2026-10-25T12:00:00Z' }]);
-  if (['order_delivery_receipts', 'traceability_events', 'distributor_batch_stocks', 'distributor_product_stocks', 'dispatch_order_lines'].some(table => url.pathname === `/rest/v1/${table}`)) return send([]);
+  if (['movements', 'order_delivery_receipts', 'traceability_events', 'distributor_batch_stocks', 'distributor_product_stocks', 'dispatch_order_lines'].some(table => url.pathname === `/rest/v1/${table}`)) return send([]);
   if (url.pathname === '/rest/v1/erp_sync_runs' || url.pathname === '/rest/v1/erp_company_settings') return send(null);
   if (url.pathname === '/rest/v1/rpc/get_expiration_thresholds') return send([{ critical_days: 30, caution_days: 60, upcoming_days: 90 }]);
   if (url.pathname === '/rest/v1/rpc/erp_stock_overview') return send([]);
