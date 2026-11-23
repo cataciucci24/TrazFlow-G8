@@ -19,7 +19,7 @@ Database changes are applied with the Supabase migrations. Existing `distributor
 The ERP is the source of truth for products, lots, stock and orders. The app talks to it only through the `ErpClient` interface in `src/lib/erp` (`getErpClient(companyId)`), and the provider is chosen with server-only environment variables:
 
 ```bash
-ERP_PROVIDER=mock            # unset = company works without ERP; "mock" or "erpnext" enables the sync
+ERP_PROVIDER=mock            # unset = company works without ERP; "mock", "erpnext" or "odoo" enables the sync
 ERP_MOCK_SCENARIO=ok         # mock only: ok | timeout | unauthorized | validation | server_error
 ERP_BASE_URL=http://localhost:8080   # erpnext only
 ERP_API_KEY=...                      # erpnext only
@@ -95,11 +95,12 @@ flowchart LR
   App --> Contract[ErpClient interface]
   Contract --> Mock[In-memory mock]
   Contract --> ERP[ERPNext adapter]
+  Contract --> Odoo[Odoo adapter: read only]
   DB --> Outbox[Outbox and cron]
   Outbox --> Contract
 ```
 
-The current providers are mock and ERPNext. Odoo and per-company credentials belong to pending sprint work (TRZ-113/TRZ-112); this branch does not claim those features are implemented. The ERP C4 level 3 is assigned to TRZ-125.
+The current providers are mock, ERPNext and Odoo. Odoo supports health checks and master-data reads; order reads and write operations are not supported yet. See [Odoo setup and limitations](docs/odoo-deploy.md). Per-company credentials remain pending in TRZ-112. The ERP C4 level 3 is assigned to TRZ-125.
 
 ## Onboarding and decisions
 

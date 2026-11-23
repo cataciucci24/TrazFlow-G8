@@ -10,7 +10,7 @@ export const ERP_CONTRACT_VERSION = 1;
 
 export type ErpContractVersion = typeof ERP_CONTRACT_VERSION;
 
-export const ERP_PROVIDERS = ["mock", "erpnext"] as const;
+export const ERP_PROVIDERS = ["mock", "erpnext", "odoo"] as const;
 
 export type ErpProvider = (typeof ERP_PROVIDERS)[number];
 

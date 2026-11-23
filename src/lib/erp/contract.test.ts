@@ -1,7 +1,7 @@
-import { test } from "vitest";
 import { runErpClientContract } from "./contract-suite";
 import { MockErpClient } from "./mock-client";
 import { CONTRACT_SECRETS, makeErpNextContractClient } from "../../../tests/helpers/erpnext-contract";
+import { makeOdooContractClient, ODOO_CONTRACT_KEY } from "../../../tests/helpers/odoo-contract";
 
 runErpClientContract("mock", () => new MockErpClient(), {
   errors: {
@@ -15,4 +15,13 @@ runErpClientContract("erpnext", makeErpNextContractClient, {
   errors: Object.fromEntries((["401", "403", "timeout", "network"] as const).map(failure => [failure, () => makeErpNextContractClient(failure)])),
   secrets: CONTRACT_SECRETS,
 });
-test.todo("contrato ERP: odoo — pendiente de TRZ-113; registrar su fábrica y capacidades cuando exista el adaptador");
+runErpClientContract("odoo", makeOdooContractClient, {
+  supports: {
+    dispatch: "el adaptador actual es de solo lectura",
+    stockEntry: "el adaptador actual es de solo lectura",
+    palletScan: "el adaptador actual es de solo lectura",
+    deliveryNotReady: "no implementa entrega ni despacho; devuelve config",
+  },
+  errors: Object.fromEntries((["401", "403", "timeout", "network"] as const).map(failure => [failure, () => makeOdooContractClient(failure)])),
+  secrets: [ODOO_CONTRACT_KEY],
+});

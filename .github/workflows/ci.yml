@@ -4,7 +4,8 @@ on:
   pull_request:
     branches: [develop, main]
   push:
-    branches: [develop, main]
+    branches: [develop, main, "codex/persona-1-*"]
+  workflow_dispatch:
 
 permissions:
   contents: read
