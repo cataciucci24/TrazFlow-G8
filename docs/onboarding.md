@@ -3,6 +3,10 @@
 Guía del comportamiento implementado en esta rama. Revisar al integrar el alta de
 empresa de TRZ-112, el reenvío de TRZ-74 y la recuperación de TRZ-31.
 
+Aplicación pública: [TrazFlow](https://traz-flow-g8.vercel.app). Las cuentas del
+seed y sus contraseñas públicas son exclusivamente locales. El despliegue requiere
+una cuenta real aprobada por el responsable de su empresa.
+
 ## 1. Preparar la empresa
 
 Un responsable debe tener la empresa y un usuario activo con rol
@@ -44,12 +48,15 @@ de solicitudes rechazadas depende de TRZ-74; no está implementado aquí.
 
 ## 4. Asignar trabajo y administrar acceso
 
-- **Depósito:** valida los pallets y confirma despachos.
+- **Depósito:** arma pallets por ítems, valida su contenido y confirma despachos.
 - **Chofer:** logística lo asigna a una orden. Una vez despachada, la ve en
   **Mis entregas** y registra el resultado de los pallets.
 - **Revocar/restaurar:** logística usa la pestaña **Operadores**. Revocar corta
   el acceso y conserva el historial. Revisar las entregas en tránsito antes de
   revocar a un chofer y reasignarlas cuando corresponda.
+
+Para pallets mixtos y reingresos, consultar la [guía operativa](persona3-pallets.md).
+Logística registra el reingreso con QR y motivo; no se modifica la entrega anterior.
 
 El destinatario o distribuidora es un dato comercial de la orden y no tiene
 cuenta. **No existe la vinculación operador-distribuidor** del modelo anterior:

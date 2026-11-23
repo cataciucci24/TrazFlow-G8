@@ -300,9 +300,11 @@ Decisiones y requisitos de la instancia:
 
 - **Remito en borrador.** TrazFlow no submitea el Delivery Note: el submit es lo que mueve stock en ERPNext y queda
   del lado del ERP. TrazFlow solo informa qué lote y pallet salieron, y después pregunta si ya se confirmó (§5.2).
-- **No verificado contra una instancia real** (no hay una publicada): el filtro de `Delivery Note` por un campo
+- **Lectura de estados del remito aún no verificada contra la instancia real**: el filtro de `Delivery Note` por un campo
   personalizado sin filtrar `docstatus` y la lectura de `docstatus` en el listado se probaron solo con respuestas
-  simuladas en `erpnext-client.test.ts`. Con el usuario de API hay que poder leer remitos anulados.
+  simuladas en `erpnext-client.test.ts`. Existe una instancia pública en Oracle con HTTPS;
+  se verificaron salud, datos maestros y órdenes, sin generar despachos para esta prueba.
+  Con el usuario de API hay que poder leer remitos anulados.
 - **Campos personalizados** (Customize Form), necesarios para idempotencia y trazabilidad:
   - `Delivery Note.trazflow_idempotency_key` — Data, **Unique**. ERPNext no tiene idempotency key nativa: el
     adaptador busca por este campo antes de crear, y si dos envíos simultáneos chocan, el índice único rechaza el

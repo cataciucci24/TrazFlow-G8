@@ -2,7 +2,11 @@
 
 [![CI](https://github.com/cataciucci24/TrazFlow-G8/actions/workflows/ci.yml/badge.svg)](https://github.com/cataciucci24/TrazFlow-G8/actions/workflows/ci.yml)
 
-Logistics traceability and visibility platform.
+TrazFlow tracks the physical flow of pallets from warehouse preparation to delivery. It connects ERP orders and stock with QR scanning, dispatch validation and an auditable history.
+
+[Open the application](https://traz-flow-g8.vercel.app) · [Documentación en español](docs/onboarding.md)
+
+The public application requires an approved account. The demo credentials below belong exclusively to the local seed.
 
 <img src="docs/images/orders-filters-mobile.png" alt="TrazFlow order list and filters on mobile, using synthetic demo data" width="280" />
 
@@ -11,6 +15,14 @@ Logistics traceability and visibility platform.
 TrazFlow complements the ERP by recording the physical flow of pallets. The visible roles are logistics manager, warehouse operator and driver. Drivers receive assignments per dispatch order and confirm deliveries from **Mis entregas**. Recipients remain business data and do not need accounts.
 
 Pallet labels can be printed individually or in batches from the pallet list. The browser produces an A4 sheet and encodes the persisted pallet code without allowing manual edits.
+
+| Role | Main operations |
+| --- | --- |
+| Logistics manager | ERP synchronization, order filters, driver assignments, pallet preparation, returns and access approvals |
+| Warehouse operator | Pallet preparation, QR scanning, locations, item validation and dispatch confirmation |
+| Driver | Assigned deliveries, QR scanning and receipt discrepancies per pallet item |
+
+Pallets may contain several product lots under one QR. Quantities are validated per item and unit. Logistics can return a delivered pallet to its warehouse with a mandatory reason; its delivery history remains available. See [mixed pallets and returns](docs/persona3-pallets.md). Reporting mixed contents to the ERP remains dependent on the adapter/outbox work described there.
 
 Database changes are applied with the Supabase migrations. Existing `distributor_operator` users must be transitioned explicitly by following [`docs/transicion-choferes.md`](docs/transicion-choferes.md).
 
@@ -37,9 +49,9 @@ The contract (payloads, external ids, error codes, idempotency key and ERPNext s
 2. Sign in as a logistics manager and open **Pallets**. Under *Integración ERP*, check that `Depósito Central - SRV` is linked to `DEP-01` (the local seed already creates this mapping).
 3. Press **Sincronizar con ERP** (also available in **Órdenes**). The panel shows the result and every run is audited in `erp_sync_runs`. Use `ERP_MOCK_SCENARIO=timeout` (or another scenario) to see a failed run: the app stays usable and the error is shown and stored.
 
-What gets imported: products, lots, one pallet per stock balance (lot × warehouse) and open dispatch orders with their product lines, which arrive as drafts. Upserts always use `(company_id, external_id)`. Nothing is deleted when it stops coming from the ERP, and a re-sync never overwrites local progress. With the ERP enabled, the manual create forms are hidden and ERP-owned fields cannot be edited through the API.
+What gets imported: warehouses, products, lots, stock balances (lot × warehouse) and open dispatch orders with their product lines, which arrive as drafts. Synchronization does not create physical pallets: users prepare them separately from the available stock. Upserts use company-scoped external identifiers; stock balances use their company/lot/warehouse key. Missing balances become zero, while historical entities and local order progress are retained. With the ERP enabled, manual product, lot and order creation is disabled.
 
-> **An imported pallet is an ERP stock balance, not a verified physical pallet.** TrazFlow generates its QR code. Print the label only when the pallet is physically prepared (US-OPS-08).
+> **An ERP stock balance is not a physical pallet.** Legacy pallets imported before this separation retain their history. New physical pallets have their own contents and TrazFlow QR label.
 
 Details, counters and limitations: [`docs/erp-sync.md`](docs/erp-sync.md).
 
@@ -50,6 +62,8 @@ Logistics managers get **Integración ERP** (`/dashboard/integrations`): ERP con
 ## Local development
 
 Use Node 24 (`.nvmrc`); the minimum supported version is 22.12. Supabase requires Node 22+ and the installed Vite requires 22.12+.
+
+Install dependencies with `npm ci` before starting the app or running tests.
 
 Run the app against the **local** Supabase stack (Docker), not the shared cloud database. Syncing with the ERP mock writes data, so never set `ERP_PROVIDER` while pointing at the cloud.
 
@@ -88,6 +102,8 @@ Troubleshooting:
 
 ## Architecture
 
+The context consists of logistics, warehouse staff and drivers using TrazFlow, with ERPNext/Odoo providing business data. The following container view shows the web app, its managed data services and external integrations. See [architecture views and code links](docs/arquitectura.md).
+
 The browser uses Next.js Server Components and authenticated Server Actions. Supabase provides authentication, PostgreSQL, RLS, RPCs and file storage. ERP reads enter through synchronization; operational writes go through a persistent outbox with idempotency and retries.
 
 ```mermaid
@@ -108,8 +124,24 @@ The current providers are mock, ERPNext and Odoo. Odoo supports health checks an
 
 See [operator onboarding](docs/onboarding.md), [current roles](docs/modelo-de-roles.md) and [architecture decisions](docs/decisiones/). A recipient is business data; drivers are assigned to dispatch orders, not linked to recipient accounts.
 
-The portfolio README requires a final review after the remaining sprint work merges (TRZ-124): confirm the public deployment URL, refresh the demo screenshot and add the seven team members, link the final C4 diagrams, and have another person cross-check the content. Local seeded users above are not production demo accounts.
+Final sprint review (TRZ-124) must incorporate the remaining company/warehouse features when merged, link the final ERP component diagram (TRZ-125), and include a cross-check by another team member. The public URL was verified to reach the login page; local seeded users are not production demo accounts.
+
+## Team
+
+Names and sprint responsibilities confirmed by the team; responsibilities describe ownership, not completion of every ticket.
+
+| Person | Name | Sprint responsibility |
+| --- | --- | --- |
+| 1 | Ámbar | Quality, Vitest, CI, ERP contract tests, import tests, HTTPS infrastructure, order filters and documentation |
+| 2 | Guille | ERP adapters, Odoo, trip optimization and ERP component architecture |
+| 3 | Nai | Shared pallet contents, mixed pallets, validation, reception and returns |
+| 4 | Jowi | Warehouses, configurable layouts and location suggestions |
+| 5 | Cata | Company onboarding, ERP settings per company, accounts and access requests |
+| 6 | Juani | Traceability timelines, delivery documents and exports |
+| 7 | Alva | Two-factor authentication, scanner inventory and customer identifiers |
 
 ## Testing
+
+Stack: Next.js 16, React 19 and TypeScript; Supabase Auth, PostgreSQL/RLS and Storage; Vitest/V8 for unit and contract tests, and Playwright for browser flows. The real ERPNext runs in Docker on Oracle behind Caddy HTTPS.
 
 Run `npm test` for all unit tests in `src/` and `tests/unit/` (Vitest). Run `npm run test:coverage` for the unified V8 report in `coverage/index.html`, `npm run typecheck` for generated Next route types and TypeScript, and `npm run test:e2e` for browser tests. See [testing and suite selection](docs/testing-demo.md). CI runs lint, type checking, unit tests and a build with dummy Supabase values.

@@ -33,11 +33,12 @@ lotes además tienen `external_active` (`false` = deshabilitado en el ERP; no se
 `ERP_PROVIDER` está definido explícitamente. Con ERP habilitado:
 
 - Se ocultan los formularios de alta de producto y lote (`createLot` también lo rechaza en el servidor).
-- **Pallets (TRZ-100):** solo `logistics_manager` los arma, eligiendo un lote sincronizado del ERP (activo, de
-  producto activo y con saldo) y cargando la cantidad real ("Armar pallet" en Pallets). `createPallet` rechaza en
-  el servidor un lote que no sea del ERP. `updatePallet` solo cambia la cantidad de pallets `in_warehouse`,
-  `source_system = 'trazflow'` y de lote del ERP. El tope por saldo lo valida la base. Los heredados no se editan.
-  Sin ERP, alta y edición siguen exactamente igual que antes.
+- **Pallets (TRZ-100 / TRZ-111):** Logística y Depósito pueden usar el armado por ítems
+  (`/dashboard/pallets/armar`). Con ERP activo, todos los lotes deben ser sincronizados;
+  la base valida el saldo por cada lote/depósito y revierte todo el armado si falla uno.
+  Cada pallet conserva un QR aunque contenga varios lotes. El flujo escalar heredado
+  mantiene sus restricciones de logística y no edita pallets heredados de saldos.
+  Ver [contenido compartido, armado y recepción por ítem](persona3-pallets.md).
 - **Las órdenes de despacho solo entran por la sincronización (TRZ-102).** Órdenes no muestra "Nueva orden" sino
   el aviso "Las órdenes se crean en el ERP y entran a TrazFlow al sincronizar.", `/dashboard/orders/new` muestra
   ese aviso en lugar del formulario, y `createDispatchOrder` rechaza la creación del lado servidor (después del

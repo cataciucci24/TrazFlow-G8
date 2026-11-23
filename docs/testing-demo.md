@@ -67,8 +67,10 @@ instalación reproducible, lint, tipos, todos los unitarios y build. Solo usa
 variables falsas de Supabase. El check se llama `CI`.
 
 La dueña del repo debe exigir ese check en las reglas de protección de ambas
-ramas. Crear el workflow no configura por sí solo la protección. La duración y
-el resultado remoto se verifican al subir el primer PR.
+ramas. Crear el workflow no configura por sí solo la protección. La ejecución
+[45105103269](https://github.com/cataciucci24/TrazFlow-G8/actions/runs/45105103269)
+del commit `96e0b5a` terminó correctamente en aproximadamente un minuto. La
+ejecución del PR final debe consultarse para verificar su propio commit.
 
 Los E2E quedan fuera del check obligatorio: las suites locales necesitan Docker,
 migraciones y datos de prueba; las de fixtures verifican otra capa. Se ejecutan
@@ -76,6 +78,10 @@ por separado antes de entregar los flujos afectados. No se afirma un tiempo en
 Actions hasta medirlo allí.
 
 ## Demo de calidad
+
+No ejecutar un build mientras corre Playwright: Next limpia `.next` y puede
+borrar los directorios de los servidores de prueba. Ejecutar build y suites
+de navegador en secuencia.
 
 1. Ejecutar `npm test` y mostrar el total real que informa Vitest.
 2. Mostrar idempotencia/reintentos en `src/lib/erp-outbox/processor.test.ts`.

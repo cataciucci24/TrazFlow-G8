@@ -1,117 +1,71 @@
-# Persona 1: pendientes y cómo retomarlos
+# Persona 1: entrega y pendientes externos
 
-Rama final: `codex/persona-1-verificacion-final`.
-El resumen de pruebas está en [persona-1-calidad.md](persona-1-calidad.md).
+Rama: `codex/persona-1-verificacion-final`.
+Worktree: `C:\Users\ambar\TrazFlow-G8-persona-1`.
+Ver [resultado completo](persona-1-calidad.md) y [evidencias de infraestructura](trz118-https-estado.md).
 
-## TRZ-118: HTTPS, IP fija y rotación
+## Trabajo implementado
 
-**Estado actual:** IP reservada `132.226.26.114` confirmada por Cata. HTTPS público
-válido en https://erpnext.132-226-26-114.sslip.io, host_name actualizado, 8080
-inaccesible desde afuera y credenciales renovadas/probadas; las anteriores fueron
-rechazadas. Entrega privada completada; archivo temporal retirado, sin secretos en Git.
+| Ticket | Resultado |
+| --- | --- |
+| TRZ-122 | Todo el código de tests usa Vitest; una cobertura V8; una config Playwright con siete proyectos; scripts y guía actualizados. |
+| TRZ-119 | Workflow CI sin secretos: instalación, lint, tipos, tests y build. Node 24 compatible con las dependencias reales; badge y archivos generados ignorados. Protección de ramas requiere Cata. |
+| TRZ-114 | Contrato compartido ejecutado contra mock, ERPNext y Odoo; omisiones explícitas para operaciones no soportadas. Mock exige despacho previo y permite reintento. |
+| TRZ-117 | Reglas de importación y acciones probadas; filas inválidas no se escriben; rows.ts con cobertura 100%; SQL local con rollback. |
+| TRZ-120 | Textos y comentarios neutrales fuera del adaptador; regla CODE documentada como propia de TrazFlow. |
+| TRZ-32 | Filtros combinados de estado/distribuidora en servidor, URL persistida, limpieza y estado vacío; mantiene aislamiento por empresa. |
+| TRZ-118 | IP reservada, HTTPS válido, firewall persistido, 8080 cerrado, credenciales renovadas, arranque automático corregido y verificado con reinicio. Cata confirmó Vercel. |
+| TRZ-73 | Guía del registro, empresa/rol, solicitud, aprobación/rechazo, revocación y asignación de choferes según el modelo vigente. |
+| TRZ-124 | README con app pública verificada, captura, roles, equipo confirmado, arquitectura y enlaces. Docs de ubicación, ERP e infraestructura actualizadas. Revisión final depende de merges restantes. |
 
-**Prueba final completada (23/11):** Cata confirmó que terminó Vercel. Se corrigió
-el arranque automático de nueve contenedores y se verificó con un segundo reinicio:
-misma IP, HTTPS válido, firewall persistido y lecturas mediante el adaptador real.
-Ver [estado y evidencias](trz118-https-estado.md). La comprobación de Vercel fue
-reportada por Cata; la prueba independiente cubre infraestructura y adaptador.
+El PR de pallets #87 de Nai se integró desde develop: lecturas por `pallet_contents`,
+pallets mixtos y reingreso. Los fixtures E2E se adaptaron al contenido compartido y
+al snapshot `expected_items` de cada orden, sin volver al formato escalar antiguo.
 
-La siguiente secuencia general sirve de referencia; no repetir los pasos locales
-ya realizados ni sobrescribir el respaldo previo. Las claves privadas y API keys
-permanecen fuera del repositorio.
+## TRZ-119: acción de Cata en GitHub
 
-### Secuencia para el administrador
+La conexión de GitHub no tiene administración. Consultar protección de main y
+develop respondió 403, por lo que no se afirma que esté activada o desactivada.
+El YAML no configura protección por sí mismo.
 
-1. Identificar la VM, su VNIC/IP privada y la IP pública actual. Guardar los
-   valores y una copia de las configuraciones actuales. Coordinar la ventana
-   porque sustituir la IP pública corta las conexiones que usan la anterior.
-2. Crear y asignar una IP pública **reservada** en Oracle. Para asignarla a esa
-   IP privada, primero debe quedar sin otra IP pública asignada. Comprobar el
-   acceso SSH por la nueva dirección antes de seguir. Ver
-   [asignación de IP reservada de Oracle](https://docs.oracle.com/en-us/iaas/Content/Network/Tasks/reserved-public-ip-assign.htm).
-3. Configurar el DNS del dominio elegido hacia la IP reservada. Revisar también
-   cualquier registro AAAA para que no dirija a otro servidor.
-4. Conservar SSH y habilitar TCP 80/443 hacia Caddy en las reglas de Oracle y en
-   el firewall real del sistema. No reemplazar a ciegas las reglas de iptables:
-   inspeccionar primero las reglas existentes y su mecanismo de persistencia.
-5. Instalar Caddy desde su [distribución oficial](https://caddyserver.com/docs/install).
-   Confirmar que `curl -I http://127.0.0.1:8080` responde dentro de la VM.
-   Copiar la plantilla, reemplazar el dominio y validar antes de recargar:
+Cata debe configurar ambas ramas para exigir PR y el check `CI`, y comprobar que
+un PR rojo queda bloqueado y que uno verde puede aprobarse. La ejecución del
+workflow y la revisión de las reglas son verificaciones diferentes.
 
-   ```bash
-   sudo caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
-   sudo systemctl reload caddy
-   sudo systemctl status caddy --no-pager
-   ```
+Mensaje listo para enviar:
 
-   Si Caddy aún no está iniciado, iniciar/habilitar su servicio según la instalación.
-   Caddy gestiona certificados y redirección a HTTPS cuando el dominio, DNS,
-   puertos y almacenamiento de certificados están correctamente configurados.
-   Ver [HTTPS automático](https://caddyserver.com/docs/automatic-https) y
-   [reverse proxy](https://caddyserver.com/docs/quick-starts/reverse-proxy).
-6. Probar `https://<dominio>` desde fuera de la VM, sin ignorar errores del
-   certificado. Revisar enlaces y redirecciones del sitio de ERPNext; si hace
-   falta, ajustar su `host_name` a esa URL tras confirmar el sitio real.
-7. Cerrar 8080 al exterior en Oracle y, preferentemente, publicar el frontend
-   Docker solo en `127.0.0.1:8080`. Aplicar ese cambio en el compose real ya
-   inspeccionado, no en un servicio supuesto. Confirmar que Caddy sigue llegando
-   al backend y que `http://<IP>:8080` falla desde otra red.
-8. Rotar las credenciales del usuario de integración en ERPNext. Actualizar
-   `ERP_BASE_URL=https://<dominio>`, `ERP_API_KEY` y `ERP_API_SECRET` en los
-   entornos de Vercel que correspondan. Las claves son variables de servidor:
-   nunca `NEXT_PUBLIC_*`. Crear un nuevo despliegue y comprobar conexión y
-   sincronización desde **Integración ERP**. Revocar las credenciales anteriores
-   y verificar que ya no autentican. No volver a usarlas como rollback.
-9. Coordinar un reinicio de la VM. Confirmar que conserva la IP, que Caddy
-   arranca y que la app vuelve a sincronizar sin editar Vercel. Actualizar
-   `erpnext-deploy.md` con valores reales y evidencias sin secretos.
+> Cata, el workflow CI de persona 1 ya corre lint, tipos, todos los tests y build.
+> Para cerrar TRZ-119 falta que, como administradora, configures main y develop
+> para exigir PR y el check CI. Mi conexión no tiene permisos de administración
+> (devuelve 403). Verificá también que un PR con CI rojo no pueda mergearse.
 
-Si falla antes del corte de Vercel, reparar la configuración del proxy usando
-su copia anterior y repetir la validación; no desactivar TLS ni abrir 8080 como
-solución permanente. Si falla después de rotar, corregir con las credenciales
-nuevas. No declarar TRZ-118 terminada hasta verificar todos sus criterios.
+## TRZ-73 / TRZ-124: dependencias del cierre de sprint
 
-**Evidencia externa:** Vercel confirmado por Cata, sin inspección independiente de
-su interfaz en esta prueba. Reinicio e integración de lectura verificados.
-Odoo necesitará su dominio/proxy cuando se despliegue;
-el adaptador actual es de lectura y no hay despliegue Odoo confirmado.
+La documentación refleja el código integrado; las siguientes funciones todavía
+no están en develop y pertenecen a otras personas:
 
-## TRZ-119: protección de ramas
+- Cata: TRZ-112 alta de empresa/ERP por empresa, TRZ-74 reenvío y TRZ-31 recuperación.
+- Jowi: TRZ-116 alta de depósitos y TRZ-115 layouts configurables.
+- Guille: TRZ-125 diagrama ERP nivel 3 (fuente e imagen) y capacidades si se integran.
+- Nai con adaptadores/outbox: reporte ERP de todos los ítems del pallet mixto.
 
-El workflow existe y puede ejecutarse en ramas de persona 1, PR y ramas base.
-La dueña del repo debe exigir el check `CI` en `develop` y `main`. El archivo YAML
-no activa por sí solo esa protección. La consulta de protección de ambas ramas
-respondió 403 (la integración no tiene permisos administrativos): no se pudo
-confirmar ni modificar su estado actual. Con permisos de administración:
+Después de esos merges, actualizar las secciones afectadas y hacer la revisión
+cruzada con otra persona que pide TRZ-124. La revisión de una sola persona no
+sustituye ese criterio. El README ya incluye la URL pública y los siete nombres;
+las cuentas del seed son locales, no credenciales de producción.
 
-1. Abrir las reglas de ambas ramas en GitHub.
-2. Exigir PR y el check `CI`; comprobar el nombre del check de una ejecución real.
-3. Verificar con un PR de prueba que un test roto impide el merge y que, al
-   corregirlo, queda verde. No introducir deliberadamente un test roto en esta rama.
+## Infraestructura
 
-## TRZ-73 / TRZ-124: cierre de documentación
+No falta otro reinicio: la prueba final y la corrección de arranque automático
+están registradas en [TRZ-118](trz118-https-estado.md). Vercel fue confirmado por
+Cata; la prueba independiente cubrió la VM y lecturas con ErpNextClient por HTTPS.
+El archivo temporal de entrega de credenciales se retiró. Odoo requerirá su
+propio dominio/proxy al desplegarse; no hay despliegue Odoo confirmado.
 
-**Por qué falta el cierre definitivo:** el sprint sigue recibiendo cambios de
-otras personas. La guía actual describe el código disponible, no funciones futuras.
+## Cómo continuar al recibir los merges
 
-- Tras TRZ-112, actualizar alta de empresa y configuración de ERP por empresa.
-- Tras TRZ-74 y TRZ-31, actualizar reenvío de solicitudes y recuperación de acceso.
-- Tras depósitos/layouts y pallets mixtos, revisar las guías de ubicaciones,
-  sincronización y contrato sin prometer esos flujos antes de su merge.
-- Agregar la URL pública verificada, los siete integrantes y sus aportes, y los
-  C4 definitivos de TRZ-125. Confirmar si existen cuentas demo de producción;
-  los usuarios públicos del seed son exclusivamente locales.
-- Hacer la revisión cruzada con otra persona y actualizar la captura si cambia
-  la interfaz. Odoo ya debe describirse como disponible para lectura, no pendiente.
-
-## Para retomar el trabajo
-
-El worktree de verificación queda en `C:\Users\ambar\TrazFlow-G8-persona-1`.
-No contiene secretos. Antes de continuar, hacer fetch, comparar con
-`origin/develop` e integrar los merges nuevos en la rama de persona 1. Repetir
-`npm run lint`, `npm run typecheck`, `npm run test:coverage` y el build con
-variables ficticias, además de los proyectos de navegador afectados.
-
-No cerrar tickets de infraestructura ni documentación final por el solo hecho
-de que la rama de código pase los tests. Registrar las evidencias externas cuando
-se obtengan los accesos y se completen las dependencias.
+Hacer fetch, integrar origin/develop en esta rama, revisar la documentación de las
+funciones nuevas y repetir lint, typecheck, test:coverage y build, además de las
+suites afectadas. No ejecutar build en paralelo con Playwright: Next limpia .next,
+que contiene los directorios de las suites. No usar credenciales cloud ni seeds
+locales contra la base compartida.

@@ -2,7 +2,8 @@
 
 Rama final: `codex/persona-1-verificacion-final`.
 Worktree: `C:\Users\ambar\TrazFlow-G8-persona-1`.
-Base integrada: `origin/develop` en `a5b1ee3`, incluidos los PR #83 y #85 de Odoo.
+Base integrada: `origin/develop` en `08a076d`, incluidos los PR #83 y #85 de Odoo
+y #87 de pallets mixtos/reingreso. Integración realizada el 23/11/2026.
 El trabajo original de `codex/persona-1-calidad-infra` se conserva en el historial.
 
 ## Tests unitarios y contrato ERP — TRZ-122 / TRZ-114
@@ -12,9 +13,9 @@ de Odoo. Se conserva `node:assert/strict`; se eliminaron el runner Node, su hook
 server-only y c8. Hay una única cobertura V8. `server-only` tiene un alias vacío
 solo en tests; las pruebas estáticas de fronteras cliente/servidor siguen activas.
 
-Resultado: **77 archivos, 524 tests aprobados, 6 omitidos con motivo, sin todo**.
+Resultado actualizado: **78 archivos, 532 tests aprobados, 6 omitidos con motivo, sin todo**.
 Los 417 tests originales pasaron tras la migración; los adicionales corresponden
-a importación, filtros, contrato compartido y Odoo integrado desde develop.
+a importación, filtros, contrato compartido, Odoo y contenido de pallets integrado desde develop.
 
 `runErpClientContract` corre los mismos casos contra mock, ERPNext y Odoo con
 respuestas externas simuladas. Odoo ejecuta lectura, relaciones, fechas, unidades,
@@ -38,12 +39,16 @@ las filas inválidas no lleguen a la RPC en modo manual ni ERP. Se conserva la
 política existente de procesar solo las filas válidas, sin inventar otra regla.
 
 `src/lib/stock-import/rows.ts`: **100% de líneas, ramas y funciones**.
-La cobertura global del proyecto es 26,75% de líneas; no debe confundirse con
+La cobertura global actual del proyecto es 26,58% de líneas; no debe confundirse con
 la cobertura específica de reglas ni con el porcentaje de historias terminadas.
 
 `supabase/tests/ush1_stock_import.sql` pasó contra PostgreSQL local y terminó con
 rollback. Verifica permisos, aislamiento de empresas, depósitos inválidos/inactivos,
 idempotencia y escritura de stock/eventos según el modo.
+
+Tras integrar #87 se aplicaron las cinco migraciones nuevas únicamente en la base
+local y pasaron también `trz111_mixed_pallets_and_return.sql` y
+`trz99_dissociate_state.sql`, ambas con rollback. No se modificó la base compartida.
 
 ## Seeds
 
@@ -66,8 +71,10 @@ Next agregó los includes de tipos para los directorios aislados de cada suite;
 se conservan en tsconfig para no ensuciar la rama en cada ejecución.
 
 Los resultados finales por proyecto se registran al terminar debajo de esta sección.
-Reportes locales: `playwright-report/<proyecto>/index.html` y
-`test-results/<proyecto>/results.json`; están ignorados por Git.
+Reportes locales: `playwright-report/index.html` y artefactos en `test-results/`;
+están ignorados por Git y se reemplazan al ejecutar otra suite. La verificación
+final guarda además un log por proyecto fuera del repo, en
+`C:\Users\ambar\.codex\tmp\persona1-final-checks\`.
 
 ## Filtros de órdenes y términos neutrales — TRZ-32 / TRZ-120
 
@@ -101,17 +108,19 @@ No se puede afirmar que esas reglas estén activas ni modificarlas con esta cone
 
 Onboarding describe registro, solicitud, aprobación/rechazo, revocación/restauración
 y asignación de choferes; el antiguo vínculo operador-distribuidor ya no existe.
-README corrige importación de líneas de órdenes, seeds, tests, roles y proveedores,
-e incluye una captura con datos sintéticos. El cierre final espera las historias
-de las otras personas y una revisión cruzada.
+README incluye app pública comprobada (login HTTP 200), los siete integrantes
+confirmados por Ámbar, roles, captura sintética y arquitectura. Corrige el saldo ERP
+frente al pallet físico y describe los ítems/reingresos de #87. Ubicaciones ya no
+afirma que el modelo esté limitado a DEP-01. El cierre final espera las historias
+de otras personas y la revisión cruzada requerida por TRZ-124.
 
 Lo que falta, por qué y los pasos para retomarlo están en
-[persona-1-pendientes.md](persona-1-pendientes.md). Incluye acceso a Oracle/Vercel,
-IP reservada, HTTPS, rotación, protección de ramas y dependencias de documentación.
+[persona-1-pendientes.md](persona-1-pendientes.md). Incluye protección de ramas
+con permisos de Cata y dependencias de documentación; infraestructura verificada.
 La [plantilla Caddy](../infra/erpnext/Caddyfile.example) se validó en un contenedor
 sin red: prueba sintaxis, no DNS, certificados ni conectividad al ERP real.
 
-## Resultado final de navegador — 22 de noviembre de 2026
+## Resultado final de navegador — 23 de noviembre de 2026
 
 | Proyecto | Aprobados | Fallos | Flaky |
 | --- | ---: | ---: | ---: |
@@ -127,6 +136,14 @@ sin red: prueba sintaxis, no DNS, certificados ni conectividad al ERP real.
 con outbox y ERP simulado, filtros, permisos, cambios de plan, suscripciones y QR.
 La demo se ejecutó con su proyecto y ritmo de presentación en navegador headless.
 Las pruebas de APIs simuladas no se presentan como pruebas de ERP remotos reales.
+
+Después de integrar #87 se verificaron los 21 casos de E2E por bloques: ocho de
+cuenta/planes, siete de entrega y pantallas adaptables, y seis de login, filtros
+y uso. Los bloques afectados se repitieron tras adaptar los fixtures a
+`pallet_contents`, `expected_items` y las RPC de validación/recepción por ítem.
+Esas RPC simuladas comprueban el SKU, lote y cantidad enviados. Pronósticos y los
+otros cinco proyectos completaron sus ejecuciones enteras. Se renovó y revisó
+visualmente la captura del README. Lint, tipos y build también aprobaron con #87.
 
 ## Avance de infraestructura posterior al push de verificación
 

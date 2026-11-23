@@ -26,6 +26,10 @@ const roleEmails = { 'chofer@trazflow.test': 'driver_operator', 'deposito@trazfl
 const product = { id: 'product-demo', name: 'Producto Demo con descripción extendida para comprobar el diseño en celular', sku: 'SKU-DEMO', unit_of_measure: 'cajas' };
 const batch = { id: 'batch-demo', batch_number: 'LOTE-DEMO', expiration_date: '2099-12-31', source_system: 'erp', products: product };
 const pallet = { id: palletId, qr_code: 'PAL-DEMO-001', status: 'assigned', current_location: 'Depósito central — Sector de preparación de pedidos', warehouse_code: 'CENTRAL', quantity: 10, created_at: '2026-10-25T12:00:00Z', source_system: 'trazflow', external_id: null, synced_at: null, batches: batch, traceability_events: [{ count: 1 }] };
+const palletContent = { item_id: 'item-demo', pallet_id: palletId, company_id: 'company-demo', batch_id: batch.id,
+  batch_number: batch.batch_number, expiration_date: batch.expiration_date, product_id: product.id,
+  product_name: product.name, product_sku: product.sku, unit_of_measure: product.unit_of_measure,
+  quantity: pallet.quantity, lot_source_system: batch.source_system };
 const part = value => Buffer.from(JSON.stringify(value)).toString('base64url');
 const token = `${part({ alg: 'HS256', typ: 'JWT' })}.${part({ sub: driverId, aud: 'authenticated', role: 'authenticated', exp: 4102444800 })}.fixture`;
 createServer(async (req, res) => {
@@ -74,10 +78,13 @@ createServer(async (req, res) => {
     return send(url.searchParams.has('id') ? order : delivered ? [] : [order]);
   }
   if (url.pathname === '/rest/v1/pallets') return send([pallet]);
+  if (url.pathname === '/rest/v1/pallet_contents') return send([palletContent]);
   if (url.pathname === '/rest/v1/products') return send([product]);
   if (url.pathname === '/rest/v1/batches') return send([batch]);
   if (url.pathname === '/rest/v1/warehouses') return send([{ code: 'CENTRAL', name: 'Depósito central', source_system: 'erp', active: true, external_id: 'CENTRAL', synced_at: null }]);
-  if (url.pathname === '/rest/v1/order_pallets') return send([{ pallet_id: palletId, pallets: pallet, validated_at: validated ? '2026-10-25T12:00:00Z' : null, validated_by: validated ? driverId : null }]);
+  if (url.pathname === '/rest/v1/order_pallets') return send([{ pallet_id: palletId, pallets: pallet,
+    expected_items: [{ productId: product.id, batchId: batch.id, quantity: pallet.quantity }],
+    validated_at: validated ? '2026-10-25T12:00:00Z' : null, validated_by: validated ? driverId : null }]);
   if (url.pathname === '/rest/v1/order_notifications') return send([{ id: 'notice-demo', event_type: 'dispatch_wrong_pallet', description: 'Un pallet escaneado no corresponde a esta orden.', pallet_id: palletId, created_at: '2026-10-25T12:00:00Z' }]);
   if (['order_delivery_receipts', 'traceability_events', 'distributor_batch_stocks', 'distributor_product_stocks', 'dispatch_order_lines'].some(table => url.pathname === `/rest/v1/${table}`)) return send([]);
   if (url.pathname === '/rest/v1/erp_sync_runs' || url.pathname === '/rest/v1/erp_company_settings') return send(null);
@@ -87,8 +94,12 @@ createServer(async (req, res) => {
   if (url.pathname === '/rest/v1/rpc/erp_integration_summary') return send([{ pending_count: 1, unreported_count: 1 }]);
   if (url.pathname === '/rest/v1/rpc/erp_dispatched_unreported') return send([{ order_id: orderId, order_external_id: 'ERP-ORDEN-DEMO-001', order_status: 'confirmed', confirmed_at: '2026-10-25T12:00:00Z', distributor_name: 'Destinatario Demo', event_id: '40000000-0000-4000-8000-000000000001', event_status: 'failed', attempts: 1, last_error_code: 'timeout', next_attempt_at: null, total_count: 1 }]);
   if (url.pathname === '/rest/v1/rpc/erp_integration_activity') return send([{ kind: 'dispatch_confirmed', id: '40000000-0000-4000-8000-000000000001', status: 'failed', occurred_at: '2026-10-25T12:00:00Z', finished_at: null, attempts: 1, next_attempt_at: null, error_code: 'timeout', error_message: 'El ERP no respondió a tiempo. El reporte queda pendiente para el siguiente intento.', error_count: 1, order_id: orderId, order_external_id: 'ERP-ORDEN-DEMO-001', pallet_count: 1, erp_reference: null, provider: 'mock', total_count: 1 }]);
-  if (url.pathname === '/rest/v1/rpc/validate_order_pallet') {
-    if (body.p_order_id !== orderId || body.p_qr_code !== pallet.qr_code) return send({ message: 'Unexpected validation input' }, 400);
+  if (url.pathname === '/rest/v1/rpc/erp_outbox_claim') return send([]);
+  if (url.pathname === '/rest/v1/rpc/validate_order_pallet_items') {
+    if (body.p_order_id !== orderId || body.p_qr_code !== pallet.qr_code ||
+      JSON.stringify(body.p_items) !== JSON.stringify([{ productSku: product.sku, batchNumber: batch.batch_number, quantity: pallet.quantity }])) {
+      return send({ message: 'Unexpected validation items' }, 400);
+    }
     validated = true;
     return send([{ outcome: 'validated', pallet_id: palletId, qr_code: pallet.qr_code, product_name: product.name, product_sku: product.sku, batch_number: batch.batch_number, validated_at: '2026-10-25T12:00:00Z' }]);
   }
@@ -99,8 +110,11 @@ createServer(async (req, res) => {
     last_event_type: delivered ? 'delivery_confirmed' : validated ? 'qr_scan' : activeRole === 'driver_operator' ? 'dispatch_confirmed' : 'location_assigned', last_event_at: '2026-10-25T12:00:00Z',
     actor_name: delivered ? 'Chofer Demo' : 'Operador Demo', actor_role: delivered ? 'driver_operator' : 'warehouse_operator',
   }] : []);
-  if (url.pathname === '/rest/v1/rpc/confirm_delivery_pallet') {
-    if (body.p_order_id !== orderId || body.p_qr_code !== 'PAL-DEMO-001' || body.p_discrepancy_type !== null) return send({ message: 'Unexpected delivery input' }, 400);
+  if (url.pathname === '/rest/v1/rpc/confirm_delivery_pallet_items') {
+    if (body.p_order_id !== orderId || body.p_qr_code !== 'PAL-DEMO-001' || body.p_discrepancy_type !== null ||
+      JSON.stringify(body.p_items) !== JSON.stringify([{ productSku: product.sku, batchNumber: batch.batch_number, quantity: pallet.quantity }])) {
+      return send({ message: 'Unexpected delivery items' }, 400);
+    }
     confirmations++;
     const outcome = delivered ? 'already_processed' : 'delivered';
     delivered = true;
