@@ -26,7 +26,9 @@ También se incorporó main en `bc481a2` (#86 de Juani). La migración de remito
 colisionaba con una versión ya aplicada: se verificó Supabase mediante SELECT y
 se renumeró solo el archivo no aplicado a `20261123100000_trz51_dispatch_notes.sql`.
 El remito se adaptó a los snapshots por ítem y conserva el conteo de pallets
-físicos. Ver [integración y despliegue de remitos](remitos.md).
+físicos. La migración de remitos ya fue aplicada y verificada en la base compartida
+por pedido de Ámbar: siete remitos generados, sin despachos pendientes ni diferencias
+en ítems. Ver [integración y despliegue de remitos](remitos.md).
 
 ## TRZ-119: protección activada y verificada
 
