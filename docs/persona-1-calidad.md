@@ -193,5 +193,11 @@ explícitamente: no se presentan como aprobados contra la base de demo.
 
 Se verificó además una instalación limpia exclusivamente local: las 74 migraciones
 y `supabase/seeds/001_demo.sql` se aplicaron desde cero, quedaron tres usuarios
-demo y una empresa, y se repitieron las 35 suites SQL con éxito. La base compartida
-solo se consultó con SELECT; no se modificaron su esquema ni su historial.
+demo y una empresa, y se repitieron las 35 suites SQL con éxito. Durante esa auditoría
+la base compartida solo se consultó con SELECT.
+
+Después del merge, Ámbar solicitó aplicar remitos en Supabase. Se aplicó únicamente
+`20261123100000_trz51_dispatch_notes.sql`, tras dry-run y sin Vault, seeds ni roles.
+Se verificaron siete remitos, cero despachos sin remito, cero diferencias en el
+conteo de ítems, RLS, trigger activo y rechazo de acceso anónimo en la API.
+No se alteraron las versiones previamente aplicadas. Ver [despliegue completado](remitos.md).
