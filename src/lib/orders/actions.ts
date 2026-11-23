@@ -131,7 +131,7 @@ export async function createDispatchOrder(
   if (associationError) {
     await supabase.from("pallets").update({ status: "in_warehouse" }).in("id", reservedIds);
     await supabase.from("dispatch_orders").delete().eq("id", createdOrder.id);
-    return { errors: { form: "No se pudieron asociar los pallets seleccionados." }, values };
+    return { errors: { form: associationError.code === "TM111" ? "Esta integración ERP todavía no admite pallets mixtos. Usá pallets de un solo ítem para esta orden." : "No se pudieron asociar los pallets seleccionados." }, values };
   }
 
   await supabase.from("traceability_events").insert(reservedIds.map((palletId) => ({
@@ -224,8 +224,9 @@ export async function associatePallets(
   );
 
   if (linkError) {
+    await supabase.from("pallets").update({ status: "in_warehouse" }).in("id", reservedIds).eq("status", "assigned");
     return {
-      error: `No se pudo asociar los pallets a la orden (${linkError.message}).`,
+      error: linkError.code === "TM111" ? "Esta integración ERP todavía no admite pallets mixtos. Usá pallets de un solo ítem para esta orden." : "No se pudo asociar los pallets a la orden. Actualizá e intentá nuevamente.",
       success: null,
     };
   }

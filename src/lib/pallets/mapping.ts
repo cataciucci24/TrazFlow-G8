@@ -1,24 +1,12 @@
 import { PALLET_LOCATION_EMBED, toPalletLocation, type RawPalletLocation } from "../locations/format.ts";
 import { normalizePalletStatus, type StoredPalletStatus } from "./status.ts";
+import type { PalletContent } from "./contents.ts";
 import type { ProductUnit } from "./units.ts";
 import type { Pallet } from "@/lib/types";
 
 export type RawProduct = { name: string; sku: string; unit_of_measure: ProductUnit };
 
-export type RawPalletBatch = {
-  batch_number: string;
-  expiration_date?: string | null;
-  source_system?: "trazflow" | "erp";
-  products: RawProduct | RawProduct[] | null;
-};
-
-/**
- * Fila cruda que devuelve Postgrest al embeber batches/products. El cliente
- * de Supabase no tiene tipos generados (createClient no recibe un genérico
- * Database), así que esta forma es la que observamos en runtime: la relación
- * hacia el lado "uno" de un FK puede llegar como objeto o como array según
- * la versión del cliente, por eso el mapeo defensivo en `mapPalletRow`.
- */
+/** Cabecera física. El contenido se carga exclusivamente desde contents.ts. */
 export type RawPalletRow = {
   id: string;
   qr_code: string;
@@ -26,28 +14,19 @@ export type RawPalletRow = {
   current_location: string | null;
   current_location_id?: string | null;
   warehouse_code?: string | null;
-  quantity: number | null;
   created_at: string;
   source_system?: "trazflow" | "erp";
   external_id?: string | null;
   synced_at?: string | null;
   location?: RawPalletLocation | RawPalletLocation[] | null;
-  batches:
-    | RawPalletBatch
-    | RawPalletBatch[]
-    | null;
+  contents?: PalletContent[];
 };
 
 export const PALLET_SELECT =
-  `id, qr_code, status, current_location, current_location_id, warehouse_code, quantity, created_at, source_system, external_id, synced_at, ${PALLET_LOCATION_EMBED}, batches ( batch_number, expiration_date, source_system, products ( name, sku, unit_of_measure ) )`;
+  `id, qr_code, status, current_location, current_location_id, warehouse_code, created_at, source_system, external_id, synced_at, ${PALLET_LOCATION_EMBED}`;
 
 export function mapPalletRow(row: RawPalletRow): Pallet {
-  const batch = Array.isArray(row.batches) ? row.batches[0] : row.batches;
-  const product = batch
-    ? Array.isArray(batch.products)
-      ? batch.products[0]
-      : batch.products
-    : null;
+  const content = row.contents?.[0];
 
   return {
     id: row.id,
@@ -57,19 +36,19 @@ export function mapPalletRow(row: RawPalletRow): Pallet {
     currentLocationId: row.current_location_id ?? null,
     location: toPalletLocation(row.location),
     warehouseCode: row.warehouse_code ?? null,
-    productName: product?.name ?? "—",
-    productSku: product?.sku ?? "—",
-    batchNumber: batch?.batch_number ?? "—",
-    quantity: row.quantity,
-    // batches.product_id es obligatorio: el producto solo falta si la fila embebida no llegó.
-    unitOfMeasure: product?.unit_of_measure ?? "unidades",
+    productName: row.contents && row.contents.length > 1 ? `Pallet mixto (${row.contents.length} ítems)` : content?.productName ?? "—",
+    productSku: row.contents?.map((item) => item.productSku).join(" · ") || "—",
+    batchNumber: row.contents?.map((item) => item.batchNumber).join(" · ") || "—",
+    quantity: row.contents?.length === 1 ? content?.quantity ?? null : null,
+    contents: row.contents ?? [],
+    unitOfMeasure: content?.unitOfMeasure ?? "unidades",
     origin: {
       sourceSystem: row.source_system ?? "trazflow",
       externalId: row.external_id ?? null,
       syncedAt: row.synced_at ?? null,
     },
-    lotSourceSystem: batch?.source_system ?? "trazflow",
-    batchExpirationDate: batch?.expiration_date ?? null,
+    lotSourceSystem: content?.lotSourceSystem ?? "trazflow",
+    batchExpirationDate: content?.expirationDate ?? null,
     palletCreatedAt: row.created_at,
   };
 }

@@ -20,7 +20,7 @@ export function InventoryPanel({ pallets, actions, initialSearch = "" }: { palle
   const visiblePallets = pallets.filter((pallet) =>
     (!location || JSON.stringify(locationOf(pallet)) === location) &&
     (!status || pallet.status === status) &&
-    (!query || [pallet.productName, pallet.productSku, pallet.batchNumber, pallet.qrCode]
+    (!query || [pallet.productName, pallet.productSku, pallet.batchNumber, pallet.qrCode, ...(pallet.contents ?? []).flatMap((item) => [item.productName, item.productSku, item.batchNumber])]
       .some((value) => normalize(value).includes(query))),
   );
   const hasFilters = Boolean(search || location || status);
