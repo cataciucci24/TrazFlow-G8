@@ -5,14 +5,14 @@ El resumen de pruebas está en [persona-1-calidad.md](persona-1-calidad.md).
 
 ## TRZ-118: HTTPS, IP fija y rotación
 
-**Estado actual:** el acceso SSH funciona con el usuario `ambar`. Ya se instalaron
-Caddy, la regla persistida 80/443 y host_name de Frappe. Las pruebas locales del
-proxy pasaron. El certificado es interno de preparación; todavía no es público.
+**Estado actual:** IP reservada `132.226.26.114` confirmada por Cata. HTTPS público
+válido en https://erpnext.132-226-26-114.sslip.io, host_name actualizado, 8080
+inaccesible desde afuera y credenciales renovadas/probadas; las anteriores fueron
+rechazadas. Entrega privada preparada en la VM, sin secretos en Git.
 
-**Por qué falta el cierre:** Cata hará la reserva de IP, el Security List de Oracle
-y los cambios/redeploy de Vercel. Se espera la IP nueva y confirmación de 80/443
-abiertos y 8080 cerrado. Después persona 1 ajustará dominio, certificado público
-y claves de integración. Ver [estado y evidencias](trz118-https-estado.md).
+**Por qué falta el cierre:** Cata debe cargar las variables nuevas en Vercel,
+redeployar y verificar healthcheck/sync. Después falta coordinar y probar el
+reinicio conservando IP e integración. Ver [estado y evidencias](trz118-https-estado.md).
 
 La siguiente secuencia general sirve de referencia; no repetir los pasos locales
 ya realizados ni sobrescribir el respaldo previo. Las claves privadas y API keys
@@ -69,9 +69,8 @@ su copia anterior y repetir la validación; no desactivar TLS ni abrir 8080 como
 solución permanente. Si falla después de rotar, corregir con las credenciales
 nuevas. No declarar TRZ-118 terminada hasta verificar todos sus criterios.
 
-**Evidencias que faltan:** URL con certificado válido, 8080 cerrado desde otra
-red, healthcheck y sync de la app desplegada, credenciales anteriores revocadas
-y reinicio conservando la IP. Odoo necesitará su dominio/proxy cuando se despliegue;
+**Evidencias que faltan:** healthcheck y sync de la app desplegada con las variables
+nuevas y reinicio conservando la IP. Odoo necesitará su dominio/proxy cuando se despliegue;
 el adaptador actual es de lectura y no hay despliegue Odoo confirmado.
 
 ## TRZ-119: protección de ramas

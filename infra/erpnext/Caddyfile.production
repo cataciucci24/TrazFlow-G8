@@ -1,0 +1,4 @@
+# Configuración pública validada en erpnext-vm; no contiene credenciales.
+erpnext.132-226-26-114.sslip.io {
+	reverse_proxy 127.0.0.1:8080
+}
