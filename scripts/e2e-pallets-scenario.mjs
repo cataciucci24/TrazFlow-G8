@@ -212,7 +212,7 @@ export function createPalletsScenario() {
           event('qr_scan', order.id, { qr_code: pallet.qr_code, validation_round: 1 }); outcome = 'validated';
         }
       }
-      const rows = result(outcome); rows[0].validated_at = relation?.validated_at ?? null;
+      const rows = result(outcome); rows[0].validated_at = ['validated', 'already_validated'].includes(outcome) ? relation?.validated_at ?? null : null;
       if (['content_required', 'content_mismatch'].includes(outcome)) Object.assign(rows[0], { product_name: null, product_sku: null, batch_number: null });
       send(rows); return true;
     }
@@ -241,6 +241,6 @@ export function createPalletsScenario() {
         outcome = 'delivered';
       }
     }
-    const rows = result(outcome); rows[0].registered_at = relation?.delivered_at ?? null; send(rows); return true;
+    const rows = result(outcome); rows[0].registered_at = ['delivered', 'already_processed'].includes(outcome) ? relation?.delivered_at ?? null : null; send(rows); return true;
   };
 }

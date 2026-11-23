@@ -69,4 +69,23 @@ describe('contratos del escenario HTTP de pallets manuales', () => {
     request('/test/pallets/reset');
     expect(request('/test/pallets/state').data).toEqual({ pallets: [], contents: [], orders: [], relations: [], events: [], movements: [], calls: [] });
   });
+  it('no filtra la fecha de una validación previa en resultados rechazados', () => {
+    const request = fixture();
+    const order = '20000000-0000-4000-8000-000000000001';
+    request('/rest/v1/rpc/create_pallet_with_items', { p_items: items, p_warehouse_code: 'CENTRAL' });
+    request('/rest/v1/dispatch_orders', {}, 'logistics_manager', 'POST');
+    request('/rest/v1/pallets?status=eq.in_warehouse', { status: 'assigned' }, 'logistics_manager', 'PATCH');
+    request('/rest/v1/order_pallets', [{ order_id: order, pallet_id: '30000000-0000-4000-8000-000000000001', expected: true }], 'logistics_manager', 'POST');
+    const path = '/rest/v1/rpc/validate_order_pallet_items';
+    expect(request(path, { p_order_id: order, p_qr_code: mixedCode, p_items: [
+      { productSku: 'ARZ-1', batchNumber: 'LOTE-1', quantity: 10 }, { productSku: 'QSO-2', batchNumber: 'LOTE-2', quantity: 2.5 },
+    ] }, 'warehouse_operator').data).toEqual([expect.objectContaining({ outcome: 'validated', validated_at: expect.any(String) })]);
+    expect(request(path, { p_order_id: order, p_qr_code: mixedCode, p_items: null }, 'warehouse_operator').data).toEqual([{
+      outcome: 'content_required', pallet_id: '30000000-0000-4000-8000-000000000001', qr_code: mixedCode,
+      product_name: null, product_sku: null, batch_number: null, validated_at: null,
+    }]);
+    expect(request(path, { p_order_id: order, p_qr_code: 'PAL-INEXISTENTE', p_items: [] }, 'warehouse_operator').data).toEqual([{
+      outcome: 'pallet_not_found', pallet_id: null, qr_code: null, product_name: null, product_sku: null, batch_number: null, validated_at: null,
+    }]);
+  });
 });
