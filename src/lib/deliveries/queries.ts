@@ -36,7 +36,7 @@ export async function getOrderDeliveryPallets(orderId: string): Promise<Delivery
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("get_order_delivery_pallets", { p_order_id: orderId });
   if (error) throw new Error("No se pudieron consultar los pallets de la entrega.", { cause: error });
-  return ((data ?? []) as DeliveryPalletRow[]).map((row) => ({
+  const rows = ((data ?? []) as DeliveryPalletRow[]).map((row) => ({
     id: row.pallet_id,
     qrCode: row.qr_code,
     productName: row.product_name,
@@ -47,6 +47,17 @@ export async function getOrderDeliveryPallets(orderId: string): Promise<Delivery
     deliveryOutcome: row.delivery_outcome,
     processedAt: row.processed_at,
   }));
+  const groups = new Map<string, DeliveryPallet>();
+  for (const row of rows) {
+    const item = { productName: row.productName, productSku: row.productSku, batchNumber: row.batchNumber, quantity: row.quantity, unitOfMeasure: row.unitOfMeasure };
+    const existing = groups.get(row.id);
+    if (existing) {
+      existing.contents!.push(item);
+      existing.productName = 'Pallet mixto (' + existing.contents!.length + ' ítems)';
+      existing.quantity = null;
+    } else groups.set(row.id, { ...row, contents: [item] });
+  }
+  return [...groups.values()];
 }
 
 /** Remitos firmados de una orden (TRZ-103). RLS: logística y depósito de la empresa, o el chofer asignado. */

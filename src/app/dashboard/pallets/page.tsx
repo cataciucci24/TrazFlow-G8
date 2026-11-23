@@ -1,3 +1,5 @@
+import Link from "next/link";
+import { ReturnPalletForm } from "@/components/pallets/return-pallet-form";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
@@ -37,7 +39,7 @@ export default async function PalletsPage() {
   return <div className="app-page">
     <PageHeader title="Pallets"
       description={erpEnabled ? "Armá los pallets físicos contra los lotes del ERP y seguí su estado." : "Consultá, registrá y realizá el seguimiento de tus pallets."}
-      action={<NewPalletForm existingBatches={existingBatches} existingProducts={products} erpLots={erpLots} warehouses={warehouses} />} />
+      action={<div className="flex flex-wrap gap-2"><ReturnPalletForm /><Link href="/dashboard/pallets/armar" className="button-secondary">Armar pallet mixto</Link><NewPalletForm existingBatches={existingBatches} existingProducts={products} erpLots={erpLots} warehouses={warehouses} /></div>} />
     {erpEnabled ? <>
       <ErpSyncPanel lastRun={lastRun} warehouses={warehouses} />
       <InlineAlert variant="info" announce={false}>

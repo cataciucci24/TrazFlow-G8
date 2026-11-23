@@ -1,4 +1,6 @@
 "use client";
+import { PalletContentList } from "@/components/pallets/content-list";
+
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
@@ -48,7 +50,7 @@ export function PalletTrackingPanel({
   const visiblePallets = pallets.filter((pallet) =>
     (!location || (pallet.currentLocation?.trim() || "") === location) &&
     (!status || pallet.status === status) &&
-    (!query || [pallet.qrCode, pallet.productName, pallet.productSku, pallet.batchNumber, pallet.origin?.externalId ?? ""].some((value) => normalize(value).includes(query))),
+    (!query || [pallet.qrCode, pallet.productName, pallet.productSku, pallet.batchNumber, pallet.origin?.externalId ?? "", ...(pallet.contents ?? []).flatMap((item) => [item.productName, item.productSku, item.batchNumber])].some((value) => normalize(value).includes(query))),
   );
   const hasFilters = Boolean(search || location || status);
 
@@ -110,7 +112,7 @@ export function PalletTrackingPanel({
                     </label>
                   </td>
                   <td role="cell" data-label="Código" className="mobile-primary font-mono font-bold">{pallet.qrCode}</td>
-                  <td role="cell" data-label="Producto" className="mobile-wide font-medium">{pallet.productName}</td>
+                  <td role="cell" data-label="Producto" className="mobile-wide font-medium">{pallet.contents && pallet.contents.length > 1 ? <PalletContentList items={pallet.contents} /> : pallet.productName}</td>
                   <td role="cell" data-label="Lote" className="font-mono text-stone-600">{pallet.batchNumber}</td>
                   <td role="cell" data-label="Estado" className="mobile-priority"><PalletStatusBadge status={pallet.status} /></td>
                   <td role="cell" data-label="Ubicación" className="mobile-priority text-stone-500">{pallet.currentLocation ?? "—"}</td>

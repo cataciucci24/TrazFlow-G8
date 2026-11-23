@@ -1,18 +1,13 @@
 import { PALLET_LOCATION_EMBED, toPalletLocation, type RawPalletLocation } from "../locations/format.ts";
 import type { OrderPalletValidation } from "./types.ts";
 
-type RawProduct = { name: string; sku: string };
-
-type RawBatch = {
-  batch_number: string;
-  products: RawProduct | RawProduct[] | null;
-};
+import type { PalletContent } from "../pallets/contents.ts";
 
 type RawPallet = {
   id: string;
   qr_code: string;
   location?: RawPalletLocation | RawPalletLocation[] | null;
-  batches: RawBatch | RawBatch[] | null;
+  contents?: PalletContent[];
 };
 
 export type RawOrderPallet = {
@@ -22,7 +17,7 @@ export type RawOrderPallet = {
 };
 
 export const ORDER_PALLET_VALIDATION_SELECT =
-  `validated_at, validated_by, pallets ( id, qr_code, ${PALLET_LOCATION_EMBED}, batches ( batch_number, products ( name, sku ) ) )`;
+  `pallet_id, expected_items, validated_at, validated_by, pallets ( id, qr_code, ${PALLET_LOCATION_EMBED} )`;
 
 /** Filas de `order_pallets` → pallets de la orden con su validación y ubicación. */
 export function mapOrderPalletValidations(rows: RawOrderPallet[]): OrderPalletValidation[] {
@@ -30,19 +25,15 @@ export function mapOrderPalletValidations(rows: RawOrderPallet[]): OrderPalletVa
     const pallet = Array.isArray(row.pallets) ? row.pallets[0] : row.pallets;
     if (!pallet) return [];
 
-    const batch = Array.isArray(pallet.batches) ? pallet.batches[0] : pallet.batches;
-    const product = batch
-      ? Array.isArray(batch.products)
-        ? batch.products[0]
-        : batch.products
-      : null;
+    const content = pallet.contents?.[0];
 
     return [{
+      contents: pallet.contents ?? [],
       id: pallet.id,
       qrCode: pallet.qr_code,
-      productName: product?.name ?? "—",
-      productSku: product?.sku ?? "—",
-      batchNumber: batch?.batch_number ?? "—",
+      productName: (pallet.contents?.length ?? 0) > 1 ? "Pallet mixto" : content?.productName ?? "—",
+      productSku: content?.productSku ?? "—",
+      batchNumber: content?.batchNumber ?? "—",
       location: toPalletLocation(pallet.location),
       validatedAt: row.validated_at,
       validatedBy: row.validated_by,

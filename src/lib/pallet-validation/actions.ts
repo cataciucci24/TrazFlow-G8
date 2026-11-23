@@ -1,5 +1,6 @@
 "use server";
 
+import type { ObservedPalletItem } from "@/lib/pallets/item-input";
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 
@@ -22,6 +23,8 @@ type ValidationRpcRow = {
 };
 
 const MESSAGES: Record<ValidationOutcome, string> = {
+  content_required: "Confirmá el contenido detectado de cada ítem del pallet.",
+  content_mismatch: "El contenido detectado no coincide con lo esperado. Revisá producto, lote y cantidad de cada ítem.",
   validated: "Pallet validado correctamente.",
   already_validated: "Este pallet ya fue validado.",
   pallet_not_found: "El código QR no corresponde a un pallet registrado.",
@@ -36,6 +39,7 @@ const MESSAGES: Record<ValidationOutcome, string> = {
 export async function validatePallet(
   orderId: string,
   scannedCode: string,
+  items?: ObservedPalletItem[],
 ): Promise<PalletValidationResult> {
   const profile = await requireUserProfile();
 
@@ -53,7 +57,8 @@ export async function validatePallet(
   }
 
   const supabase = await createClient();
-  const { data, error } = await supabase.rpc("validate_order_pallet", {
+  const { data, error } = await supabase.rpc("validate_order_pallet_items", {
+    p_items: items ?? null,
     p_order_id: orderId,
     p_qr_code: qrCode,
   });
@@ -67,7 +72,7 @@ export async function validatePallet(
     return { outcome: "error", message: MESSAGES.error, pallet: null };
   }
 
-  if (row.outcome === "validated") {
+  if (row.outcome === "validated" || row.outcome === "content_mismatch") {
     revalidatePath(`/dashboard/orders/${orderId}`);
     // TRZ-63: el escaneo quedó en el outbox (trigger de order_pallets); se manda sin hacer esperar al operador.
     after(() =>

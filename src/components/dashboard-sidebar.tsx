@@ -72,6 +72,8 @@ export function DashboardSidebar({ role, companyPlan }: DashboardSidebarProps) {
       ? [{ href: "/dashboard/deliveries", label: "Mis entregas", icon: <ScanIcon />, active: pathname.startsWith("/dashboard/deliveries") }]
       : [{ href: "/dashboard", label: detailTitle, icon: <ScanIcon />, active: pathname === "/dashboard" || pathname.startsWith("/dashboard/orders/") }];
 
+  if (role === "warehouse_operator") links.push({ href: "/dashboard/pallets/armar", label: "Armar pallet", icon: <PalletIcon />, active: pathname.startsWith("/dashboard/pallets/armar") });
+
   if (role !== "driver_operator") links.push({ href: "/dashboard/locations", label: "Ubicaciones", icon: <InventoryIcon />, active: pathname.startsWith("/dashboard/locations") });
 
   const navigation = (

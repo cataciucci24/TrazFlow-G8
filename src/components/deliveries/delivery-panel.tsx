@@ -1,5 +1,7 @@
 "use client";
 
+import { ObservedContentForm } from "@/components/pallets/observed-content-form";
+import type { ObservedPalletItem } from "@/lib/pallets/item-input";
 import { useCallback, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
@@ -14,6 +16,7 @@ import type { DeliveryDiscrepancyType, DeliveryPallet, DeliveryResult } from "@/
 export function DeliveryPanel({ orderId, pallets, canDeliver }: { orderId: string; pallets: DeliveryPallet[]; canDeliver: boolean }) {
   const router = useRouter();
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [damaged, setDamaged] = useState(false);
   const [pendingCode, setPendingCode] = useState<string | null>(null);
   const [result, setResult] = useState<DeliveryResult | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -21,9 +24,9 @@ export function DeliveryPanel({ orderId, pallets, canDeliver }: { orderId: strin
   const hasDiscrepancy = pallets.some((pallet) => pallet.deliveryOutcome !== null && pallet.deliveryOutcome !== "delivered");
   const expectedCode = pendingCode ? pallets.some((pallet) => pallet.qrCode === pendingCode.trim()) : false;
 
-  const submit = useCallback((code: string, difference: DeliveryDiscrepancyType | null) => {
+  const submit = useCallback((code: string, difference: DeliveryDiscrepancyType | null, items?: ObservedPalletItem[]) => {
     startTransition(async () => {
-      const response = await confirmDeliveryPallet(orderId, code, difference);
+      const response = await confirmDeliveryPallet(orderId, code, difference, items);
       setResult(response);
       setPendingCode(null);
       router.refresh();
@@ -54,14 +57,14 @@ export function DeliveryPanel({ orderId, pallets, canDeliver }: { orderId: strin
           <span aria-hidden="true" className={`size-3 shrink-0 rounded-full ${pallet.deliveryOutcome === "delivered" ? "bg-emerald-600" : pallet.deliveryOutcome ? "bg-red-600" : "border border-stone-300"}`} />
           <div className="min-w-0 flex-1">
             <p className="break-all font-mono font-semibold">{pallet.qrCode}</p>
-            <p className="text-sm text-stone-500">{pallet.productName} · Lote {pallet.batchNumber} · {pallet.quantity ?? "—"} {pallet.unitOfMeasure}</p>
+            <ul className="text-sm text-stone-500">{(pallet.contents ?? [pallet]).map((item, index) => <li key={index}>{item.productName} ({item.productSku}) · Lote {item.batchNumber} · {item.quantity ?? "—"} {item.unitOfMeasure}</li>)}</ul>
           </div>
-          {pallet.deliveryOutcome ? <Badge tone={pallet.deliveryOutcome === "delivered" ? "success" : "danger"}>{pallet.deliveryOutcome === "delivered" ? "Entregado" : pallet.deliveryOutcome === "missing" ? "Faltante" : "Dañado"}</Badge>
+          {pallet.deliveryOutcome ? <Badge tone={pallet.deliveryOutcome === "delivered" ? "success" : "danger"}>{pallet.deliveryOutcome === "delivered" ? "Entregado" : pallet.deliveryOutcome === "missing" ? "Faltante" : pallet.deliveryOutcome === "content_mismatch" ? "Diferencia por ítem" : "Dañado"}</Badge>
             : <button type="button" className="button-secondary button-sm" disabled={!canDeliver || isPending} onClick={() => submit(pallet.qrCode, "missing")}>Marcar faltante</button>}
         </li>)}
       </ul>}
 
-    {scannerOpen && <QrScanner disabled={isPending} onCancel={() => setScannerOpen(false)} onScan={(code) => { setScannerOpen(false); setPendingCode(code); }} />}
+    {scannerOpen && <QrScanner disabled={isPending} onCancel={() => setScannerOpen(false)} onScan={(code) => { setScannerOpen(false); setDamaged(false); setPendingCode(code); }} />}
     <Modal open={Boolean(pendingCode)} onClose={() => setPendingCode(null)} title="Confirmar resultado" busy={isPending}
       description={expectedCode ? "Confirmá la entrega del pallet o registralo como dañado." : "El código no pertenece a los pallets esperados. Registrá la diferencia."}
       actions={<button type="button" className="button-secondary" onClick={() => setPendingCode(null)} disabled={isPending}>Cancelar</button>}>
@@ -69,8 +72,10 @@ export function DeliveryPanel({ orderId, pallets, canDeliver }: { orderId: strin
       {pendingCode && <PalletScanDetails key={pendingCode} qrCode={pendingCode.trim()} />}
       <div className="mt-4 grid gap-2 sm:grid-cols-2">
         {expectedCode ? <>
-          <button type="button" className="button-primary" disabled={isPending} onClick={() => submit(pendingCode!, null)}>Entregado</button>
-          <button type="button" className="button-secondary" disabled={isPending} onClick={() => submit(pendingCode!, "damaged")}>Dañado</button>
+          <div className="sm:col-span-2"><ObservedContentForm key={pendingCode} pending={isPending}
+            expected={(pallets.find((pallet) => pallet.qrCode === pendingCode?.trim())?.contents ?? []).map((item) => ({ productSku: item.productSku, batchNumber: item.batchNumber, quantity: item.quantity }))}
+            onConfirm={(items) => submit(pendingCode!, damaged ? "damaged" : null, items)} label="Confirmar recepción por ítem" /></div>
+          <label className="form-label sm:col-span-2"><input type="checkbox" className="form-check mr-2" disabled={isPending} checked={damaged} onChange={(event) => setDamaged(event.target.checked)} />El pallet tiene daños</label>
         </> : <>
           <button type="button" className="button-secondary" disabled={isPending} onClick={() => submit(pendingCode!, "surplus")}>Sobrante</button>
           <button type="button" className="button-secondary" disabled={isPending} onClick={() => submit(pendingCode!, "wrong_order")}>No corresponde</button>

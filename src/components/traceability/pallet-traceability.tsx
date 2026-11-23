@@ -1,3 +1,4 @@
+import { PalletContentList } from "@/components/pallets/content-list";
 import { LocationHistory } from "@/components/locations/location-history";
 import Link from "next/link";
 import { PalletQrButton } from "@/components/pallets/pallet-qr-button";
@@ -35,6 +36,7 @@ export function PalletTraceability({
             <p className="section-description">Identificación y estado actual del pallet.</p>
           </div>
         </div>
+        {pallet.contents && pallet.contents.length > 1 && <PalletContentList items={pallet.contents} />}
         <dl className="surface grid gap-5 p-6 text-sm sm:grid-cols-2">
           <div>
             <dt className="text-slate-500">Producto</dt>

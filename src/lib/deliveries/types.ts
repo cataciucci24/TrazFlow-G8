@@ -3,6 +3,7 @@ import type { OrderStatus } from "@/lib/types";
 
 export type DeliveryDiscrepancyType = "missing" | "surplus" | "damaged" | "wrong_order";
 export type DeliveryOutcome =
+  | "content_required"
   | "delivered"
   | "already_processed"
   | "surplus_recorded"
@@ -17,6 +18,7 @@ export type DeliveryOutcome =
   | "error";
 
 export type DeliveryPallet = {
+  contents?: { productName: string; productSku: string; batchNumber: string; quantity: number | null; unitOfMeasure: ProductUnit }[];
   id: string;
   qrCode: string;
   productName: string;
@@ -24,7 +26,7 @@ export type DeliveryPallet = {
   batchNumber: string;
   quantity: number | null;
   unitOfMeasure: ProductUnit;
-  deliveryOutcome: "delivered" | "missing" | "damaged" | null;
+  deliveryOutcome: "delivered" | "missing" | "damaged" | "content_mismatch" | null;
   processedAt: string | null;
 };
 

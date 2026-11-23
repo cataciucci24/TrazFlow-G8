@@ -1,3 +1,4 @@
+import { PalletContentList } from "@/components/pallets/content-list";
 import Link from "next/link";
 
 import { PalletRowActions } from "@/components/pallets/pallet-actions";
@@ -43,12 +44,13 @@ export function groupByLocation<T extends Pallet>(pallets: T[]) {
 
 /** Totales por unidad: cada pallet suma en la unidad de su producto. */
 function summarizeStock(pallets: Pallet[]) {
-  const defined = pallets.filter((pallet) => pallet.quantity !== null);
+  const entries = pallets.flatMap<Pick<Pallet, "quantity" | "unitOfMeasure">>((pallet) => pallet.contents ?? [pallet]);
+  const defined = entries.filter((item) => item.quantity !== null);
   const totals = PRODUCT_UNITS.map((unit) => ({
     unit,
     total: defined.filter((pallet) => pallet.unitOfMeasure === unit).reduce((sum, pallet) => sum + pallet.quantity!, 0),
   })).filter(({ total }) => total > 0);
-  return { totals, undefinedCount: pallets.length - defined.length };
+  return { totals, undefinedCount: entries.length - defined.length };
 }
 
 function palletCount(count: number) {
@@ -109,10 +111,10 @@ export function LocationStockTable({ location, pallets, actions, filtered = fals
             {pallets.map((pallet) => (
               <tr key={pallet.id}>
                 <td className="max-w-64 break-words font-mono font-bold">{pallet.qrCode}</td>
-                <td className="max-w-64 break-words font-medium">{pallet.productName}<span className="table-secondary block md:hidden">SKU {pallet.productSku} · Lote {pallet.batchNumber}</span></td>
+                <td className="max-w-64 break-words font-medium">{pallet.contents && pallet.contents.length > 1 ? <PalletContentList items={pallet.contents} /> : pallet.productName}<span className="table-secondary block md:hidden">SKU {pallet.productSku} · Lote {pallet.batchNumber}</span></td>
                 <td className="table-secondary-column max-w-48 break-words font-mono text-slate-600">{pallet.productSku}</td>
                 <td className="table-secondary-column max-w-48 break-words font-mono text-slate-600">{pallet.batchNumber}</td>
-                <td className="text-right tabular-nums">{pallet.quantity === null ? "Sin definir" : `${formatQuantity.format(pallet.quantity)} ${pallet.unitOfMeasure}`}</td>
+                <td className="text-right tabular-nums">{(pallet.contents?.length ?? 0) > 1 ? "Ver cantidades por ítem" : pallet.quantity === null ? "Sin definir" : `${formatQuantity.format(pallet.quantity)} ${pallet.unitOfMeasure}`}</td>
                 <td>
                   <PalletStatusBadge status={pallet.status} />
                 </td>

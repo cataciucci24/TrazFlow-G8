@@ -1,7 +1,8 @@
+import { attachExpectedPalletContents, type ExpectedPalletRelation, attachPalletContents } from "./contents";
 import { createClient } from "@/lib/supabase/server";
 import { getExpirationThresholds } from "@/lib/expiration/queries";
 import { classifyExpiration } from "@/lib/expiration/thresholds";
-import { mapOrderPalletRows, mapPalletRow, PALLET_SELECT, type RawPalletRow, type RawProduct } from "@/lib/pallets/mapping";
+import { mapPalletRow, PALLET_SELECT, type RawPalletRow, type RawProduct } from "@/lib/pallets/mapping";
 import type { ExistingProduct, ExpirationAlert, Lot, Pallet, PalletWithHistory } from "@/lib/types";
 
 export type StalePallet = Pallet & {
@@ -27,7 +28,7 @@ export async function getAvailablePallets(companyId: string): Promise<Pallet[]> 
     );
   }
 
-  return ((data ?? []) as unknown as RawPalletRow[]).map(mapPalletRow);
+  return (await attachPalletContents(supabase, (data ?? []) as unknown as RawPalletRow[])).map(mapPalletRow);
 }
 
 /** Inventario completo para que logística pueda seguir cada pallet por estado. */
@@ -44,7 +45,7 @@ export async function getCompanyPallets(companyId: string): Promise<PalletWithHi
   }
 
   const rows = (data ?? []) as unknown as (RawPalletRow & { traceability_events: { count: number }[] | null })[];
-  return rows.map((row) => ({
+  return (await attachPalletContents(supabase, rows)).map((row) => ({
     ...mapPalletRow(row),
     hasHistory: (row.traceability_events?.[0]?.count ?? 0) > 0,
   }));
@@ -57,7 +58,7 @@ export async function getCompanyPalletsByIds(companyId: string, ids: string[]): 
   const { data, error } = await supabase.from("pallets").select(PALLET_SELECT)
     .eq("company_id", companyId).in("id", ids);
   if (error) throw new Error("No se pudieron consultar los pallets para imprimir.", { cause: error });
-  const byId = new Map(((data ?? []) as unknown as RawPalletRow[]).map((row) => [row.id, mapPalletRow(row)]));
+  const byId = new Map((await attachPalletContents(supabase, (data ?? []) as unknown as RawPalletRow[])).map((row) => [row.id, mapPalletRow(row)]));
   return ids.flatMap((id) => {
     const pallet = byId.get(id);
     return pallet ? [pallet] : [];
@@ -80,7 +81,7 @@ export async function getStalePallets(
     throw new Error(`No se pudieron leer los pallets inmovilizados (${palletError.code}: ${palletError.message}).`, { cause: palletError });
   }
 
-  const pallets = (palletData ?? []) as unknown as RawPalletRow[];
+  const pallets = await attachPalletContents(supabase, (palletData ?? []) as unknown as RawPalletRow[]);
   if (pallets.length === 0) return [];
 
   const palletIds = pallets.map((pallet) => pallet.id);
@@ -120,7 +121,7 @@ export async function getPalletsForOrder(orderId: string): Promise<Pallet[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("order_pallets")
-    .select(`pallets ( ${PALLET_SELECT} )`)
+    .select(`pallet_id, expected_items, pallets ( ${PALLET_SELECT} )`)
     .eq("order_id", orderId);
 
   if (error) {
@@ -130,7 +131,12 @@ export async function getPalletsForOrder(orderId: string): Promise<Pallet[]> {
     );
   }
 
-  return mapOrderPalletRows(data ?? []);
+  const relations = await attachExpectedPalletContents(supabase, (data ?? []) as unknown as (ExpectedPalletRelation & { pallets: unknown })[]);
+  const rows = relations.flatMap((row) => {
+    const pallet = Array.isArray(row.pallets) ? row.pallets[0] : row.pallets;
+    return pallet ? [{ ...(pallet as RawPalletRow), contents: row.contents }] : [];
+  });
+  return rows.map(mapPalletRow);
 }
 
 type RawLotRow = {
@@ -198,8 +204,6 @@ type RawExpirationBatch = {
 type RawExpirationAlertRow = {
   id: string;
   current_location: string | null;
-  quantity: number;
-  batches: RawExpirationBatch | RawExpirationBatch[] | null;
 };
 
 type RawDistributorBatchRow = {
@@ -245,12 +249,9 @@ export async function getExpirationAlerts(companyId: string): Promise<Expiration
   const [warehouseResult, distributorResult] = await Promise.all([
     supabase
       .from("pallets")
-      .select("id, current_location, quantity, batches!inner ( batch_number, expiration_date, products ( name, sku, unit_of_measure ) )")
+      .select("id, current_location")
       .eq("company_id", companyId)
-      .eq("status", "in_warehouse")
-      .gt("quantity", 0)
-      .gte("batches.expiration_date", today)
-      .lte("batches.expiration_date", maximumDate),
+      .eq("status", "in_warehouse"),
     supabase
       .from("distributor_batch_stocks")
       .select("id, quantity, batches!inner ( batch_number, expiration_date, products ( name, sku, unit_of_measure ) ), distributor_product_stocks ( distributors ( name ) )")
@@ -289,12 +290,15 @@ export async function getExpirationAlerts(companyId: string): Promise<Expiration
     }];
   }
 
-  const warehouse = ((warehouseResult.data ?? []) as unknown as RawExpirationAlertRow[]).flatMap((row) => toAlert({
-    id: `warehouse-${row.id}`,
-    source: "warehouse",
-    quantity: row.quantity,
-    currentLocation: row.current_location,
-  }, row.batches));
+  const warehouseRows = await attachPalletContents(supabase, (warehouseResult.data ?? []) as RawExpirationAlertRow[]);
+  const warehouse = warehouseRows.flatMap((row) => row.contents.flatMap((item) => {
+    if (!item.quantity || !item.expirationDate || item.expirationDate < today || item.expirationDate > maximumDate) return [];
+    return toAlert({
+      id: `warehouse-${item.itemId}`, source: "warehouse", quantity: item.quantity,
+      currentLocation: row.current_location,
+    }, { batch_number: item.batchNumber, expiration_date: item.expirationDate,
+      products: { name: item.productName, sku: item.productSku, unit_of_measure: item.unitOfMeasure } });
+  }));
 
   const distributors = ((distributorResult.data ?? []) as unknown as RawDistributorBatchRow[]).flatMap((row) => {
     const stock = one(row.distributor_product_stocks);

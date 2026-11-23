@@ -1,5 +1,6 @@
 "use server";
 
+import { getPalletContents } from "./contents";
 import { isProductUnit, isValidQuantity, type ProductUnit } from "@/lib/pallets/units";
 
 import { revalidatePath } from "next/cache";
@@ -263,14 +264,16 @@ async function updateErpPalletQuantity(profile: UserProfile, palletId: string, f
   const supabase = await createClient();
   const { data, error: lookupError } = await supabase
     .from("pallets")
-    .select("id, qr_code, status, source_system, batch_id")
+    .select("id, qr_code, status, source_system")
     .eq("id", palletId)
     .eq("company_id", profile.companyId)
     .maybeSingle();
   if (lookupError || !data) return { error: "El pallet no existe o no pertenece a tu empresa.", success: null };
   if (data.status !== "in_warehouse") return { error: NOT_EDITABLE_ERROR, success: null };
   if (data.source_system !== "trazflow") return { error: ERP_EDIT_ERROR, success: null };
-  const lot = await findLot(supabase, profile.companyId, data.batch_id);
+  const contents = (await getPalletContents(supabase, [palletId])).get(palletId) ?? [];
+  if (contents.length !== 1) return { error: "Los pallets mixtos no se editan con el formulario de un solo ítem.", success: null };
+  const lot = await findLot(supabase, profile.companyId, contents[0].batchId);
   if (!lot?.fromErp) return { error: ERP_EDIT_ERROR, success: null };
   if (!isValidQuantity(quantity, lot.unit)) return { error: QUANTITY_ERROR, success: null };
 
@@ -348,6 +351,8 @@ export async function updatePallet(
   if (!hasRole(profile, "logistics_manager")) {
     return { error: "Solo logística puede editar pallets.", success: null };
   }
+  const items = (await getPalletContents(await createClient(), [palletId])).get(palletId) ?? [];
+  if (items.length > 1) return { error: "Los pallets mixtos no se editan con el formulario de un solo ítem.", success: null };
   // Asociado a una orden en borrador: solo la cantidad, con o sin ERP.
   const { data: current } = await (await createClient())
     .from("pallets").select("status").eq("id", palletId).eq("company_id", profile.companyId).maybeSingle();
