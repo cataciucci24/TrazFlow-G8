@@ -26,7 +26,7 @@ completa al TSX original. SQL y E2E no se suman a estos porcentajes.
 layouts se generan antes de comprobar TypeScript. `*.tsbuildinfo` ya está ignorado
 y no forma parte del repositorio.
 
-## Navegador: una configuración, siete proyectos
+## Navegador: una configuración, ocho proyectos
 
 Todas las suites usan `playwright.config.ts`. En sus servidores de desarrollo,
 `NEXT_TEST_DIST_DIR` desactiva `serverComponentsHmrCache`: los fixtures y la base
@@ -34,18 +34,19 @@ cambian entre pasos y una recarga HMR no debe reutilizar respuestas viejas. La
 configuración de producción conserva su comportamiento. Se ejecuta una suite por invocación,
 porque las APIs de fixtures de `e2e` y `forecast` usan el mismo puerto y los modos
 de importación requieren entornos distintos. Sin `--project` se elige `e2e`.
-`npx playwright test --list` enumera los siete proyectos sin iniciar servicios.
+`npx playwright test --list` enumera los ocho proyectos sin iniciar servicios.
 
 | Comando | Alcance |
 | --- | --- |
-| `npm run test:e2e` | `tests/e2e`, salvo pronósticos; API HTTP de fixtures |
+| `npm run test:e2e` | `tests/e2e`, salvo pronósticos y pallets manuales; API HTTP de fixtures |
+| `npm run test:e2e:pallets` | Pallet mixto, despacho/recepción por ítem, reingreso y reutilización; [escenario manual local](testing-pallets-mixtos.md) |
 | `npm run test:demo` | Entrega del chofer, visible, QR real y pausas de presentación |
 | `npm run test:e2e:forecast` | Pronósticos con su API HTTP de fixtures |
 | `npm run test:e2e:plan-changes` | Cambios de plan contra Supabase local |
 | `npm run test:e2e:stock-import` | Importación directa sin ERP contra Supabase local |
 | `npm run test:e2e:stock-import-erp` | Importación con mock ERP contra Supabase local |
 | `npm run test:e2e:subscription` | Suscripciones contra Supabase local |
-| `npm run test:all` | Unitarios y proyecto `e2e` |
+| `npm run test:all` | Unitarios, proyecto `e2e` y proyecto `pallets-manual` |
 
 También se admite `npx playwright test --project=<nombre>`.
 `tests/e2e` valida navegación, cookies y acciones contra APIs simuladas:
