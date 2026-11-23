@@ -68,7 +68,9 @@ Persona 2 debe confirmar, después del trabajo de persona 5 en outbox/config/pan
 
 Aplicar las migraciones nuevas en orden, antes de desplegar la aplicación. La de ola 0 es `20261122100000_pallet_contents.sql`. Las de TRZ-111 son `20261122110000_mixed_pallet_items.sql` y `20261122110100_pallet_item_checks.sql`. El evento de reingreso se agrega en `20261122120000_pallet_return_event.sql`, separado de su uso en `20261122120100_pallet_return.sql` porque PostgreSQL exige confirmar el valor del enum antes de usarlo.
 
-No se aplicaron cambios a Supabase remoto. No se cambiaron configuración de seeds, scripts de package.json ni configuración de tests, que pertenecen a persona 1.
+Las cinco migraciones se aplicaron el 22/11/2026 al proyecto remoto `prhsdpghhsjcmvlgtxgr` (TrazFlow, rama `main`, etiquetada `Production` en Supabase), con autorización explícita del usuario para esa base exacta. Se ejecutaron por separado y se registraron en `supabase_migrations.schema_migrations`, dentro de la misma transacción de cada migración. No se cargaron seeds ni datos de prueba. No se cambiaron configuración de seeds, scripts de package.json ni configuración de tests, que pertenecen a persona 1.
+
+La verificación remota posterior confirmó cinco versiones registradas, los 10 pallets existentes conservados con 10 ítems, cero pallets sin ítems, cero diferencias entre lote/cantidad originales y contenido migrado, cero asociaciones sin snapshot, las cuatro RPC nuevas disponibles, RLS de ítems activo y las funciones internas sin permiso de ejecución para `authenticated`. Se solicitó la recarga del esquema de PostgREST.
 
 Validación realizada:
 
@@ -88,7 +90,7 @@ psql "$LOCAL_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/trz111_mixed_pal
 
 Usar una base local migrada: el archivo crea fixtures dentro de una transacción y hace rollback. Verifica permisos, aislamiento entre empresas, stock ERP del ítem secundario, reversión del armado fallido, comparación por ítem, invalidación de una validación obsoleta, recepción con diferencia, reingreso idempotente y reasignación sin borrar la entrega anterior.
 
-No se probaron cámara/impresión en un navegador ni el despliegue real de PostgREST/Supabase. Las pruebas embebidas no reemplazan una prueba de concurrencia con dos sesiones independientes; el tope reutiliza los locks de `erp_stock_balances` y el armado toma los lotes en orden de UUID.
+Se verificaron las migraciones y sus estructuras en Supabase remoto; siguen pendientes las pruebas de los flujos de la aplicación, cámara e impresión en un navegador. Las pruebas embebidas no reemplazan una prueba de concurrencia con dos sesiones independientes; el tope reutiliza los locks de `erp_stock_balances` y el armado toma los lotes en orden de UUID.
 
 Se corrigió una línea de portabilidad en `src/lib/erp-sync/server-boundary.test.ts`: la comprobación de límites de servidor normaliza los separadores de rutas Windows antes de aplicar la expresión regular. No cambia la regla de seguridad ni la configuración de tests; persona 1 puede conservar esa normalización al migrarlo a Vitest.
 
