@@ -40,7 +40,9 @@ export default defineConfig({
   },
   metadata: { presentation: suite === "demo" },
   projects: [
-    { name: "e2e", testIgnore: "**/next-orders.spec.ts", use: browserUse },
+    { name: "e2e", testIgnore: ["**/next-orders.spec.ts", "**/mixed-pallets.spec.ts"], use: browserUse },
+    { name: "pallets-manual", testMatch: "mixed-pallets.spec.ts", timeout: 240_000,
+      use: { ...browserUse, actionTimeout: 20_000, navigationTimeout: 60_000 } },
     { name: "demo", testMatch: "driver-delivery.spec.ts", timeout: 120_000, use: { ...browserUse, video: "on" as const, launchOptions: { slowMo: 1200 } } },
     { name: "forecast", testMatch: "next-orders.spec.ts", use: browserUse },
     ...["plan-changes", "stock-import", "stock-import-erp", "subscription"].map(name => ({
@@ -55,7 +57,7 @@ export default defineConfig({
       SUPABASE_SERVICE_ROLE_KEY: "", ERP_PROVIDER: suite === "stock-import" ? "" : "mock", ERP_BASE_URL: "", ERP_API_KEY: "", ERP_API_SECRET: "", CRON_SECRET: "",
       NEXT_TEST_DIST_DIR: ".next/" + suite + "-local", TRAZFLOW_E2E: "0", NEXT_TELEMETRY_DISABLED: "1",
       NEXT_FONT_GOOGLE_MOCKED_RESPONSES: resolve("scripts/e2e-fonts.cjs") },
-  }] : [{ command: suite === "forecast" ? "node scripts/e2e-forecast-supabase.mjs" : "node scripts/e2e-supabase.mjs", url: "http://127.0.0.1:54329/health", reuseExistingServer: false }, {
+  }] : [{ command: suite === "forecast" ? "node scripts/e2e-forecast-supabase.mjs" : "node scripts/e2e-supabase.mjs", env: { TRAZFLOW_PALLETS_MANUAL: suite === "pallets-manual" ? "1" : "0" }, url: "http://127.0.0.1:54329/health", reuseExistingServer: false }, {
     command: "npm run dev -- --webpack --hostname 127.0.0.1 --port 3100",
     url: "http://127.0.0.1:3100/login",
     timeout: suite === "forecast" ? 300_000 : 120_000,
@@ -65,7 +67,8 @@ export default defineConfig({
       TRAZFLOW_E2E: "1",
       NEXT_PUBLIC_SUPABASE_URL: "http://127.0.0.1:54329",
       NEXT_PUBLIC_SUPABASE_ANON_KEY: "demo-anon-key",
-      ERP_PROVIDER: "mock",
+      ERP_PROVIDER: suite === "pallets-manual" ? "" : "mock",
+      ERP_BASE_URL: "", ERP_API_KEY: "", ERP_API_SECRET: "",
       NEXT_FONT_GOOGLE_MOCKED_RESPONSES: resolve("scripts/e2e-fonts.cjs"),
     },
   }],

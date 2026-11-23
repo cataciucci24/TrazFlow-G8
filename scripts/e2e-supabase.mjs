@@ -1,5 +1,7 @@
 // Servicio HTTP de fixtures exclusivo de Playwright. Nunca se importa en la app.
 import { createServer } from 'node:http';
+import { createPalletsScenario } from './e2e-pallets-scenario.mjs';
+const palletsScenario = process.env.TRAZFLOW_PALLETS_MANUAL === '1' ? createPalletsScenario() : null;
 
 const driverId = '10000000-0000-4000-8000-000000000001';
 const orderId = '20000000-0000-4000-8000-000000000001';
@@ -36,7 +38,7 @@ const token = `${part({ alg: 'HS256', typ: 'JWT' })}.${part({ sub: driverId, aud
 createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,DELETE,OPTIONS');
   if (req.method === 'OPTIONS') { res.writeHead(204).end(); return; }
   const url = new URL(req.url, 'http://127.0.0.1:54329');
   const chunks = [];
@@ -71,6 +73,7 @@ createServer(async (req, res) => {
     return send(url.searchParams.has('role') ? [profile] : profile);
   }
   if (url.pathname === '/rest/v1/distributors') return send([{ id: '40000000-0000-4000-8000-000000000001', name: 'Destinatario Demo' }]);
+  if (palletsScenario?.({ req, url, body, send, role: activeRole })) return;
   if (url.pathname === '/rest/v1/dispatch_orders') {
     const order = { id: orderId, driver_id: driverId, distributor_id: '40000000-0000-4000-8000-000000000001', status: delivered ? 'delivered' : activeRole === 'driver_operator' ? 'confirmed' : 'draft', source_system: 'trazflow', external_id: null, synced_at: null, estimated_dispatch_date: '2026-10-25', created_at: '2026-10-25T12:00:00Z', notes: 'Pedido de prueba con observaciones para comprobar que todo el contenido siga visible en una pantalla pequeña.', distributors: { name: 'Destinatario Demo' }, driver: { name: 'Chofer Demo' }, order_pallets: [{ validated_at: validated ? '2026-10-25T12:00:00Z' : null, delivery_outcome: delivered ? 'delivered' : null }] };
     const statusFilter = url.searchParams.get('status');
