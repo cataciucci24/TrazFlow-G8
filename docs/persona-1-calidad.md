@@ -134,5 +134,8 @@ Se confirmó acceso SSH como ambar a la IP reservada `132.226.26.114`. Caddy 2.1
 regla 80/443 persistida y host_name final configurados. HTTPS público Let's Encrypt
 validado desde afuera: login 200, ping pong y HTTP 308. 8080 no accesible externamente.
 API key y secret renovados: lecturas correctas con las nuevas credenciales y rechazo
-de las anteriores. Entrega privada solo en la VM. Faltan Vercel/redeploy/healthcheck/
-sync a cargo de Cata y el reinicio coordinado. Ver [estado de HTTPS](trz118-https-estado.md).
+de las anteriores. Cata confirmó Vercel. El 23/11 se detectó y corrigió la política
+on-failure de nueve contenedores; un segundo reinicio comprobó arranque automático,
+IP conservada, TLS válido, firewall persistido y lecturas con ErpNextClient real.
+El archivo temporal de entrega se retiró. La interfaz de Vercel no se inspeccionó
+en esta prueba. Ver [estado de HTTPS](trz118-https-estado.md).

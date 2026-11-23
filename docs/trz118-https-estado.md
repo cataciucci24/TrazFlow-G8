@@ -1,4 +1,4 @@
-# TRZ-118: HTTPS público y pase a Vercel
+# TRZ-118: HTTPS público y persistencia verificada
 
 ## Estado comprobado — 22 de noviembre de 2026
 
@@ -10,7 +10,7 @@ DNS y SSH comprobados, verificando la misma identidad anterior del servidor:
 
 SSH: `ambar@132.226.26.114`, sudo sin contraseña. No se modificó authorized_keys
 de ubuntu. Compose: `/home/ubuntu/frappe_docker/pwd.yml`; sitio `frontend`, imagen
-`frappe/erpnext:v16.52.1`. No se reiniciaron Docker ni la VM.
+`frappe/erpnext:v16.52.1`. Prueba de reinicio completada el 23/11/2026.
 
 Caddy 2.11.9 está activo y habilitado. `/etc/caddy/Caddyfile` usa el dominio final,
 proxy a `127.0.0.1:8080` y HTTPS automático público, sin `tls internal`.
@@ -50,21 +50,38 @@ Se confirmó la cuenta `logistica@trazflow.test` y se renovaron tanto API key co
 API secret mediante Frappe. Las nuevas credenciales se probaron por HTTPS y las
 anteriores ya no autentican. No están en Git ni en el chat.
 
-Archivo de entrega **solo en la VM**:
-`/var/lib/trazflow-secrets/erpnext-vercel.json`, propietario root, modo 0600,
-directorio 0700. Contiene `ERP_BASE_URL`, `ERP_API_KEY` y `ERP_API_SECRET`.
-Cata puede acceder con sudo desde su sesión SSH y cargarlas directamente en
-Vercel, sin imprimirlas en chats/logs ni copiarlas al repositorio. Después de
-confirmar la carga, retirar el archivo temporal y conservarlas en el gestor de
-secretos autorizado.
+Se entregaron mediante `/var/lib/trazflow-secrets/erpnext-vercel.json`, solo en
+la VM, propietario root, modo 0600, directorio 0700. Cata confirmó a través de
+Ámbar que terminó la actualización de Vercel. Después de la prueba se retiró
+el archivo temporal; las variables quedan bajo la administración de Cata.
 
-## Falta para cerrar
+## Reinicio y corrección — 23 de noviembre de 2026
 
-1. Cata: actualizar esas tres variables en los entornos correspondientes de Vercel,
-   redeployar y verificar healthcheck y sincronización desde Integración ERP.
-   El despliegue anterior usa credenciales ya revocadas hasta completar este paso.
-2. Coordinar una ventana para reiniciar la VM. Verificar que conserva la IP,
-   que Caddy/Docker arrancan, HTTPS sigue válido y la app sincroniza sin volver
-   a editar variables. El reinicio todavía no se ejecutó.
-3. Registrar esas evidencias antes de cerrar TRZ-118. El proxy y las credenciales
-   están listos; no se afirma que Vercel ya esté actualizado.
+Se coordinó el corte con Cata. El primer reinicio conservó IP y Caddy, pero los
+servicios del ERP tenían `restart=on-failure`: los que salieron correctamente al
+apagar la VM no arrancaron después. Eso dejó el proxy devolviendo 502.
+
+Se corrigieron los nueve servicios permanentes a `restart=always` en Docker y
+`deploy.restart_policy.condition: any` en `/home/ubuntu/frappe_docker/pwd.yml`.
+Se conservó `condition: none` en configurator y create-site: son tareas de una
+sola ejecución y no deben repetirse al arrancar. Compose validado con `config
+--quiet`. Respaldo previo, solo root:
+`/var/backups/trazflow/trz118-reboot/pwd.yml.before` (contiene secretos).
+
+Se repitió un reinicio completo para comprobar el cambio:
+
+- Boot ID inicial: `6c8c4a0e-38ae-48f5-ad8d-eb310ea64ef4`.
+- Primer reinicio: `ac7dd097-29c1-4cb4-b9ba-ff780e775154`.
+- Reinicio de verificación: `2fc33101-86e4-4d54-85cd-eed0f9740500`.
+- Misma IP reservada y misma identidad SSH.
+- Caddy y Docker activos; nueve contenedores arrancaron automáticamente, DB healthy.
+- Regla iptables 80/443 conservada tras reiniciar.
+- HTTPS login 200 con TLS válido, ping pong, HTTP 308 y 8080 cerrado externamente.
+- Adaptador real `ErpNextClient`, ejecutado desde la computadora de prueba por
+  HTTPS: healthcheck correcto; `pullMasterData` con 2 depósitos, 8 productos,
+  11 lotes y 11 saldos; `pullDispatchOrders` con 8 órdenes. Solo lectura,
+  sin crear despachos ni escribir en la base de datos de la app.
+
+Vercel fue confirmado por Cata; no se inspeccionaron sus variables ni se ejecutó
+un sync desde la interfaz desplegada en esta prueba. La evidencia independiente
+registrada aquí cubre la VM, HTTPS y el adaptador real después del reinicio.

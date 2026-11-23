@@ -8,11 +8,13 @@ El resumen de pruebas está en [persona-1-calidad.md](persona-1-calidad.md).
 **Estado actual:** IP reservada `132.226.26.114` confirmada por Cata. HTTPS público
 válido en https://erpnext.132-226-26-114.sslip.io, host_name actualizado, 8080
 inaccesible desde afuera y credenciales renovadas/probadas; las anteriores fueron
-rechazadas. Entrega privada preparada en la VM, sin secretos en Git.
+rechazadas. Entrega privada completada; archivo temporal retirado, sin secretos en Git.
 
-**Por qué falta el cierre:** Cata debe cargar las variables nuevas en Vercel,
-redeployar y verificar healthcheck/sync. Después falta coordinar y probar el
-reinicio conservando IP e integración. Ver [estado y evidencias](trz118-https-estado.md).
+**Prueba final completada (23/11):** Cata confirmó que terminó Vercel. Se corrigió
+el arranque automático de nueve contenedores y se verificó con un segundo reinicio:
+misma IP, HTTPS válido, firewall persistido y lecturas mediante el adaptador real.
+Ver [estado y evidencias](trz118-https-estado.md). La comprobación de Vercel fue
+reportada por Cata; la prueba independiente cubre infraestructura y adaptador.
 
 La siguiente secuencia general sirve de referencia; no repetir los pasos locales
 ya realizados ni sobrescribir el respaldo previo. Las claves privadas y API keys
@@ -69,8 +71,9 @@ su copia anterior y repetir la validación; no desactivar TLS ni abrir 8080 como
 solución permanente. Si falla después de rotar, corregir con las credenciales
 nuevas. No declarar TRZ-118 terminada hasta verificar todos sus criterios.
 
-**Evidencias que faltan:** healthcheck y sync de la app desplegada con las variables
-nuevas y reinicio conservando la IP. Odoo necesitará su dominio/proxy cuando se despliegue;
+**Evidencia externa:** Vercel confirmado por Cata, sin inspección independiente de
+su interfaz en esta prueba. Reinicio e integración de lectura verificados.
+Odoo necesitará su dominio/proxy cuando se despliegue;
 el adaptador actual es de lectura y no hay despliegue Odoo confirmado.
 
 ## TRZ-119: protección de ramas

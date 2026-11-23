@@ -27,7 +27,17 @@ cd /home/ubuntu/frappe_docker
 
 Caddy sirve HTTPS público válido en el dominio final. Configuración y pruebas en
 [estado de TRZ-118](trz118-https-estado.md). Las credenciales se renovaron;
-Cata debe cargar las variables nuevas y redeployar Vercel.
+Cata confirmó la actualización de Vercel. Reinicio y arranque automático del ERP
+verificados el 23/11/2026; ver evidencias y alcance de la prueba en ese documento.
+
+## Arranque automático de la instalación actual
+
+Los nueve servicios permanentes usan `deploy.restart_policy.condition: any`
+en `/home/ubuntu/frappe_docker/pwd.yml`, equivalente a `restart=always` aplicado
+a sus contenedores. La configuración original `on-failure` no los levantaba
+después de un apagado limpio. No volver a introducirla al actualizar el compose.
+`configurator` y `create-site` conservan `condition: none`; no deben repetirse.
+Respaldo privado previo: `/var/backups/trazflow/trz118-reboot/pwd.yml.before`.
 
 ## 1. Docker
 
@@ -216,6 +226,7 @@ con 4 órdenes `pending`. No se probó todavía `reportDispatch` ni el envío de
 ## Estado de TRZ-118
 
 IP reservada y HTTPS público verificados; API key y secret renovados y anteriores
-revocados. Falta que Cata cargue las variables en Vercel, redeploye y verifique
-healthcheck/sync; después, reinicio coordinado y prueba de persistencia.
+revocados. Cata confirmó Vercel. Reinicio completo verificado después de corregir
+el arranque automático: misma IP, TLS válido, servicios activos y lecturas del
+adaptador real correctas. La interfaz desplegada no se inspeccionó en esa prueba.
 Ver [evidencias y siguiente pase](trz118-https-estado.md).
