@@ -108,8 +108,16 @@ Verificación actual: `npm test` aprobó 588 pruebas, con 6 omitidas por la suit
 
 - **Persona 2:** acordar la identidad de cada línea de ítem, permitir repetir `palletCode` entre líneas del mismo pallet y definir la versión del contrato §5. Confirmar soporte de esas líneas en los adaptadores y sus validadores para despacho y entrega. Hoy el contrato sigue en versión 1, su validador rechaza `palletCode` repetido y los métodos de despacho/entrega de Odoo siguen sin implementación.
 - **Persona 5:** integrar primero TRZ-112 y avisar qué interfaz queda para empresa/configuración y productores del outbox. Persona 3 debe construir el payload por ítem sobre esa separación, respetando los snapshots de la orden, sin competir por los mismos archivos.
-- **Persona 1, para ampliar la prueba automática del flujo completo:** los fixtures compartidos de navegador necesitan implementar `create_pallet_with_items` y `return_pallet_to_warehouse`, además de órdenes con varios ítems esperados/detectados en despacho y recepción. El servidor actual permite verificar pantallas y trazabilidad mixtas, pero no toda la cadena armado → despacho → recepción → reingreso. No se modificó ese script compartido desde persona 3.
+- **Persona 1 — resuelto en PR #93:** incorporó fixtures para `create_pallet_with_items`, `return_pallet_to_warehouse` y varios ítems esperados/detectados, junto con la suite `npm run test:e2e:pallets`. Cubre armado → despacho → recepción exacta o con diferencias → reingreso → nueva orden. La PR ya está en `develop` y se integró en `codex/persona3-cierre`. Esta dependencia de cobertura queda resuelta; no habilita el contrato ERP de mixtos ni reemplaza las pruebas SQL.
 
 Personas 4, 6 y 7 no bloquean este cierre. El reingreso deja el pallet sin posición para ubicarlo por el flujo existente; trazabilidad/remitos pueden consumir `contents.ts` y los snapshots de las órdenes; el QR conserva su identidad actual.
 
 Mientras falten las dependencias de personas 2 y 5 se mantiene el rechazo `TM111` al despacho mixto por ERP. La siguiente entrega de persona 3 debe cambiar el payload, ajustar el contrato coordinado, probar los consumidores y recién entonces retirar esa restricción.
+
+### Verificación tras integrar la PR #93 de persona 1
+
+Las 61 pruebas de pallets y fixtures pasaron (`npx vitest run src/lib/pallets tests/unit/pallet-contents.test.ts tests/unit/pallets-fixture.test.ts`). Los dos recorridos de `npm run test:e2e:pallets` se completaron: la primera ejecución aprobó el caso con diferencias y falló el exacto por `page.goto: net::ERR_ABORTED` al abrir el detalle de entrega después del login del chofer; `npm run test:e2e:pallets -- --last-failed` aprobó el caso exacto completo.
+
+Observación para persona 1: el helper `login` de `tests/e2e/mixed-pallets.spec.ts` espera únicamente salir de `/login`, pero el flujo pasa por `/complete-registration`, `/dashboard` y finalmente `/dashboard/deliveries`. La navegación siguiente puede competir con esa redirección. Conviene esperar la URL y el contenido final del rol antes del siguiente `page.goto`. No se modificaron las pruebas compartidas desde persona 3. Es una falla intermitente de sincronización observada, no un bloqueo funcional de pallets.
+
+La cobertura se ejecutó exclusivamente con fixtures locales, sin escribir en Supabase remoto. Quedan pendientes las dependencias ERP de personas 2 y 5 descritas arriba.
