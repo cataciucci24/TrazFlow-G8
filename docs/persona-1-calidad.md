@@ -127,3 +127,10 @@ sin red: prueba sintaxis, no DNS, certificados ni conectividad al ERP real.
 con outbox y ERP simulado, filtros, permisos, cambios de plan, suscripciones y QR.
 La demo se ejecutó con su proyecto y ritmo de presentación en navegador headless.
 Las pruebas de APIs simuladas no se presentan como pruebas de ERP remotos reales.
+
+## Avance de infraestructura posterior al push de verificación
+
+Se confirmó acceso SSH como ambar y se completó el paso local de TRZ-118: Caddy
+2.11.9, regla 80/443 persistida y host_name. Proxy validado localmente con TLS
+interno; el certificado público y el cierre de la historia esperan la IP reservada
+y el Security List que hará Cata. Ver [estado de HTTPS](trz118-https-estado.md).

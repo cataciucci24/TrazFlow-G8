@@ -14,17 +14,20 @@
 | Proveedor | Oracle Cloud Always Free, región US West (Phoenix) |
 | VM | `erpnext-vm`, Ubuntu 24.04, `VM.Standard.A1.Flex` (**ARM / aarch64**), 2 OCPU, 12 GB RAM, ~47 GB de disco |
 | IP pública | `129.146.120.18` (**efímera**: puede cambiar si la VM se detiene; entonces hay que actualizar `ERP_BASE_URL` en Vercel) |
-| SSH | usuario `ubuntu`, clave privada propia (no está en el repo) |
+| SSH | usuario `ambar`, sudo sin contraseña; clave privada fuera del repo. No modificar authorized_keys de ubuntu |
 | ERPNext | `http://129.146.120.18:8080`, sitio `frontend`, imagen `frappe/erpnext:v16.52.1` |
 
-Desde WSL, la clave descargada en Windows hay que copiarla con permisos 600 (desde `/mnt/c` SSH la rechaza):
+Acceso confirmado para persona 1:
 
 ```bash
-cp /mnt/c/Users/<usuario>/Downloads/ssh-key-AAAA-MM-DD.key ~/.ssh/oracle-erpnext.key
-chmod 600 ~/.ssh/oracle-erpnext.key
-ssh -i ~/.ssh/oracle-erpnext.key ubuntu@129.146.120.18
-uname -m   # aarch64
+ssh -i ~/.ssh/trazflow-ambar ambar@129.146.120.18
+sudo -i
+cd /home/ubuntu/frappe_docker
 ```
+
+Caddy y el firewall local ya están preparados, con certificado interno provisional.
+El pase a IP reservada y certificado público está detallado en
+[estado de TRZ-118](trz118-https-estado.md). No usar todavía la URL provisional en Vercel.
 
 ## 1. Docker
 
@@ -212,16 +215,9 @@ con 4 órdenes `pending`. No se probó todavía `reportDispatch` ni el envío de
 - **IP efímera**: si cambia, actualizar `ERP_BASE_URL`. Se puede reservar una IP pública en Oracle.
 - **Backups**: no hay backups automáticos. Manual: `docker compose -f pwd.yml exec backend bench --site frontend backup`.
 
-## Acceso pendiente para TRZ-118
+## Estado de TRZ-118
 
-El estado de servidor indicado arriba es el último estado documentado, no una
-confirmación de infraestructura actual. Persona 1 no dispone todavía de consola
-Oracle ni clave SSH. No se ha reservado IP, instalado TLS ni rotado credenciales.
-No sustituir la URL documentada por una URL HTTPS supuesta hasta verificarla.
-
-El administrador de la VM debe reservar/asignar la IP pública, elegir un dominio
-que resuelva a ella y configurar un proxy TLS delante del puerto interno 8080.
-Después debe comprobar el certificado, cerrar 8080 al exterior, rotar las claves
-del usuario de integración y actualizar la configuración del despliegue. Finalmente
-probar healthcheck, sincronización y reinicio conservando la IP. Los comandos y
-valores definitivos dependen del acceso y del estado real de esa VM.
+El acceso SSH como ambar ya fue confirmado y se completó la preparación local de
+Caddy, iptables persistido y host_name. La reserva de IP, el Security List y Vercel
+los hará Cata. Certificado público, rotación y pruebas finales siguen pendientes.
+Ver [evidencias y siguiente pase](trz118-https-estado.md).

@@ -1,0 +1,10 @@
+# Estado de preparación en la VM, todavía sin certificado público.
+# No usar esta URL en Vercel hasta completar IP reservada y ACME público.
+{
+	skip_install_trust
+}
+
+erpnext.129-146-120-18.sslip.io {
+	tls internal
+	reverse_proxy 127.0.0.1:8080
+}

@@ -5,21 +5,18 @@ El resumen de pruebas está en [persona-1-calidad.md](persona-1-calidad.md).
 
 ## TRZ-118: HTTPS, IP fija y rotación
 
-**Por qué falta:** no hay acceso a la consola Oracle ni clave SSH de `erpnext-vm`.
-La conexión disponible de Vercel tampoco tiene acceso al equipo configurado.
-La infraestructura remota no se puede validar ni cambiar desde el acceso actual.
+**Estado actual:** el acceso SSH funciona con el usuario `ambar`. Ya se instalaron
+Caddy, la regla persistida 80/443 y host_name de Frappe. Las pruebas locales del
+proxy pasaron. El certificado es interno de preparación; todavía no es público.
 
-**Qué pedir al equipo:** responsable de Oracle, acceso a la instancia y a su
-VCN/VNIC, acceso SSH mediante archivo privado entregado fuera de Git y del chat,
-dominio elegido y responsable del proyecto Vercel. Confirmar el sitio y el compose
-reales de ERPNext antes de ejecutar cambios. No se necesita entregar contraseñas
-personales ni copiar secretos a esta documentación.
+**Por qué falta el cierre:** Cata hará la reserva de IP, el Security List de Oracle
+y los cambios/redeploy de Vercel. Se espera la IP nueva y confirmación de 80/443
+abiertos y 8080 cerrado. Después persona 1 ajustará dominio, certificado público
+y claves de integración. Ver [estado y evidencias](trz118-https-estado.md).
 
-**Material listo:** [plantilla Caddy](../infra/erpnext/Caddyfile.example) y el
-[estado histórico del servidor](erpnext-deploy.md). `erp.example.com` es un
-marcador que debe reemplazarse. La sintaxis se validó con Caddy en un contenedor
-sin red; eso no demuestra DNS, certificados ni acceso al ERP real. No se ha
-aplicado a ninguna VM.
+La siguiente secuencia general sirve de referencia; no repetir los pasos locales
+ya realizados ni sobrescribir el respaldo previo. Las claves privadas y API keys
+permanecen fuera del repositorio.
 
 ### Secuencia para el administrador
 
