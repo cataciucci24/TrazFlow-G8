@@ -28,7 +28,10 @@ y no forma parte del repositorio.
 
 ## Navegador: una configuración, siete proyectos
 
-Todas las suites usan `playwright.config.ts`. Se ejecuta una suite por invocación,
+Todas las suites usan `playwright.config.ts`. En sus servidores de desarrollo,
+`NEXT_TEST_DIST_DIR` desactiva `serverComponentsHmrCache`: los fixtures y la base
+cambian entre pasos y una recarga HMR no debe reutilizar respuestas viejas. La
+configuración de producción conserva su comportamiento. Se ejecuta una suite por invocación,
 porque las APIs de fixtures de `e2e` y `forecast` usan el mismo puerto y los modos
 de importación requieren entornos distintos. Sin `--project` se elige `e2e`.
 `npx playwright test --list` enumera los siete proyectos sin iniciar servicios.
@@ -58,7 +61,8 @@ La demo conserva video incluso cuando aprueba.
 
 ## CI
 
-`.github/workflows/ci.yml` corre en PR y push hacia `develop` y `main`, con Node 20:
+`.github/workflows/ci.yml` corre en PR a `develop`/`main`, en push a esas ramas
+y a `codex/persona-1-*`, y manualmente, con Node 24:
 instalación reproducible, lint, tipos, todos los unitarios y build. Solo usa
 variables falsas de Supabase. El check se llama `CI`.
 

@@ -49,6 +49,8 @@ Logistics managers get **Integración ERP** (`/dashboard/integrations`): ERP con
 
 ## Local development
 
+Use Node 24 (`.nvmrc`); the minimum supported version is 22.12. Supabase requires Node 22+ and the installed Vite requires 22.12+.
+
 Run the app against the **local** Supabase stack (Docker), not the shared cloud database. Syncing with the ERP mock writes data, so never set `ERP_PROVIDER` while pointing at the cloud.
 
 1. Start the stack and build the database from scratch (migrations + [`supabase/seeds/001_demo.sql`](supabase/seeds/001_demo.sql)):

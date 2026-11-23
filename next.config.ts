@@ -8,7 +8,12 @@ const nextConfig: NextConfig = {
   // USH1: exceljs lee la planilla en el servidor, sin pasar por el bundler.
   serverExternalPackages: ["exceljs"],
   // USH1: planillas de hasta 4 MB (MAX_IMPORT_BYTES) más el sobre del formulario.
-  experimental: { serverActions: { bodySizeLimit: "4.2mb" } },
+  experimental: {
+    serverActions: { bodySizeLimit: "4.2mb" },
+    // Los fixtures y la base local cambian entre pasos de Playwright.
+    // Evita que un refresh de desarrollo reutilice respuestas anteriores.
+    ...(process.env.NEXT_TEST_DIST_DIR ? { serverComponentsHmrCache: false } : {}),
+  },
 };
 
 export default nextConfig;

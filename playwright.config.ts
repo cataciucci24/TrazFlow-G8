@@ -4,7 +4,10 @@ import { execFileSync } from "node:child_process";
 
 // Cada ejecución elige una suite: forecast y e2e comparten un puerto de fixtures.
 const selected = process.argv.flatMap((arg, index, args) => arg.startsWith("--project=") ? [arg.slice(10)] : arg === "--project" ? [args[index + 1]] : []);
-const suite = selected[0] ?? "e2e";
+// Los workers vuelven a cargar la configuración sin los argumentos del CLI.
+// Heredan la suite elegida para conservar proyectos, entorno y modo demo.
+const suite = selected[0] ?? process.env.TRAZFLOW_PLAYWRIGHT_PROJECT ?? "e2e";
+process.env.TRAZFLOW_PLAYWRIGHT_PROJECT = suite;
 if (selected.length > 1) throw new Error("Ejecutá una suite por vez con --project=<suite>.");
 const local = ["plan-changes", "stock-import", "stock-import-erp", "subscription"].includes(suite);
 const listing = process.argv.includes("--list");

@@ -1,106 +1,129 @@
-# Persona 1: calidad e infraestructura
+# Persona 1: resultado de calidad e infraestructura
 
-Rama de trabajo: `codex/persona-1-calidad-infra`, desde `develop`.
+Rama final: `codex/persona-1-verificacion-final`.
+Worktree: `C:\Users\ambar\TrazFlow-G8-persona-1`.
+Base integrada: `origin/develop` en `a5b1ee3`, incluidos los PR #83 y #85 de Odoo.
+El trabajo original de `codex/persona-1-calidad-infra` se conserva en el historial.
 
-## TRZ-122: tests y seeds
+## Tests unitarios y contrato ERP — TRZ-122 / TRZ-114
 
-Los 417 tests originales pasaron después de la migración mecánica a Vitest.
-`npm test` incluye `src` y `tests/unit`; se conserva `node:assert/strict`.
-Se eliminan el hook de resolución de Node y c8. La cobertura tiene un único
-reporte y exige al menos 90% de líneas para `stock-import/rows.ts`.
-Vitest usa dos workers para limitar memoria y evitar tiempos de espera bajo carga.
+Vitest ejecuta todos los tests de `src` y `tests/unit`, incluidos los tests nuevos
+de Odoo. Se conserva `node:assert/strict`; se eliminaron el runner Node, su hook
+server-only y c8. Hay una única cobertura V8. `server-only` tiene un alias vacío
+solo en tests; las pruebas estáticas de fronteras cliente/servidor siguen activas.
 
-Las siete configuraciones de Playwright se reúnen en proyectos dentro de
-`playwright.config.ts`. La selección y los entornos están documentados en
-[testing](testing-demo.md). El listado descubre todos los proyectos sin Docker.
+Resultado: **77 archivos, 524 tests aprobados, 6 omitidos con motivo, sin todo**.
+Los 417 tests originales pasaron tras la migración; los adicionales corresponden
+a importación, filtros, contrato compartido y Odoo integrado desde develop.
+
+`runErpClientContract` corre los mismos casos contra mock, ERPNext y Odoo con
+respuestas externas simuladas. Odoo ejecuta lectura, relaciones, fechas, unidades,
+identificadores, depósitos completos y errores; sus cuatro escrituras no
+implementadas se omiten explícitamente. El mock omite HTTP 403 separado y
+transporte porque no los simula. No se afirma una prueba contra ERP remotos reales.
+
+Por decisión confirmada por la responsable de persona 1, el mock exige despacho
+previo para registrar entrega o adjunto. Devuelve not_ready reintentable y las
+pruebas comprueban el reintento después del despacho. Su estado sigue siendo
+volátil: reiniciar el proceso borra la memoria del mock.
+
+Prueba de sensibilidad realizada: cambiar temporalmente el mapeo de vencimiento
+de ERPNext a `31/12/2027` hizo fallar el contrato. El mapeo fue restaurado.
+
+## Importación y SQL — TRZ-117
+
+Casos tabulados y pruebas de las acciones reales verifican archivo, encabezados,
+unidades, fechas, cantidades, duplicados, permisos, dry-run, límite de 4 MB y que
+las filas inválidas no lleguen a la RPC en modo manual ni ERP. Se conserva la
+política existente de procesar solo las filas válidas, sin inventar otra regla.
+
+`src/lib/stock-import/rows.ts`: **100% de líneas, ramas y funciones**.
+La cobertura global del proyecto es 26,75% de líneas; no debe confundirse con
+la cobertura específica de reglas ni con el porcentaje de historias terminadas.
+
+`supabase/tests/ush1_stock_import.sql` pasó contra PostgreSQL local y terminó con
+rollback. Verifica permisos, aislamiento de empresas, depósitos inválidos/inactivos,
+idempotencia y escritura de stock/eventos según el modo.
+
+## Seeds
 
 El seed se movió a `supabase/seeds/001_demo.sql` sin cambiar contenido (mismo hash
-Git). Un arranque local nuevo aplicó las migraciones y el seed: tres usuarios demo
-y un depósito. No se modificó ninguna base remota.
+Git). `config.toml` carga `./seeds/*.sql`. El arranque nuevo aplicó todas las
+migraciones y el seed: tres usuarios demo y un depósito. Los tests locales crean
+y eliminan sus propias empresas y usuarios. No se modificó la base remota.
 
-## TRZ-119: CI
+## Navegador y configuración Playwright
 
-Workflow para PR/push a `develop` y `main`: Node 20, npm ci, lint, typegen + tsc,
-Vitest y build con Supabase ficticio. Badge en README. `*.tsbuildinfo` ya estaba
-ignorado y no había archivos de ese tipo versionados.
+Hay siete proyectos en `playwright.config.ts`, ejecutados por separado por los
+puertos y modos distintos. La suite elegida se transmite a los workers, que
+recargan el archivo sin los argumentos del comando inicial.
 
-Se actualizó Next y su configuración ESLint de 16.4.3 a 16.4.6 porque la versión
-anterior bloqueaba el primer arranque/build por avisos de seguridad. El build
-pasó con 16.4.6; una auditoría posterior ya no informó vulnerabilidades de Next.
-Esto no equivale a declarar libres de vulnerabilidades todas las dependencias.
+Se corrigió la caché HMR de los servidores de prueba: reutilizaba respuestas
+anteriores al cambiar fixtures y podía presentar una caída de catálogo como datos
+vacíos. `serverComponentsHmrCache` se desactiva con `NEXT_TEST_DIST_DIR`, sin
+cambiar la configuración normal de producción. La prueba de error volvió a pasar.
+Next agregó los includes de tipos para los directorios aislados de cada suite;
+se conservan en tsconfig para no ensuciar la rama en cada ejecución.
 
-Pendiente de GitHub: subir/revisar PR, medir ejecución remota y exigir el check
-`CI` en la protección de ambas ramas (responsable: dueña del repositorio).
+Los resultados finales por proyecto se registran al terminar debajo de esta sección.
+Reportes locales: `playwright-report/<proyecto>/index.html` y
+`test-results/<proyecto>/results.json`; están ignorados por Git.
 
-## TRZ-114: contrato ERP
+## Filtros de órdenes y términos neutrales — TRZ-32 / TRZ-120
 
-Suite compartida para mock y ERPNext con HTTP y persistencia simulados. Odoo
-figura como pendiente de TRZ-113. Dos casos se omiten con motivo en el mock:
-HTTP 403 separado y fallo de transporte, porque no los simula.
+Estado y distribuidora se combinan en la consulta de servidor, conservando empresa
+y RLS. La URL mantiene la selección; limpiar reinicia resultados y selectores.
+Hay estados vacíos específicos y verificación móvil sin desborde horizontal.
 
-Se confirmó con la responsable de persona 1 que el mock debe exigir despacho
-previo para registrar entrega/adjunto. Devuelve not_ready reintentable y el test
-comprueba que el reintento funciona después del despacho.
+El código de negocio usa términos del contrato en lugar de nombres de documentos
+de ERPNext. La búsqueda sin distinguir mayúsculas de frappe, erpnext, stock entry,
+pick list, delivery note y doctype no devuelve resultados en src fuera del
+adaptador y tests. No se modificaron migraciones históricas. CODE se mantiene
+como regla de entrada de TrazFlow, documentada en el ADR.
 
-Prueba de sensibilidad: una modificación temporal del mapeo de ERPNext a fecha
-`31/12/2027` hizo fallar la suite. Se restauró el código antes de continuar.
+## Build, runtime y CI — TRZ-119
 
-## TRZ-117: importación
+Lint y TypeScript con `next typegen` aprobaron. El build pasó con valores falsos
+para Supabase. Next y su configuración ESLint se actualizaron a 16.4.6: la versión
+anterior detenía el primer arranque/build por vulnerabilidades conocidas.
 
-Casos tabulados de reglas y tests de las acciones reales: límites de archivo,
-permisos, dry-run, filas inválidas, duplicados y errores de depósito. Se conserva
-la política ya implementada de procesar solo las filas válidas.
+CI usa **Node 24**, igual que la verificación local, y hay `.nvmrc`. Se corrigió
+la propuesta de Node 20 del ticket porque el Supabase instalado exige Node 22+
+y Vite exige 22.12+. `package.json` declara el mínimo 22.12. No se cambió la
+versión de Supabase ni se bajaron dependencias para mantener Node 20.
 
-La suite SQL `supabase/tests/ush1_stock_import.sql` pasó contra Supabase local y
-terminó con rollback. Verifica las reglas dentro de PostgreSQL, incluidos modos
-manual/ERP, depósitos de otra empresa o inactivos y creación de eventos.
+El workflow ejecuta npm ci, lint, tipos, Vitest y build sin secretos reales. Se
+activa en PR a develop/main, push a esas ramas y ramas de persona 1, y manualmente.
+La validación de protección de develop/main devolvió 403: requiere administración.
+No se puede afirmar que esas reglas estén activas ni modificarlas con esta conexión.
 
-## TRZ-120: términos neutrales
+## Documentación y pendientes — TRZ-73 / TRZ-124 / TRZ-118
 
-Se reemplazan nombres de documentos del proveedor en mensajes y comentarios del
-código de negocio. La búsqueda sin distinguir mayúsculas de frappe, erpnext,
-stock entry, pick list, delivery note y doctype no devolvió resultados en `src`
-fuera de `src/lib/erp` y tests. No se editaron migraciones históricas.
+Onboarding describe registro, solicitud, aprobación/rechazo, revocación/restauración
+y asignación de choferes; el antiguo vínculo operador-distribuidor ya no existe.
+README corrige importación de líneas de órdenes, seeds, tests, roles y proveedores,
+e incluye una captura con datos sintéticos. El cierre final espera las historias
+de las otras personas y una revisión cruzada.
 
-La expresión CODE sigue siendo una regla de TrazFlow, sin cambiar los códigos
-aceptados. Decisión documentada en [ADR](decisiones/001-testing-y-limites-erp.md).
+Lo que falta, por qué y los pasos para retomarlo están en
+[persona-1-pendientes.md](persona-1-pendientes.md). Incluye acceso a Oracle/Vercel,
+IP reservada, HTTPS, rotación, protección de ramas y dependencias de documentación.
+La [plantilla Caddy](../infra/erpnext/Caddyfile.example) se validó en un contenedor
+sin red: prueba sintaxis, no DNS, certificados ni conectividad al ERP real.
 
-## TRZ-32: órdenes
+## Resultado final de navegador — 22 de noviembre de 2026
 
-Filtros combinables por estado/distribuidora aplicados en servidor junto al
-alcance de empresa. Selección persistente en URL, limpiar filtros y estado vacío
-específico. Tests de validación y composición de la consulta.
+| Proyecto | Aprobados | Fallos | Flaky |
+| --- | ---: | ---: | ---: |
+| e2e | 21 | 0 | 0 |
+| forecast | 3 | 0 | 0 |
+| stock-import | 4 | 0 | 0 |
+| stock-import-erp | 1 | 0 | 0 |
+| plan-changes | 6 | 0 | 0 |
+| subscription | 2 | 0 | 0 |
+| demo | 2 | 0 | 0 |
 
-## TRZ-73 y TRZ-124: documentación
-
-Onboarding inicial según el código vigente; explica registro, solicitud,
-aprobación/rechazo, revocación/restauración y asignación de choferes. El vínculo
-operador-distribuidor del ticket histórico ya no existe. Revisar tras TRZ-112,
-TRZ-74 y TRZ-31. README corrige líneas de órdenes importadas, testing, seeds,
-roles y arquitectura. El cierre final espera el resto de los merges, datos del
-equipo, URL pública verificada, C4 definitivo y revisión cruzada. El README ya
-incluye una captura real del navegador con datos sintéticos.
-
-## TRZ-118: acceso pendiente
-
-No se dispone de consola Oracle ni clave SSH de erpnext-vm. La conexión Vercel
-respondió 403 para el equipo configurado y el intento de solicitar autorización
-respondió 404. No se cambió infraestructura, dominio, red ni credenciales.
-Coordinar con quien administra Oracle y Vercel antes de completar esta historia.
-
-## Validación local
-
-- ESLint: aprobado.
-- TypeScript con generación de rutas: aprobado.
-- Vitest con cobertura: 76 archivos; 494 aprobados, 2 omitidos con motivo y 1 todo.
-- Cobertura de rows.ts: 100% de líneas, ramas y funciones.
-- Build de producción: aprobado con Next 16.4.6.
-- Supabase: arranque nuevo con migraciones y seeds aprobado.
-- SQL de importación: aprobado con rollback.
-
-Las ejecuciones interrumpidas por falta de navegador o saturación de memoria no
-se cuentan como aprobación. Se verificaron tres casos de navegador: entrega del chofer a 1280 y 390 px,
-y filtros de órdenes en celular. El caso de filtros también verifica el reinicio
-de ambos selectores al limpiar y ausencia de desborde horizontal. Captura en
-`docs/images/orders-filters-mobile.png`. No se afirma una ejecución completa de
-las suites comerciales, forecast ni los proyectos de Playwright con Supabase local.
+**Total: 39 aprobados.** Incluye importación real local de 5.000 filas, importación
+con outbox y ERP simulado, filtros, permisos, cambios de plan, suscripciones y QR.
+La demo se ejecutó con su proyecto y ritmo de presentación en navegador headless.
+Las pruebas de APIs simuladas no se presentan como pruebas de ERP remotos reales.
