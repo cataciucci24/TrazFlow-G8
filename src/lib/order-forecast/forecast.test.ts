@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { businessDate, forecastCustomerOrders, type ForecastOrder, type ForecastProductLine } from "./forecast.ts";
 
 const now = new Date("2026-11-01T15:00:00Z");

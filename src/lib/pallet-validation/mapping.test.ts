@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { mapOrderPalletValidations, ORDER_PALLET_VALIDATION_SELECT } from "./mapping.ts";
 
 const content = { itemId: "i1", palletId: "p1", companyId: "c1", batchId: "b1", batchNumber: "L-1", expirationDate: null, productId: "prod1", productName: "Arroz", productSku: "ARZ", unitOfMeasure: "unidades" as const, quantity: 10, lotSourceSystem: "trazflow" as const };

@@ -60,10 +60,14 @@ select pg_temp.check_scan((select actor_name='Ambar' and physical_location='DEP-
 select pg_temp.check_scan((select count(*)=0 from public.get_pallet_scan_details(current_setting('test.empty_qr'))), 'chofer no ve otro pallet de su empresa');
 reset role;
 -- El evento más reciente manda, aun cuando su actor sea inconsistente: nunca filtrar una persona ajena.
+-- RESET ROLE no borra auth.uid(): limpiar el JWT para que el trigger de autor
+-- conserve este fixture administrativo en lugar de reemplazarlo por el chofer.
+select set_config('request.jwt.claim.sub', '', true);
 insert into public.traceability_events(company_id,pallet_id,event_type,user_id,created_at) values
  ('10600000-0000-0000-0000-000000000001','10600000-0000-0000-0000-000000000041','qr_scan',
   '10600000-0000-0000-0000-000000000014',now()+interval '1 minute');
 set local role authenticated;
+select set_config('request.jwt.claim.sub', '10600000-0000-0000-0000-000000000013', true);
 select pg_temp.check_scan((select last_event_type='qr_scan' and actor_name is null and actor_role is null
   from public.get_pallet_scan_details(current_setting('test.scan_qr'))), 'no expone actores de otra empresa');
 reset role;

@@ -325,7 +325,7 @@ async function updateAssignedPalletQuantity(palletId: string, formData: FormData
   revalidatePalletPaths();
   if (row.order_id) revalidatePath(`/dashboard/orders/${row.order_id}`);
   if (row.validation_cleared) {
-    // TRZ-63: se borró la validación, así que el outbox tiene el aviso para sacar el pallet del Pick List.
+    // TRZ-63: se borró la validación, así que el outbox tiene el aviso para sacar el pallet del documento de preparación de la orden.
     const profile = await requireUserProfile();
     after(() =>
       processCompanyErpOutbox({

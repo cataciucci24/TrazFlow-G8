@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { actionErrorMessage, registrationErrorMessage } from "./feedback-messages.ts";
 
 test("oculta diagnósticos de base de datos en los errores de órdenes y stock conocidos", () => {

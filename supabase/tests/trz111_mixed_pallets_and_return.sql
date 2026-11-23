@@ -116,4 +116,21 @@ select pg_temp.expect_error($q$select * from public.create_pallet_with_items('[{
 select pg_temp.check_pallet(not has_function_privilege('authenticated','public.validate_order_pallet_legacy(uuid,text)','execute'),'API no elude la comparación con la función interna');
 select pg_temp.check_pallet(not has_table_privilege('authenticated','public.pallet_items','insert'),'API no altera ítems fuera de la RPC');
 reset role;
+-- Integración TRZ-51 + TRZ-111: el remito conserva todos los ítems de ESA orden.
+select pg_temp.check_pallet((select jsonb_array_length(content->'lines')=2
+  and (content->'lines') @> '[{"productSku":"MIX-ARZ","quantity":10},{"productSku":"MIX-QSO","quantity":2.5}]'::jsonb
+  from public.dispatch_notes where order_id='11100000-0000-0000-0000-000000000061'), 'remito completo del pallet mixto');
+select public.issue_dispatch_note('11100000-0000-0000-0000-000000000061', now(), null);
+select pg_temp.check_pallet((select count(*)=1 from public.dispatch_notes
+  where order_id='11100000-0000-0000-0000-000000000061'), 'el remito se emite una sola vez');
+select pg_temp.expect_error($q$update public.dispatch_notes set number=999 where order_id='11100000-0000-0000-0000-000000000061'$q$, '42501');
+set local role authenticated;
+select set_config('request.jwt.claim.sub','11100000-0000-0000-0000-000000000014',true);
+select pg_temp.check_pallet((select count(*)=0 from public.dispatch_notes), 'otra empresa no lee el remito');
+select set_config('request.jwt.claim.sub','11100000-0000-0000-0000-000000000013',true);
+select pg_temp.check_pallet((select count(*)=0 from public.dispatch_notes), 'el chofer no amplía permisos de lectura de remitos');
+select set_config('request.jwt.claim.sub','11100000-0000-0000-0000-000000000011',true);
+select pg_temp.check_pallet((select count(*)=1 from public.dispatch_notes
+  where order_id='11100000-0000-0000-0000-000000000061'), 'logística de la empresa lee el remito');
+reset role;
 rollback;

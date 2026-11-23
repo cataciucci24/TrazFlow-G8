@@ -37,7 +37,7 @@ import { emptyErpOutboxRunSummary, type ErpOutboxRunSummary } from "./types.ts";
  *
  * TRZ-62 y TRZ-63 sumaron:
  *   stock-entry:…                    → reportStockEntry (alta o baja en borrador)
- *   pallet-scan:… / pallet-unscan:…  → reportPalletScan (línea del Pick List de la orden)
+ *   pallet-scan:… / pallet-unscan:…  → reportPalletScan (línea del documento de preparación de la orden de la orden)
  *
  * USH1 sumó:
  *   stock-import:…  → reportStockImport (crea producto y lote si faltan, y deja el stock en borrador)

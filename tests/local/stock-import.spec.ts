@@ -93,6 +93,28 @@ test("archivos no admitidos y sin columnas dan un error claro", async ({ page })
   await expect(page.getByText(/No pudimos leer el archivo/)).toBeVisible();
 });
 
+test("casos borde: unidades inválidas, CSV truncado y kilos grandes con líneas iniciales vacías", async ({ page }) => {
+  await login(page);
+  await page.goto("/dashboard/inventory/import");
+  await upload(page, "unidad.csv", ["Peso;KG-BORDE;constructor;KG-L1;31/12/2031;DEP-01;10"]);
+  await page.getByRole("button", { name: "Revisar archivo", exact: true }).click();
+  await expect(page.getByRole("table", { name: "Filas con errores" })).toContainText("Unidad");
+  await expect(page.getByRole("button", { name: /^Confirmar/ })).toHaveCount(0);
+  await upload(page, "truncado.csv", ['Peso;KG-BORDE;kg;KG-L1;31/12/2031;DEP-01;"10']);
+  await page.getByRole("button", { name: "Revisar archivo", exact: true }).click();
+  await expect(page.getByText("No pudimos leer el archivo. Revisá que sea un .csv válido.")).toBeVisible();
+  expect((await checked(await admin.from("products").select("id").eq("company_id", companyId).eq("sku", "KG-BORDE")))!.length).toBe(0);
+
+  await page.getByLabel("Planilla").setInputFiles({ name: "peso.csv", mimeType: "text/csv",
+    buffer: Buffer.from(`\r\n\r\n${HEADER}\r\nPeso;KG-BORDE;kg;KG-L1;31/12/2031;DEP-01;1234567.89`) });
+  await page.getByRole("button", { name: "Revisar archivo", exact: true }).click();
+  await page.getByRole("button", { name: /^Confirmar 1 fila/ }).click();
+  await expect(page.getByText("1 de 1 filas importadas como pallets en depósito.")).toBeVisible();
+  const balances = await checked(await admin.from("pallets").select("quantity,batches!inner(products!inner(sku))")
+    .eq("company_id", companyId).eq("batches.products.sku", "KG-BORDE"));
+  expect(balances!.map(row => Number(row.quantity))).toEqual([1234567.89]);
+});
+
 test("5.000 filas se validan e importan", async ({ page }) => {
   test.setTimeout(240_000);
   await login(page);

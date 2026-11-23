@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
-import { test } from "node:test";
+import { test } from "vitest";
 
 /** La sincronización (cliente ERP, entorno, Supabase) no puede llegar al navegador. */
 
@@ -64,8 +64,8 @@ test("TRZ-104: los módulos de los cron importan server-only y solo los usan los
   }
   const users = /from\s+["'](?:@\/lib\/supabase\/service|@\/lib\/cron\/[\w-]+)["']/;
   for (const path of sourceFiles(SRC)) {
-    const name = relative(SRC, path).replaceAll("\\", "/");
+    const name = relative(SRC, path);
     if (!users.test(readFileSync(path, "utf8"))) continue;
-    assert.match(name, /^app\/api\/cron\/[\w-]+\/route\.ts$/, `${name} usa service_role o un cron fuera de /api/cron`);
+    assert.match(name.replaceAll("\\", "/"), /^app\/api\/cron\/[\w-]+\/route\.ts$/, `${name} usa service_role o un cron fuera de /api/cron`);
   }
 });

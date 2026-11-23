@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 
 import { activityBadge, isSyncStale, overallIntegrationStatus } from "./status.ts";
 import type { ErpHealthState, IntegrationSummary } from "./types.ts";

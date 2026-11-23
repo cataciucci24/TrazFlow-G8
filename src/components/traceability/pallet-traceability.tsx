@@ -1,27 +1,25 @@
 import { PalletContentList } from "@/components/pallets/content-list";
-import { LocationHistory } from "@/components/locations/location-history";
 import Link from "next/link";
 import { PalletQrButton } from "@/components/pallets/pallet-qr-button";
+import { EventTimeline } from "@/components/traceability/event-timeline";
+import type { TimelineEntry } from "@/lib/traceability/timeline";
 
 import type { PalletTraceability as PalletTraceabilityData } from "@/lib/traceability/types";
-import { EmptyState, PalletStatusBadge, SectionHeader } from "@/components/ui/design-system";
+import { PalletStatusBadge } from "@/components/ui/design-system";
 
 type PalletTraceabilityProps = {
   traceability: PalletTraceabilityData;
+  timeline: TimelineEntry[];
   canPrint?: boolean;
 };
 
-const DATE_FORMATTER = new Intl.DateTimeFormat("es-AR", {
-  dateStyle: "short",
-  timeStyle: "short",
-});
-
-/** Presenta el estado actual y el recorrido real registrado en movements. */
+/** Estado actual del pallet y su línea de tiempo unificada (TRZ-57). */
 export function PalletTraceability({
   traceability,
+  timeline,
   canPrint = true,
 }: PalletTraceabilityProps) {
-  const { pallet, movements } = traceability;
+  const { pallet } = traceability;
 
   return (
     <div className="list-content space-y-6">
@@ -62,64 +60,7 @@ export function PalletTraceability({
       </section>
 
       <Link href={`/dashboard/locations?pallet=${pallet.id}`} className="button-secondary w-fit">Consultar o actualizar ubicación</Link>
-      <LocationHistory palletId={pallet.id} />
-      <section className="section-stack">
-        <SectionHeader title="Historial de movimientos" description="Recorrido cronológico registrado para este pallet." />
-        <div className="surface p-5 sm:p-6">
-
-        {movements.length === 0 ? (
-          <EmptyState title="Sin movimientos registrados" description="El recorrido del pallet aparecerá acá a medida que se registren sus movimientos." />
-        ) : (
-          <ol className="space-y-3">
-            {movements.map((movement, index) => (
-              <li
-                key={movement.id}
-                className="rounded-xl border border-stone-200 bg-stone-50 p-4 text-sm"
-              >
-                <p className="font-semibold text-slate-950">
-                  {index + 1}. {DATE_FORMATTER.format(new Date(movement.createdAt))}
-                </p>
-
-                <div className="my-3 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3">
-                  <span className="text-slate-600">
-                    {movement.originLocation ?? "Origen no registrado"}
-                  </span>
-                  <span aria-hidden="true" className="text-slate-400">
-                    →
-                  </span>
-                  <span className="text-right text-slate-950">
-                    {movement.destinationLocation}
-                  </span>
-                </div>
-
-                <dl className="space-y-1 text-slate-500">
-                  <div className="flex flex-wrap gap-2">
-                    <dt>Estado:</dt>
-                    <dd className="text-slate-950">
-                      <PalletStatusBadge status={movement.resultingStatus} />
-                    </dd>
-                  </div>
-                  {movement.orderId && (
-                    <div className="flex flex-wrap gap-2">
-                      <dt>Orden:</dt>
-                      <dd>
-                        <Link
-                          href={`/dashboard/orders/${movement.orderId}`}
-                          title={movement.orderId}
-                          className="table-action"
-                        >
-                          {movement.orderId.slice(0, 8)}
-                        </Link>
-                      </dd>
-                    </div>
-                  )}
-                </dl>
-              </li>
-            ))}
-          </ol>
-        )}
-        </div>
-      </section>
+      <EventTimeline entries={timeline} />
     </div>
   );
 }

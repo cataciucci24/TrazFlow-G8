@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { buildInvoicePdf, invoiceFilename } from "./invoice-pdf.ts";
 import { argentinaToday, formatPaymentDate, hasInvoice, paidThrough, toPayment, type CompanyPayment, type PaymentRow } from "./payments.ts";
 

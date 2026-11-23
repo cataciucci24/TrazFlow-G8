@@ -25,6 +25,8 @@ import {
 import { getOrderScanHistory } from "@/lib/scans/queries";
 import { getOrderNotifications } from "@/lib/order-notifications/queries";
 import { ErpOriginCell } from "@/components/erp/erp-origin";
+import { DispatchNoteLink } from "@/components/dispatch-notes/dispatch-note-view";
+import { isDispatched } from "@/lib/dispatch-notes/types";
 import { OrderStatusBadge, EmptyState, InlineAlert, PageHeader, PalletStatusBadge, SectionHeader, TableShell } from "@/components/ui/design-system";
 
 export const metadata: Metadata = {
@@ -122,7 +124,7 @@ export default async function DispatchOrderDetailPage({
 
   return (
     <div className="app-page">
-      <PageHeader title="Detalle de orden" description={`Código ${order.id}`} action={<Link href="/dashboard/orders" className="button-secondary">Volver</Link>} />
+      <PageHeader title="Detalle de orden" description={`Código ${order.id}`} action={<div className="flex flex-wrap gap-2">{isDispatched(order.status) && <DispatchNoteLink orderId={order.id} />}<Link href="/dashboard/orders" className="button-secondary">Volver</Link></div>} />
       {driverResult === "assigned" && <InlineAlert variant="success">Chofer asignado correctamente.</InlineAlert>}
       {driverResult === "error" && <InlineAlert variant="danger">No se pudo asignar el chofer. Verificá que esté activo y pertenezca a tu empresa.</InlineAlert>}
 

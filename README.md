@@ -1,12 +1,30 @@
 # TrazFlow
 
-Logistics traceability and visibility platform.
+[![CI](https://github.com/cataciucci24/TrazFlow-G8/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/cataciucci24/TrazFlow-G8/actions/workflows/ci.yml?query=branch%3Adevelop)
+
+TrazFlow tracks the physical flow of pallets from warehouse preparation to delivery. It connects ERP orders and stock with QR scanning, dispatch validation and an auditable history.
+
+[Open the application](https://traz-flow-g8.vercel.app) · [Documentación en español](docs/onboarding.md)
+
+The public application requires an approved account. The demo credentials below belong exclusively to the local seed.
+
+<img src="docs/images/orders-filters-mobile.png" alt="TrazFlow order list and filters on mobile, using synthetic demo data" width="280" />
 
 ## Current operation
 
 TrazFlow complements the ERP by recording the physical flow of pallets. The visible roles are logistics manager, warehouse operator and driver. Drivers receive assignments per dispatch order and confirm deliveries from **Mis entregas**. Recipients remain business data and do not need accounts.
 
 Pallet labels can be printed individually or in batches from the pallet list. The browser produces an A4 sheet and encodes the persisted pallet code without allowing manual edits.
+
+| Role | Main operations |
+| --- | --- |
+| Logistics manager | ERP synchronization, order filters, driver assignments, pallet preparation, returns and access approvals |
+| Warehouse operator | Pallet preparation, QR scanning, locations, item validation and dispatch confirmation |
+| Driver | Assigned deliveries, QR scanning and receipt discrepancies per pallet item |
+
+Pallets may contain several product lots under one QR. Quantities are validated per item and unit. Logistics can return a delivered pallet to its warehouse with a mandatory reason; its delivery history remains available. See [mixed pallets and returns](docs/persona3-pallets.md). Reporting mixed contents to the ERP remains dependent on the adapter/outbox work described there.
+
+Logistics and warehouse staff can view and print a digital dispatch note after dispatch. It freezes the order's item contents, including mixed pallets, and keeps totals separated by unit. Pallet traceability uses a unified chronological timeline. See [dispatch notes and deployment](docs/remitos.md).
 
 Database changes are applied with the Supabase migrations. Existing `distributor_operator` users must be transitioned explicitly by following [`docs/transicion-choferes.md`](docs/transicion-choferes.md).
 
@@ -15,7 +33,7 @@ Database changes are applied with the Supabase migrations. Existing `distributor
 The ERP is the source of truth for products, lots, stock and orders. The app talks to it only through the `ErpClient` interface in `src/lib/erp` (`getErpClient(companyId)`), and the provider is chosen with server-only environment variables:
 
 ```bash
-ERP_PROVIDER=mock            # unset = company works without ERP; "mock" or "erpnext" enables the sync
+ERP_PROVIDER=mock            # unset = company works without ERP; "mock", "erpnext" or "odoo" enables the sync
 ERP_MOCK_SCENARIO=ok         # mock only: ok | timeout | unauthorized | validation | server_error
 ERP_BASE_URL=http://localhost:8080   # erpnext only
 ERP_API_KEY=...                      # erpnext only
@@ -30,12 +48,12 @@ The contract (payloads, external ids, error codes, idempotency key and ERPNext s
 `ERP_PROVIDER` must be set **explicitly** for the integration to be on (`isErpEnabled` in `src/lib/erp-sync/enabled.ts`). `getErpClient` still falls back to the mock, but an unset variable means "this installation has no ERP": the manual product/lot/pallet forms keep working and the sync action answers with a clear message. Copy [`.env.example`](.env.example) to `.env.local` and set `ERP_PROVIDER=mock` to try the flow:
 
 1. Apply the migrations (`npx supabase db reset` on a local database).
-2. Sign in as a logistics manager and open **Pallets**. Under *Integración ERP*, link the ERP warehouse `Depósito Central - SRV` (the mock's warehouse) to `DEP-01`.
+2. Sign in as a logistics manager and open **Pallets**. Under *Integración ERP*, check that `Depósito Central - SRV` is linked to `DEP-01` (the local seed already creates this mapping).
 3. Press **Sincronizar con ERP** (also available in **Órdenes**). The panel shows the result and every run is audited in `erp_sync_runs`. Use `ERP_MOCK_SCENARIO=timeout` (or another scenario) to see a failed run: the app stays usable and the error is shown and stored.
 
-What gets imported: products, lots, one pallet per stock balance (lot × warehouse) and the header of open dispatch orders, which arrive as drafts. Order lines are not imported yet. Upserts always use `(company_id, external_id)`. Nothing is deleted when it stops coming from the ERP, and a re-sync never overwrites local progress. With the ERP enabled, the manual create forms are hidden and ERP-owned fields cannot be edited through the API.
+What gets imported: warehouses, products, lots, stock balances (lot × warehouse) and open dispatch orders with their product lines, which arrive as drafts. Synchronization does not create physical pallets: users prepare them separately from the available stock. Upserts use company-scoped external identifiers; stock balances use their company/lot/warehouse key. Missing balances become zero, while historical entities and local order progress are retained. With the ERP enabled, manual product, lot and order creation is disabled.
 
-> **An imported pallet is an ERP stock balance, not a verified physical pallet.** TrazFlow generates its QR code. Print the label only when the pallet is physically prepared (US-OPS-08).
+> **An ERP stock balance is not a physical pallet.** Legacy pallets imported before this separation retain their history. New physical pallets have their own contents and TrazFlow QR label.
 
 Details, counters and limitations: [`docs/erp-sync.md`](docs/erp-sync.md).
 
@@ -45,9 +63,13 @@ Logistics managers get **Integración ERP** (`/dashboard/integrations`): ERP con
 
 ## Local development
 
+Use Node 24 (`.nvmrc`); the minimum supported version is 22.12. Supabase requires Node 22+ and the installed Vite requires 22.12+.
+
+Install dependencies with `npm ci` before starting the app or running tests.
+
 Run the app against the **local** Supabase stack (Docker), not the shared cloud database. Syncing with the ERP mock writes data, so never set `ERP_PROVIDER` while pointing at the cloud.
 
-1. Start the stack and build the database from scratch (migrations + [`supabase/seed.sql`](supabase/seed.sql)):
+1. Start the stack and build the database from scratch (migrations + [`supabase/seeds/001_demo.sql`](supabase/seeds/001_demo.sql)):
 
    ```bash
    npx supabase start
@@ -72,7 +94,7 @@ Run the app against the **local** Supabase stack (Docker), not the shared cloud 
    | `deposito@trazflow.test` | `test1234` | `warehouse_operator` |
    | `chofer@trazflow.test` | `test1234` | `driver_operator` |
 
-5. The seed loads no ERP data. Sign in as `logistica@trazflow.test` and follow [Syncing master data and orders](#syncing-master-data-and-orders-us-erp-03) (link the mock warehouse to `DEP-01`, then **Sincronizar con ERP**) to import products, lots, pallets and orders from the mock.
+5. The seed loads no ERP data. Sign in as `logistica@trazflow.test` and follow [Syncing master data and orders](#syncing-master-data-and-orders-us-erp-03) (the seed links the mock warehouse to `DEP-01`; press **Sincronizar con ERP**) to import products, lots, pallets and orders from the mock.
 
 Troubleshooting:
 
@@ -80,27 +102,50 @@ Troubleshooting:
 - *"No pudimos cargar esta pantalla"*: the local database is missing migrations. Run `npx supabase migration up --local --include-all`, or `npx supabase db reset` to rebuild it (this erases local data).
 - Accounts from the cloud database do not exist locally; use the seeded users above. Mail sent by the local stack (sign-up confirmations) goes to Mailpit at http://127.0.0.1:54324.
 
-## Getting Started
+## Architecture
 
-First, run the development server:
+The context consists of logistics, warehouse staff and drivers using TrazFlow, with ERPNext/Odoo providing business data. The following container view shows the web app, its managed data services and external integrations. See [architecture views and code links](docs/arquitectura.md).
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+The browser uses Next.js Server Components and authenticated Server Actions. Supabase provides authentication, PostgreSQL, RLS, RPCs and file storage. ERP reads enter through synchronization; operational writes go through a persistent outbox with idempotency and retries.
+
+```mermaid
+flowchart LR
+  Users[Logistics, warehouse and drivers] --> App[Next.js application]
+  App --> DB[Supabase: Auth, PostgreSQL, RLS and Storage]
+  App --> Contract[ErpClient interface]
+  Contract --> Mock[In-memory mock]
+  Contract --> ERP[ERPNext adapter]
+  Contract --> Odoo[Odoo adapter: read only]
+  DB --> Outbox[Outbox and cron]
+  Outbox --> Contract
 ```
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+The current providers are mock, ERPNext and Odoo. Odoo supports health checks and master-data reads; order reads and write operations are not supported yet. See [Odoo setup and limitations](docs/odoo-deploy.md). Per-company credentials remain pending in TRZ-112. The ERP C4 level 3 is assigned to TRZ-125.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Onboarding and decisions
 
-## Deploy on Vercel
+See [operator onboarding](docs/onboarding.md), [current roles](docs/modelo-de-roles.md) and [architecture decisions](docs/decisiones/). A recipient is business data; drivers are assigned to dispatch orders, not linked to recipient accounts.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Final sprint review (TRZ-124) must incorporate the remaining company/warehouse features when merged, link the final ERP component diagram (TRZ-125), and include a cross-check by another team member. The public URL was verified to reach the login page; local seeded users are not production demo accounts.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Team
+
+Names and sprint responsibilities confirmed by the team; responsibilities describe ownership, not completion of every ticket.
+
+| Person | Name | Sprint responsibility |
+| --- | --- | --- |
+| 1 | Ámbar | Quality, Vitest, CI, ERP contract tests, import tests, HTTPS infrastructure, order filters and documentation |
+| 2 | Guille | ERP adapters, Odoo, trip optimization and ERP component architecture |
+| 3 | Nai | Shared pallet contents, mixed pallets, validation, reception and returns |
+| 4 | Jowi | Warehouses, configurable layouts and location suggestions |
+| 5 | Cata | Company onboarding, ERP settings per company, accounts and access requests |
+| 6 | Juani | Traceability timelines, delivery documents and exports |
+| 7 | Alva | Two-factor authentication, scanner inventory and customer identifiers |
+
+## Testing
+
+Stack: Next.js 16, React 19 and TypeScript; Supabase Auth, PostgreSQL/RLS and Storage; Vitest/V8 for unit and contract tests, and Playwright for browser flows. The real ERPNext runs in Docker on Oracle behind Caddy HTTPS.
+
+Run `npm test` for all unit tests in `src/` and `tests/unit/` (Vitest). Run `npm run test:coverage` for the unified V8 report in `coverage/index.html`, `npm run typecheck` for generated Next route types and TypeScript, and `npm run test:e2e` for browser tests. See [testing and suite selection](docs/testing-demo.md). CI runs lint, type checking, unit tests and a build with dummy Supabase values.
+
+With the local Supabase stack running and migrated, `npm run test:sql` checks the 35 self-contained SQL suites with rollback. Historical cloud snapshots require their separate fixture and are explicitly excluded from this local command.

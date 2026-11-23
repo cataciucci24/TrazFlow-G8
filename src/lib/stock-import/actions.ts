@@ -27,12 +27,16 @@ async function readFile(form: FormData): Promise<{ fileName: string; valid: Impo
   if (file.size > MAX_IMPORT_BYTES) return { error: "El archivo supera los 4 MB." };
   const extension = file.name.toLowerCase().split(".").pop();
   if (extension !== "xlsx" && extension !== "csv") return { error: "El archivo tiene que ser .xlsx o .csv." };
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  const table = extension === "csv" ? parseCsv(decodeCsv(bytes)) : await parseXlsx(bytes);
-  if (!table) return { error: "No pudimos leer el archivo. Revisá que sea un .xlsx válido." };
-  const raw = toRawRows(table);
-  if ("error" in raw) return raw;
-  return { fileName: file.name, total: raw.rows.length, ...validateRows(raw.rows) };
+  try {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const table = extension === "csv" ? parseCsv(decodeCsv(bytes)) : await parseXlsx(bytes);
+    if (!table) return { error: `No pudimos leer el archivo. Revisá que sea un .${extension} válido.` };
+    const raw = toRawRows(table);
+    if ("error" in raw) return raw;
+    return { fileName: file.name, total: raw.rows.length, ...validateRows(raw.rows) };
+  } catch {
+    return { error: `No pudimos leer el archivo. Revisá que sea un .${extension} válido.` };
+  }
 }
 
 /** Pasa las filas válidas por la base, de a tandas. Una tanda que falla deja sus filas sin procesar, no las pierde. */

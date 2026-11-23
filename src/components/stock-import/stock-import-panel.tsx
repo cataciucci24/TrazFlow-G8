@@ -82,7 +82,7 @@ export function StockImportPanel() {
     {error ? <InlineAlert variant="danger">{error}</InlineAlert> : null}
     {finished ? <InlineAlert variant={result.imported ? "success" : "warning"}>
       {result.imported === 0 ? "No se importó ninguna fila."
-        : result.mode === "erp" ? `${result.imported} de ${result.total} filas enviadas al ERP. Quedan como Stock Entry en borrador y entran a TrazFlow con la sincronización después de confirmarlas ahí. Seguí el envío en Integración ERP.`
+        : result.mode === "erp" ? `${result.imported} de ${result.total} filas enviadas al ERP. Quedan como movimientos de stock pendientes de confirmar en el ERP. Entran a TrazFlow con la sincronización cuando se confirmen allá. Seguí el envío en Integración ERP.`
         : `${result.imported} de ${result.total} filas importadas como pallets en depósito.`}
     </InlineAlert> : null}
     {result && result.unprocessed ? <InlineAlert variant="warning">{result.imported} filas importadas y {result.unprocessed} sin procesar por una falla. Confirmá de nuevo: las que ya entraron no se duplican.</InlineAlert> : null}
