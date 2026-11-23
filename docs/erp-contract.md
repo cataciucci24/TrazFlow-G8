@@ -142,6 +142,9 @@ informa en el reporte.
 
 Un reporte **por orden despachada**, con una línea por pallet que salió físicamente.
 
+> **Contrato v2 (TRZ-111, pallets mixtos):** una línea por ítem del pallet, scan/unscan con `items` y
+> `content_mismatch` en la entrega. Ver [`erp-contract-mixtos.md`](erp-contract-mixtos.md). Los adaptadores aceptan v1 y v2.
+
 ```json
 {
   "contractVersion": 1,

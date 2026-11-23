@@ -24,6 +24,8 @@ import {
   type ErpPullOptions,
   type ErpStockBalance,
   type ErpWarehouse,
+  type ContentDifference,
+  type ObservedItem,
   type PalletScanReport,
   type StockEntryReport,
   type StockImportReport,
@@ -37,6 +39,7 @@ import {
   assertValidPalletScanReport,
   assertValidStockEntryReport,
   assertValidStockImportReport,
+  palletScanItems,
 } from "./validation.ts";
 
 /**
@@ -160,6 +163,7 @@ const DISCREPANCY_LABELS: Record<DeliveryDiscrepancyKind, string> = {
   surplus: "Sobrante",
   damaged: "Dañado",
   wrong_order: "No corresponde a la orden",
+  content_mismatch: "Contenido distinto al esperado",
 };
 
 /** Marca que identifica el comentario de una entrega: con ella se detecta un reintento (idempotencia). */
@@ -187,10 +191,32 @@ export function buildDeliveryComment(report: DeliveryReport): string {
   );
   if (report.discrepancies.length) {
     parts.push(`<p>Diferencias:</p><ul>${report.discrepancies
-      .map((difference) => `<li>${escapeHtml(difference.palletCode ?? "sin código")}: ${DISCREPANCY_LABELS[difference.type]}</li>`)
+      .map((difference) => `<li>${escapeHtml(difference.palletCode ?? "sin código")}: ${DISCREPANCY_LABELS[difference.type]}${
+        difference.contentDifferences?.length
+          ? `<ul>${difference.contentDifferences.map((content) => `<li>${contentDifferenceText(content)}</li>`).join("")}</ul>`
+          : ""
+      }</li>`)
       .join("")}</ul>`);
   }
   return parts.join("");
+}
+
+/**
+ * Una diferencia de contenido (v2) como texto: lo esperado y lo detectado. Lo que el chofer no pudo identificar va
+ * como texto observado: TrazFlow nunca crea ni asigna un producto o lote del ERP a partir de eso.
+ */
+function contentDifferenceText(difference: ContentDifference): string {
+  const expected = difference.expected
+    ? `${escapeHtml(difference.expected.productExternalId)} lote ${escapeHtml(difference.expected.lotExternalId)}, ${difference.expected.quantity} ${escapeHtml(difference.expected.uom)}`
+    : "nada (sobrante)";
+  const detected = difference.detected ? observedItemText(difference.detected) : "nada (faltante)";
+  return `Esperado: ${expected} · Detectado: ${detected}`;
+}
+
+function observedItemText(item: ObservedItem): string {
+  const product = item.productExternalId ?? `sin identificar en el ERP: "${item.observedSku ?? ""}"`;
+  const lot = item.lotExternalId ?? (item.observedLot ? `"${item.observedLot}" (sin identificar)` : "sin lote");
+  return `${escapeHtml(product)} lote ${escapeHtml(lot)}, ${item.quantity} ${escapeHtml(item.uom)}`;
 }
 
 const RECEIPT_EXTENSIONS: Record<string, string> = {
@@ -327,24 +353,30 @@ export function buildDeliveryNote(report: DispatchReport, order: ErpNextSalesOrd
   };
 }
 
-/** Línea del Pick List (TRZ-63): el depósito es el de la línea de la orden, igual que en el Delivery Note. */
-export function buildPickListLine(scan: PalletScanReport, order: ErpNextSalesOrder): Record<string, unknown> {
-  const item = order.items.find((orderItem) => orderItem.item_code === scan.productExternalId);
-  if (!item) throw validation(`El producto ${scan.productExternalId} no figura en la orden ${order.name}.`);
-  return {
-    item_code: scan.productExternalId,
-    qty: scan.quantity,
-    stock_qty: scan.quantity,
-    uom: scan.uom,
-    conversion_factor: 1,
-    warehouse: item.warehouse,
-    batch_no: scan.lotExternalId,
-    use_serial_batch_fields: 1,
-    sales_order: order.name,
-    sales_order_item: item.name,
-    [ERPNEXT_CUSTOM_FIELDS.palletCode]: scan.palletCode,
-    [ERPNEXT_CUSTOM_FIELDS.idempotencyKey]: scan.idempotencyKey,
-  };
+/**
+ * Filas del Pick List de un escaneo (TRZ-63, v2 de TRZ-111): una por ítem del pallet, todas con la clave del scan
+ * (`scanIdempotencyKey`), que es lo que después permite sacarlas juntas. Un scan v1 es un solo ítem. El depósito es
+ * el de la línea de la orden, igual que en el Delivery Note.
+ */
+export function buildPickListLines(scan: PalletScanReport, order: ErpNextSalesOrder): Record<string, unknown>[] {
+  return palletScanItems(scan).map((scanned) => {
+    const item = order.items.find((orderItem) => orderItem.item_code === scanned.productExternalId);
+    if (!item) throw validation(`El producto ${scanned.productExternalId} no figura en la orden ${order.name}.`);
+    return {
+      item_code: scanned.productExternalId,
+      qty: scanned.quantity,
+      stock_qty: scanned.quantity,
+      uom: scanned.uom,
+      conversion_factor: 1,
+      warehouse: item.warehouse,
+      batch_no: scanned.lotExternalId,
+      use_serial_batch_fields: 1,
+      sales_order: order.name,
+      sales_order_item: item.name,
+      [ERPNEXT_CUSTOM_FIELDS.palletCode]: scan.palletCode,
+      [ERPNEXT_CUSTOM_FIELDS.idempotencyKey]: scan.scanIdempotencyKey,
+    };
+  });
 }
 
 /**
@@ -745,8 +777,9 @@ export class ErpNextClient implements ErpClient {
   }
 
   /**
-   * TRZ-63: un Pick List en borrador por orden (clave pick-list:{orden}), con una línea por pallet escaneado. El
-   * scan agrega la línea; el unscan la saca y deja un comentario con su clave, que es lo que lo marca como hecho.
+   * TRZ-63: un Pick List en borrador por orden (clave pick-list:{orden}), con una fila por ítem de cada pallet
+   * escaneado (TRZ-111). El scan agrega todas sus filas en una sola escritura; el unscan saca todas las filas de
+   * ese scan en una sola escritura y deja un comentario con su clave, que es lo que lo marca como hecho.
    * El ERP aplica su regla de lotes al confirmar; TrazFlow no decide nada. El Delivery Note sigue saliendo del
    * despacho (reportDispatch).
    */
@@ -769,7 +802,7 @@ export class ErpNextClient implements ErpClient {
         customer: order.customer,
         pick_manually: 1,
         [key]: pickKey,
-        locations: [buildPickListLine(scan, order)],
+        locations: buildPickListLines(scan, order),
       };
       try {
         const body = await this.#request<{ data?: { name?: unknown } }>("POST", resourcePath("Pick List"), pickList);
@@ -790,13 +823,13 @@ export class ErpNextClient implements ErpClient {
     const path = `${resourcePath("Pick List")}/${encodeURIComponent(ref.name)}`;
     const doc = (await this.#request<{ data?: { name: string; docstatus: number; locations?: Array<Record<string, unknown>> } }>("GET", path)).data;
     if (!doc || !Array.isArray(doc.locations)) throw invalidResponse(`Pick List ${ref.name} sin líneas`);
-    const index = doc.locations.findIndex((line) => line[key] === scan.scanIdempotencyKey);
+    const scanned = doc.locations.some((line) => line[key] === scan.scanIdempotencyKey);
 
     if (scan.action === "scan") {
-      if (index >= 0) return duplicateResult(ref);
+      if (scanned) return duplicateResult(ref);
       if (doc.docstatus !== 0) throw validation(`El Pick List ${ref.name} ya está confirmado: no admite más pallets.`);
       const order = await this.#salesOrderFor(scan.orderExternalId);
-      await this.#request("PUT", path, { locations: [...doc.locations, buildPickListLine(scan, order)] });
+      await this.#request("PUT", path, { locations: [...doc.locations, ...buildPickListLines(scan, order)] });
       return { erpReference: ref.name, duplicate: false, acceptedAt: this.#now().toISOString() };
     }
 
@@ -807,7 +840,7 @@ export class ErpNextClient implements ErpClient {
       [["reference_doctype", "=", "Pick List"], ["reference_name", "=", ref.name], ["content", "like", `%${marker}%`]],
       1,
     )).length > 0;
-    if (index < 0) {
+    if (!scanned) {
       if (marked) return duplicateResult(ref);
       throw new ErpError("not_ready", `Todavía no llegó el escaneo ${scan.scanIdempotencyKey}: se reintenta.`);
     }
@@ -818,10 +851,13 @@ export class ErpNextClient implements ErpClient {
         comment_type: "Comment",
         reference_doctype: "Pick List",
         reference_name: ref.name,
-        content: `<p>TrazFlow sacó el pallet ${escapeHtml(scan.palletCode)} (lote ${escapeHtml(scan.lotExternalId)}, ${scan.quantity} ${escapeHtml(scan.uom)}) ${escapeHtml(marker)}</p>`,
+        content: `<p>TrazFlow sacó el pallet ${escapeHtml(scan.palletCode)} ${escapeHtml(marker)}</p><ul>${palletScanItems(scan)
+          .map((item) => `<li>${escapeHtml(item.productExternalId)} lote ${escapeHtml(item.lotExternalId)}, ${item.quantity} ${escapeHtml(item.uom)}</li>`)
+          .join("")}</ul>`,
       });
     }
-    await this.#request("PUT", path, { locations: doc.locations.filter((_, position) => position !== index) });
+    // Todas las filas del scan original, aunque el pallet haya cambiado después.
+    await this.#request("PUT", path, { locations: doc.locations.filter((line) => line[key] !== scan.scanIdempotencyKey) });
     return { erpReference: ref.name, duplicate: false, acceptedAt: this.#now().toISOString() };
   }
 

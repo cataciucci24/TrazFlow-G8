@@ -51,9 +51,9 @@ describe("validación de reportes de despacho al ERP", () => {
     expect(dispatchReportProblems(validReport({ lines: [] }))).toContain("el despacho no tiene líneas");
   });
 
-  it("detecta pallets repetidos", () => {
+  it("v1: detecta pallets repetidos", () => {
     const line = validReport().lines[0];
-    const report = validReport({ lines: [line, { ...line }] });
+    const report = validReport({ contractVersion: 1, lines: [line, { ...line }] });
     expect(dispatchReportProblems(report)).toContain("lines[1].palletCode PAL-001 está repetido");
   });
 

@@ -17,6 +17,7 @@ import {
   type ErpHealth,
   type ErpMasterData,
   type ErpPullOptions,
+  type PalletItem,
   type PalletScanReport,
   type StockEntryReport,
   type StockImportReport,
@@ -30,6 +31,7 @@ import {
   assertValidPalletScanReport,
   assertValidStockEntryReport,
   assertValidStockImportReport,
+  palletScanItems,
 } from "./validation.ts";
 
 export type MockErpClientOptions = {
@@ -79,6 +81,9 @@ export class MockErpClient implements ErpClient {
   readonly #reports = new Map<string, StoredReport>();
   /** Entregas y remitos informados (TRZ-103), por clave. */
   readonly #deliveries = new Map<string, StoredReport>();
+  /** Pick List simulado (TRZ-63/TRZ-111): filas por clave de scan, y las claves de unscan ya aplicadas. */
+  readonly #pickRows = new Map<string, PalletItem[]>();
+  readonly #unscanned = new Set<string>();
   readonly #dispatchStatus: MockDispatchStatus;
   readonly #batchPickingPolicy: BatchPickingPolicy;
 
@@ -123,7 +128,8 @@ export class MockErpClient implements ErpClient {
     this.#simulate("reportDispatch");
     assertValidDispatchReport(report);
 
-    const fingerprint = stableStringify(report);
+    // Como el remito real: las filas se comparan sin importar el orden (TRZ-111).
+    const fingerprint = stableStringify({ ...report, lines: report.lines.map(stableStringify).sort() });
     const previous = this.#reports.get(report.idempotencyKey);
     if (previous) {
       if (previous.fingerprint !== fingerprint) {
@@ -208,14 +214,33 @@ export class MockErpClient implements ErpClient {
     return this.#storeWrite(entry.idempotencyKey, `MOCK-STE-${entry.idempotencyKey.slice("stock-import:".length)}`, stableStringify(entry));
   }
 
-  /** TRZ-63: un unscan necesita que su scan ya haya llegado; si no, not_ready. */
+  /**
+   * TRZ-63 / TRZ-111: como el Pick List real, con filas por ítem marcadas con la clave del scan. El scan agrega todas
+   * sus filas juntas (duplicado si ya hay alguna con esa clave); el unscan saca todas las filas de su scan, o
+   * not_ready si el scan todavía no llegó, o duplicado si ya las sacó.
+   */
   async reportPalletScan(scan: PalletScanReport): Promise<DeliveryReportResult> {
     this.#simulate("reportPalletScan");
     assertValidPalletScanReport(scan);
-    if (scan.action === "unscan" && !this.#deliveries.has(scan.scanIdempotencyKey)) {
+    const erpReference = `MOCK-PICK-${scan.orderExternalId}`;
+    const result = (duplicate: boolean): DeliveryReportResult => ({ erpReference, duplicate, acceptedAt: this.#now().toISOString() });
+    if (scan.action === "scan") {
+      if (this.#pickRows.has(scan.scanIdempotencyKey)) return result(true);
+      this.#pickRows.set(scan.scanIdempotencyKey, structuredClone(palletScanItems(scan)));
+      return result(false);
+    }
+    if (this.#unscanned.has(scan.idempotencyKey)) return result(true);
+    if (!this.#pickRows.has(scan.scanIdempotencyKey)) {
       throw new ErpError("not_ready", `Todavía no llegó el escaneo ${scan.scanIdempotencyKey}: se reintenta.`);
     }
-    return this.#storeWrite(scan.idempotencyKey, `MOCK-PICK-${scan.orderExternalId}`, stableStringify(scan));
+    this.#pickRows.delete(scan.scanIdempotencyKey);
+    this.#unscanned.add(scan.idempotencyKey);
+    return result(false);
+  }
+
+  /** Filas del Pick List simulado por clave de scan (para tests). */
+  pickListRows(scanIdempotencyKey: string): PalletItem[] | undefined {
+    return structuredClone(this.#pickRows.get(scanIdempotencyKey));
   }
 
   #storeWrite(key: string, erpReference: string, fingerprint: string): DeliveryReportResult {
