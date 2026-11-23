@@ -13,6 +13,10 @@ test("en unidades y cajas la cantidad debe ser entera", () => {
 test("en kilogramos admite hasta dos decimales", () => {
   assert.equal(isValidQuantity(12.75, "kilogramos"), true);
   assert.equal(isValidQuantity(12.755, "kilogramos"), false);
+  assert.equal(isValidQuantity(1234567.89, "kilogramos"), true);
+  assert.equal(isValidQuantity(1234567.891, "kilogramos"), false);
+  assert.equal(isValidQuantity(999999999.99, "kilogramos"), true);
+  assert.equal(isValidQuantity(999999999.991, "kilogramos"), false);
 });
 
 test("la cantidad debe ser mayor a cero y finita", () => {

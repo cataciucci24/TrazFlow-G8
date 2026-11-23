@@ -33,5 +33,5 @@ export function mapErpUnit(uom: string | null | undefined): ProductUnit | null {
     .trim()
     .replace(/\.$/, "")
     .toLowerCase();
-  return ERP_UNIT_ALIASES[key] ?? null;
+  return Object.hasOwn(ERP_UNIT_ALIASES, key) ? ERP_UNIT_ALIASES[key] : null;
 }

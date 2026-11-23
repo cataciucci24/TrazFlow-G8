@@ -44,6 +44,34 @@ test("duplicados no llegan a la RPC", async () => {
   expect(await confirmStockImport(form([good, good]))).toMatchObject({ imported: 1, errors: [{ row: 3, messages: [expect.stringMatching(/duplicada/)] }] });
   expect(mocks.rpc.mock.calls[0][1].p_rows).toHaveLength(1);
 });
+
+test.each([false, true])("una unidad heredada del prototipo nunca llega a la RPC ERP=%s", async enabled => {
+  mocks.enabled.mockResolvedValue(enabled);
+  expect(await confirmStockImport(form([good.replace(";cajas;", ";constructor;")]))).toMatchObject({ imported: 0, errors: [{ row: 2 }] });
+  expect(mocks.rpc).not.toHaveBeenCalled();
+  expect(mocks.after).not.toHaveBeenCalled();
+});
+
+test("una tanda fallida queda reintentable y no se cuenta como importada", async () => {
+  mocks.rpc.mockResolvedValueOnce({ data: null, error: { code: "08006" } });
+  const lines = Array.from({ length: 501 }, (_, i) => good.replace("ACE-500", `SKU-${i}`));
+  expect(await confirmStockImport(form(lines))).toMatchObject({ total: 501, imported: 1, unprocessed: 500 });
+  expect(mocks.rpc).toHaveBeenCalledTimes(2);
+});
+
+test("rechazo de permisos de la RPC no revalida ni programa el outbox", async () => {
+  mocks.enabled.mockResolvedValue(true);
+  mocks.rpc.mockResolvedValue({ data: null, error: { code: "42501" } });
+  expect(await confirmStockImport(form())).toEqual({ error: "Solo logística puede importar stock." });
+  expect(mocks.after).not.toHaveBeenCalled();
+  expect(mocks.revalidate).not.toHaveBeenCalled();
+});
+
+test("un CSV con comillas sin cerrar no escribe ninguna fila", async () => {
+  expect(await confirmStockImport(form([good.replace(/10$/, '\"10')]))).toEqual({ error: "No pudimos leer el archivo. Revisá que sea un .csv válido." });
+  expect(mocks.rpc).not.toHaveBeenCalled();
+  expect(mocks.after).not.toHaveBeenCalled();
+});
 test.each([false, true])("depósito inexistente informado por la RPC no dispara envío ERP=%s", async enabled => {
   mocks.enabled.mockResolvedValue(enabled);
   mocks.rpc.mockResolvedValue({ data: [{ row: 2, status: "warehouse_not_found" }], error: null });

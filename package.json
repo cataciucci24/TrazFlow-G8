@@ -13,6 +13,7 @@
     "test:coverage": "vitest run --coverage",
     "test:coverage:unit": "vitest run --coverage",
     "test:all": "npm test && npm run test:e2e",
+    "test:sql": "node scripts/test-sql.mjs",
     "test:e2e": "playwright test --project=e2e",
     "test:demo": "playwright test --project=demo --headed --workers=1",
     "typecheck": "next typegen && tsc --noEmit",

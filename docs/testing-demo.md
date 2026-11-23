@@ -96,6 +96,12 @@ solo sobre una base local o descartable. El seed local vive en
 `supabase/seeds/001_demo.sql`; `supabase/config.toml` carga `./seeds/*.sql` en orden.
 Nunca ejecutar los seeds de demo contra la nube.
 
+`npm run test:sql` ejecuta las 35 suites locales reproducibles contra el contenedor
+Supabase identificado por `project_id` en config.toml. No acepta conexiones remotas.
+Excluye explícitamente el fixture y los cuatro archivos `*_cloud_state_checks.sql`:
+necesitan la réplica histórica y el orden de migraciones indicado en sus encabezados.
+Un test sin rollback se rechaza; cualquier fallo hace terminar el comando en rojo.
+
 ```powershell
 Get-Content -Raw supabase/tests/us_erp01_ops07_driver_delivery.sql | docker exec -i supabase_db_TrazFlow-G8 psql -U postgres -d postgres -v ON_ERROR_STOP=1
 if ($LASTEXITCODE -ne 0) { throw 'Falló la suite SQL' }

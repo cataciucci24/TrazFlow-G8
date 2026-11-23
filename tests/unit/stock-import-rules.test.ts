@@ -11,11 +11,15 @@ describe("reglas de importación de TrazFlow", () => {
     [{ product: "" }, "Falta el producto"], [{ product: "a".repeat(201) }, "200 caracteres"],
     [{ sku: "" }, "Falta el SKU"], [{ sku: "A<B>" }, "SKU inválido"],
     [{ lot: "" }, "Falta el lote"], [{ lot: "L@1" }, "Lote inválido"],
-    [{ unit: "litros" }, "Unidad"], [{ expiration: "31/02/2027" }, "Vencimiento inválido"],
+    [{ unit: "litros" }, "Unidad"], [{ unit: "constructor" }, "Unidad"],
+    [{ unit: "__proto__" }, "Unidad"], [{ unit: "hasOwnProperty" }, "Unidad"],
+    [{ expiration: "31/02/2027" }, "Vencimiento inválido"],
     [{ expiration: "2026-11-21" }, "vencido"], [{ warehouse: "D/1" }, "depósito inválido"],
     [{ quantity: "0" }, "Cantidad inválida"], [{ quantity: "-1" }, "Cantidad inválida"],
     [{ quantity: "1.234" }, "Cantidad inválida"], [{ quantity: "1.2" }, "Cantidad inválida"],
     [{ quantity: "1000000001" }, "Cantidad inválida"], [{ unit: "kg", quantity: "1.234" }, "dos decimales"],
+    [{ quantity: "1.00000000000000001" }, "Cantidad inválida"],
+    [{ unit: "kg", quantity: "1.23000000000000001" }, "dos decimales"],
   ] as const)("rechaza %j: %s", (values, message) => {
     const result = validateRows([row(values)], today);
     expect(result.valid).toEqual([]);
@@ -32,6 +36,12 @@ describe("reglas de importación de TrazFlow", () => {
   it("acepta los límites de producto y cantidad y normaliza el depósito", () => {
     const result = validateRows([row({ product: "a".repeat(200), quantity: "1000000000", warehouse: "dep-01" })], today);
     expect(result.valid[0]).toMatchObject({ quantity: 1_000_000_000, warehouse: "DEP-01" });
+  });
+  it.each(["1234567.89", "999999999.99"])("acepta cantidades grandes con dos decimales en kg: %s", quantity => {
+    expect(validateRows([row({ unit: "kg", quantity })], today).valid).toHaveLength(1);
+  });
+  it("los ceros finales no agregan precisión ni cambian la cantidad", () => {
+    expect(validateRows([row({ unit: "kg", quantity: "1.2300" })], today).valid[0].quantity).toBe(1.23);
   });
   it("devuelve todos los errores con la fila original de Excel", () => {
     const result = validateRows([row({ product: "", sku: "", lot: "", unit: "", expiration: "", warehouse: "", quantity: "" }, 12)], today);

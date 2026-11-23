@@ -4,6 +4,11 @@ import { test } from "vitest";
 import { MOCK_ERP_FIXTURES } from "../erp/fixtures.ts";
 import { mapErpUnit } from "./units.ts";
 
+test("nombres heredados de Object no son unidades ERP", () => {
+  for (const unit of ["constructor", "__proto__", "hasOwnProperty", "toString"])
+    assert.equal(mapErpUnit(unit), null, unit);
+});
+
 test("traduce las unidades del ERP a las de TrazFlow", () => {
   assert.equal(mapErpUnit("Caja"), "cajas");
   assert.equal(mapErpUnit(" kg. "), "kilogramos");

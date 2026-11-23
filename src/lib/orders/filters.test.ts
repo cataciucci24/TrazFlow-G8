@@ -2,6 +2,15 @@ import { expect, test } from "vitest";
 import { applyOrderFilters, readOrderFilters } from "./filters";
 
 const id = "10000000-0000-4000-8000-000000000001";
+test("normaliza UUID en mayúsculas para conservar la selección de distribuidora", () => {
+  expect(readOrderFilters({ distributor: "ABCDEFAB-CDEF-ABCD-EFAB-CDEFABCDEFAB" }).distributor)
+    .toBe("abcdefab-cdef-abcd-efab-cdefabcdefab");
+});
+
+test("un filtro inválido no borra el otro filtro válido", () => {
+  expect(readOrderFilters({ status: "constructor", distributor: id })).toEqual({ status: "", distributor: id });
+  expect(readOrderFilters({ status: "draft", distributor: "eq.otra-empresa" })).toEqual({ status: "draft", distributor: "" });
+});
 test.each(["draft", "validating", "has_discrepancy", "confirmed", "delivered", "delivered_with_discrepancy"])("acepta el estado %s", status => {
   expect(readOrderFilters({ status, distributor: id })).toEqual({ status, distributor: id });
 });

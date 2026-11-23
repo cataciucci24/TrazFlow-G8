@@ -5,6 +5,8 @@ Ruta: `/dashboard/inventory/import`, desde «Importar desde Excel» en Stock. So
 ## Flujo
 
 1. Descargar la plantilla (`.xlsx`) o usar un `.csv` con las mismas columnas: Producto, SKU, Unidad, Lote, Vencimiento, Depósito y Cantidad. En `.csv` se admite `;` o `,` como separador.
+   Se ignoran líneas vacías antes del encabezado. Las comillas deben estar cerradas
+   y escapadas correctamente; un CSV mal formado se rechaza completo antes de escribir.
 2. «Revisar archivo» muestra cuántas filas entran, las primeras 10 y, de las que no, la fila y el motivo. No escribe nada.
 3. «Confirmar» vuelve a leer y validar el archivo en el servidor: no se confía en filas enviadas por el navegador. Las filas con error se saltean, las demás entran.
 
@@ -14,6 +16,11 @@ Límites: 5.000 filas y 4 MB. Una falla general deja filas «sin procesar»; rei
 
 - **En el archivo** (`src/lib/stock-import/rows.ts`): formato de SKU y lote, unidad (`unidades`, `cajas`, `kilogramos`, con alias como `kg`), fecha real y no vencida, cantidad mayor a 0 (entera salvo en kilogramos, con hasta dos decimales y sin separador de miles), fila duplicada por SKU + lote + depósito, y mismo SKU con otra unidad o nombre, o mismo lote con otro vencimiento.
 - **Contra la empresa** (`import_stock_rows`, en tandas de 500): depósito existente y activo o, con ERP, vinculado; unidad y vencimiento iguales a los ya cargados; y que ese lote no tenga ya stock o una importación viva en ese depósito.
+
+La precisión se verifica sobre el texto original: no se redondean decimales
+sobrantes para volver válida una fila. Los ceros finales son equivalentes
+(`1,2300 kg` equivale a `1,23 kg`). Los importes grandes con dos decimales siguen
+siendo válidos hasta el tope, sin rechazos por representación binaria.
 
 Esa última regla evita duplicar stock al subir dos veces un archivo. Por eso esta pantalla sirve para la carga inicial y no para reponer un lote existente.
 

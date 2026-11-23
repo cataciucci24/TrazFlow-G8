@@ -48,7 +48,7 @@ const UNIT_ALIASES: Record<string, ProductUnit> = {
 
 function parseUnit(text: string): ProductUnit | null {
   const unit = text.toLowerCase();
-  return isProductUnit(unit) ? unit : UNIT_ALIASES[unit] ?? null;
+  return isProductUnit(unit) ? unit : Object.hasOwn(UNIT_ALIASES, unit) ? UNIT_ALIASES[unit] : null;
 }
 
 /** Acepta YYYY-MM-DD y DD/MM/AAAA, y rechaza fechas que no existen como 31/02. */
@@ -87,7 +87,10 @@ export function validateRows(rows: RawImportRow[], today = argentinaToday()): { 
     const warehouse = values.warehouse.toUpperCase();
     if (!/^[A-Z0-9][A-Z0-9_-]{0,39}$/.test(warehouse)) messages.push(values.warehouse ? "Código de depósito inválido." : "Falta el depósito.");
     const quantity = parseImportQuantity(values.quantity);
-    if (quantity === null || (unit && !isValidQuantity(quantity, unit)) || quantity <= 0) {
+    // Validar el texto antes de que Number redondee decimales no representables.
+    const fractionalDigits = (values.quantity.split(/[.,]/)[1] ?? "").replace(/0+$/, "").length;
+    const precisionAllowed = !unit || fractionalDigits <= (unit === "kilogramos" ? 2 : 0);
+    if (quantity === null || !precisionAllowed || (unit && !isValidQuantity(quantity, unit)) || quantity <= 0) {
       messages.push(unit === "kilogramos" ? "Cantidad inválida: mayor a 0 y hasta dos decimales." : "Cantidad inválida: debe ser un entero mayor a 0, sin separador de miles.");
     }
     return { rowNumber, messages, row: { row: rowNumber, product: values.product, sku: values.sku, unit, lot: values.lot, expiration, warehouse, quantity } };

@@ -145,3 +145,5 @@ Names and sprint responsibilities confirmed by the team; responsibilities descri
 Stack: Next.js 16, React 19 and TypeScript; Supabase Auth, PostgreSQL/RLS and Storage; Vitest/V8 for unit and contract tests, and Playwright for browser flows. The real ERPNext runs in Docker on Oracle behind Caddy HTTPS.
 
 Run `npm test` for all unit tests in `src/` and `tests/unit/` (Vitest). Run `npm run test:coverage` for the unified V8 report in `coverage/index.html`, `npm run typecheck` for generated Next route types and TypeScript, and `npm run test:e2e` for browser tests. See [testing and suite selection](docs/testing-demo.md). CI runs lint, type checking, unit tests and a build with dummy Supabase values.
+
+With the local Supabase stack running and migrated, `npm run test:sql` checks the 35 self-contained SQL suites with rollback. Historical cloud snapshots require their separate fixture and are explicitly excluded from this local command.

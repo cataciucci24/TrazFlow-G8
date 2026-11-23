@@ -9,7 +9,7 @@ export function readOrderFilters(params: OrderSearchParams): OrderFilters {
   const status = typeof params.status === "string" && Object.hasOwn(ORDER_STATUS_LABELS, params.status)
     ? params.status as OrderStatus : "";
   const distributor = typeof params.distributor === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(params.distributor)
-    ? params.distributor : "";
+    ? params.distributor.toLowerCase() : "";
   return { status, distributor };
 }
 
