@@ -377,6 +377,7 @@ con `ErpError` de código `config` ("Odoo: operación no soportada todavía") si
 `getBatchPickingPolicy` responde `fifo`. Verificado contra **Odoo 19.0 Community** (imagen oficial `odoo:19.0`) con
 los módulos Inventario (`stock`) y Fechas de vencimiento (`product_expiry`). Cómo levantarlo y cargar datos:
 [`odoo-deploy.md`](odoo-deploy.md).
+Dónde encaja cada adaptador en el módulo: [componentes del módulo ERP](arquitectura-erp-componentes.md) (TRZ-125).
 
 **API.** JSON-RPC externa: `POST {ERP_BASE_URL}/jsonrpc`. `common.authenticate(db, usuario, api_key, {})` devuelve el
 uid (o `false`) y cada lectura es `object.execute_kw(db, uid, api_key, modelo, "search_read", …)`, de a 500 registros
