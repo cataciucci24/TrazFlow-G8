@@ -1,7 +1,6 @@
--- SOLO PARA DESARROLLO LOCAL (TRZ-71). Vehículo del chofer de prueba que crea supabase/seed.sql.
+-- SOLO PARA DESARROLLO LOCAL (TRZ-71). Vehículo del chofer de prueba que crea supabase/seeds/001_demo.sql.
 --
--- No se carga solo: supabase/config.toml corre únicamente ./seed.sql. Después de `npx supabase db reset`:
---   psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -f supabase/seeds/trz71_driver_vehicles.sql
+-- Se carga solo con `npx supabase db reset` (supabase/config.toml corre ./seeds/*.sql), después de 001_demo.sql.
 --
 -- Idempotente: si el chofer ya tiene vehículo, lo deja como está. 6 pallets alcanza para ver la alerta con las
 -- órdenes del mock ERP asignadas al chofer en un mismo día.
