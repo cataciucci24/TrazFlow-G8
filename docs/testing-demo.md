@@ -70,8 +70,8 @@ Antes de lint también corre `npm run check:migrations`: versiones SQL duplicada
 o nombres sin versión hacen fallar CI antes de intentar desplegar. Se verificó
 con dos archivos de prueba que compartían `20261122100000`.
 
-La dueña del repo debe exigir ese check en las reglas de protección de ambas
-ramas. Crear el workflow no configura por sí solo la protección. La ejecución
+Cata activó el ruleset que exige PR y el check CI en main/develop, verificado por
+API. Crear el workflow no configura por sí solo esa protección. La ejecución
 [45105103269](https://github.com/cataciucci24/TrazFlow-G8/actions/runs/45105103269)
 del commit `96e0b5a` terminó correctamente en aproximadamente un minuto. La
 ejecución del PR final debe consultarse para verificar su propio commit.

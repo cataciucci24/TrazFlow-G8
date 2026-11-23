@@ -101,8 +101,9 @@ versión de Supabase ni se bajaron dependencias para mantener Node 20.
 
 El workflow ejecuta npm ci, lint, tipos, Vitest y build sin secretos reales. Se
 activa en PR a develop/main, push a esas ramas y ramas de persona 1, y manualmente.
-La validación de protección de develop/main devolvió 403: requiere administración.
-No se puede afirmar que esas reglas estén activas ni modificarlas con esta conexión.
+Se verificó el ruleset activo de Cata para main/develop: PR obligatorio y check CI
+de GitHub Actions requerido, sin bypass para esta cuenta. El endpoint clásico
+respondía 403; la verificación se completó por la API de rulesets.
 
 ## Documentación y pendientes — TRZ-73 / TRZ-124 / TRZ-118
 
@@ -115,8 +116,8 @@ afirma que el modelo esté limitado a DEP-01. El cierre final espera las histori
 de otras personas y la revisión cruzada requerida por TRZ-124.
 
 Lo que falta, por qué y los pasos para retomarlo están en
-[persona-1-pendientes.md](persona-1-pendientes.md). Incluye protección de ramas
-con permisos de Cata y dependencias de documentación; infraestructura verificada.
+[persona-1-pendientes.md](persona-1-pendientes.md). Registra protección de ramas
+confirmada y dependencias de documentación; infraestructura verificada.
 La [plantilla Caddy](../infra/erpnext/Caddyfile.example) se validó en un contenedor
 sin red: prueba sintaxis, no DNS, certificados ni conectividad al ERP real.
 
@@ -175,7 +176,9 @@ Se comprobó CI remoto rojo con una regresión intencional en el PR temporal #89
 [ejecución fallida](https://github.com/cataciucci24/TrazFlow-G8/actions/runs/45110002403).
 Al retirar la regresión, volvió a
 [verde](https://github.com/cataciucci24/TrazFlow-G8/actions/runs/45110318050).
-Ese PR quedó cerrado, sin merge. La protección de ramas sigue siendo acción de Cata.
+Ese PR quedó cerrado, sin merge. Se verificó también el ruleset obligatorio
+[proteccion-main-develop](https://github.com/cataciucci24/TrazFlow-G8/rules/27874251),
+activado por Cata antes de las ejecuciones roja/verde.
 
 Al comparar main y develop se detectó que remitos y pallet_contents compartían
 versión SQL. SELECT en Supabase confirmó que solo pallet_contents estaba aplicada.

@@ -9,7 +9,7 @@ Ver [resultado completo](persona-1-calidad.md) y [evidencias de infraestructura]
 | Ticket | Resultado |
 | --- | --- |
 | TRZ-122 | Todo el código de tests usa Vitest; una cobertura V8; una config Playwright con siete proyectos; scripts y guía actualizados. |
-| TRZ-119 | Workflow CI sin secretos: instalación, lint, tipos, tests y build. Node 24 compatible con las dependencias reales; badge y archivos generados ignorados. Protección de ramas requiere Cata. |
+| TRZ-119 | Workflow CI sin secretos, Node 24, versiones SQL únicas, lint, tipos, tests y build. Badge de develop, archivos generados ignorados y protección de main/develop activa y verificada. |
 | TRZ-114 | Contrato compartido ejecutado contra mock, ERPNext y Odoo; omisiones explícitas para operaciones no soportadas. Mock exige despacho previo y permite reintento. |
 | TRZ-117 | Reglas de importación y acciones probadas; filas inválidas no se escriben; rows.ts con cobertura 100%; SQL local con rollback. |
 | TRZ-120 | Textos y comentarios neutrales fuera del adaptador; regla CODE documentada como propia de TrazFlow. |
@@ -28,28 +28,19 @@ se renumeró solo el archivo no aplicado a `20261123100000_trz51_dispatch_notes.
 El remito se adaptó a los snapshots por ítem y conserva el conteo de pallets
 físicos. Ver [integración y despliegue de remitos](remitos.md).
 
-## TRZ-119: acción de Cata en GitHub
+## TRZ-119: protección activada y verificada
 
-La cuenta Git tiene escritura, sin administración. Consultar protección detallada
-respondió 403; el metadata de ramas devolvió `protected: false` para main y develop
-en esta auditoría, y Ámbar confirmó que Cata todavía no lo había configurado.
-El YAML no configura protección por sí mismo.
+Cata activó el [ruleset proteccion-main-develop](https://github.com/cataciucci24/TrazFlow-G8/rules/27874251).
+Se verificó por API: enforcement activo sobre refs/heads/main y refs/heads/develop,
+PR obligatorio, check `CI` vinculado a GitHub Actions (integration_id 15368), sin
+bypass para esta cuenta. También se bloquean borrado y force push. El endpoint
+clásico de protección daba 403; el ruleset sí permite verificar la configuración.
 
 Se comprobó CI rojo y luego verde con el [PR temporal #89](https://github.com/cataciucci24/TrazFlow-G8/pull/89),
 cerrado al terminar y sin merge. Un test deliberadamente falso falló en el paso
-`npm test`; al retirarlo, CI aprobó. Esto prueba detección, no el bloqueo del merge
-por una protección todavía pendiente.
-
-Cata debe configurar ambas ramas para exigir PR y el check `CI`, y comprobar que
-un PR rojo queda bloqueado y que uno verde puede aprobarse. La ejecución del
-workflow y la revisión de las reglas son verificaciones diferentes.
-
-Mensaje listo para enviar:
-
-> Cata, el workflow CI de persona 1 ya corre lint, tipos, todos los tests y build.
-> Para cerrar TRZ-119 falta que, como administradora, configures main y develop
-> para exigir PR y el check CI. Mi conexión no tiene permisos de administración
-> (devuelve 403). Verificá también que un PR con CI rojo no pueda mergearse.
+`npm test`; al retirarlo, CI aprobó. El ruleset ya estaba activo antes de esas
+ejecuciones y hace obligatorio ese resultado. No se intentó forzar un merge roto.
+Este punto ya no requiere una acción pendiente de Cata.
 
 ## TRZ-73 / TRZ-124: dependencias del cierre de sprint
 
