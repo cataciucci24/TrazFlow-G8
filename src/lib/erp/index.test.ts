@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 
 import { readErpConfig } from "./config.ts";
 import { ErpNextClient } from "./erpnext-client.ts";

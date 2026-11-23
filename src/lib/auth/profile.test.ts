@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 
 import { isUserRole, USER_ROLES } from "../types.ts";
 import { canAccessDashboard, hasUnknownRole, toUserProfile, type UserRow } from "./profile.ts";

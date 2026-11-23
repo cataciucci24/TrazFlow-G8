@@ -41,7 +41,7 @@ export function PalletRowActions({
   // Asociado a una orden en borrador (TRZ-100): solo la cantidad, también sin ERP.
   const isAssigned = pallet.status === "assigned";
   const quantityOnly = erpManaged || isAssigned;
-  const allowEdit = pallet.origin?.sourceSystem !== "erp" && (!erpManaged || pallet.lotSourceSystem === "erp");
+  const allowEdit = (pallet.contents?.length ?? 1) <= 1 && pallet.origin?.sourceSystem !== "erp" && (!erpManaged || pallet.lotSourceSystem === "erp");
   const notify = useFeedback();
   const [state, setState] = useState(INITIAL_STATE);
   const [isPending, startTransition] = useTransition();

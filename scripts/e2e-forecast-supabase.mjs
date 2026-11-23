@@ -14,7 +14,8 @@ const orders = [
   { id: 'new-1', distributor_id: 'new', confirmed_at: timestamp(-1), status: 'confirmed' },
 ];
 const lines = orders.flatMap(order => [5, 15].map((quantity, index) => ({
-  order_id: order.id, pallet_id: `${order.id}-${index}`, pallets: { quantity, batches: { products: { id: 'rice', name: 'Arroz', sku: 'ARR', unit_of_measure: 'cajas' } } },
+  order_id: order.id, pallet_id: `${order.id}-${index}`,
+  expected_items: [{ productId: 'rice', batchId: 'rice-lot', quantity }],
 })));
 let failing = false;
 createServer(async (req, res) => {
@@ -38,5 +39,8 @@ createServer(async (req, res) => {
   if (url.pathname === '/rest/v1/distributors') return send(paginate(customers));
   if (url.pathname === '/rest/v1/dispatch_orders') return send(user.profileRole === 'logistics_manager' ? paginate(orders) : []);
   if (url.pathname === '/rest/v1/order_pallets') return send(paginate(lines));
+  if (url.pathname === '/rest/v1/batches') return send([{ id: 'rice-lot', company_id: companyId,
+    batch_number: 'ARR-01', expiration_date: null, source_system: 'erp',
+    products: { id: 'rice', name: 'Arroz', sku: 'ARR', unit_of_measure: 'cajas' } }]);
   return send({ message: 'Unexpected forecast fixture endpoint' }, 501);
 }).listen(54329, '127.0.0.1');

@@ -1,3 +1,4 @@
+import { PalletContentList } from "@/components/pallets/content-list";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -54,8 +55,10 @@ export default async function StagnantInventoryPage({
   );
   const totalsByUnit = new Map<string, number>();
   for (const pallet of visiblePallets) {
-    if (pallet.quantity === null) continue;
-    totalsByUnit.set(pallet.unitOfMeasure, (totalsByUnit.get(pallet.unitOfMeasure) ?? 0) + pallet.quantity);
+    for (const item of pallet.contents ?? [pallet]) {
+      if (item.quantity === null) continue;
+      totalsByUnit.set(item.unitOfMeasure, (totalsByUnit.get(item.unitOfMeasure) ?? 0) + item.quantity);
+    }
   }
   const totalQuantityLabel = totalsByUnit.size === 0
     ? "—"
@@ -109,7 +112,7 @@ export default async function StagnantInventoryPage({
               {visiblePallets.map((pallet) => (
                 <tr key={pallet.id}>
                   <td><Link href={`/dashboard/traceability?qr=${encodeURIComponent(pallet.qrCode)}`} className="table-action font-mono">{pallet.qrCode}</Link></td>
-                  <td><p className="font-semibold">{pallet.productName}</p><p className="text-xs text-stone-500">SKU {pallet.productSku}<span className="md:hidden"> · Lote {pallet.batchNumber}</span> · {pallet.quantity !== null ? `${NUMBER_FORMATTER.format(pallet.quantity)} ${pallet.unitOfMeasure}` : "cantidad sin definir"}</p></td>
+                  <td>{pallet.contents && pallet.contents.length > 1 ? <PalletContentList items={pallet.contents} /> : <><p className="font-semibold">{pallet.productName}</p><p className="text-xs text-stone-500">SKU {pallet.productSku}<span className="md:hidden"> · Lote {pallet.batchNumber}</span> · {pallet.quantity !== null ? `${NUMBER_FORMATTER.format(pallet.quantity)} ${pallet.unitOfMeasure}` : "cantidad sin definir"}</p></>}</td>
                   <td className="table-secondary-column font-mono text-stone-600">{pallet.batchNumber}</td>
                   <td><PalletStatusBadge status={pallet.status} /></td>
                   <td className="text-stone-500">{pallet.currentLocation ?? "Sin ubicación"}</td>

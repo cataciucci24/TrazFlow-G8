@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 
 import type { ErpClient } from "../erp/client.ts";
 import { MockErpClient } from "../erp/mock-client.ts";

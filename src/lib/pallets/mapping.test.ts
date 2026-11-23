@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { mapOrderPalletRows, mapPalletRow, PALLET_SELECT, type RawPalletRow } from "./mapping.ts";
 
 const location = { warehouse_code: "DEP-01", code: "A01", aisle: "A", rack: "1", level: "1", position: "2" };
@@ -12,10 +12,9 @@ function row(overrides: Partial<RawPalletRow> = {}): RawPalletRow {
     current_location: "DEP-01 / A01",
     current_location_id: "loc-1",
     warehouse_code: "DEP-01",
-    quantity: 10,
     created_at: "2026-10-28T10:00:00Z",
     location,
-    batches: { batch_number: "L-1", products: { name: "Arroz", sku: "ARZ", unit_of_measure: "unidades" } },
+    contents: [{ itemId: "i1", palletId: "p1", companyId: "c1", batchId: "b1", batchNumber: "L-1", expirationDate: null, productId: "prod1", productName: "Arroz", productSku: "ARZ", unitOfMeasure: "unidades", quantity: 10, lotSourceSystem: "trazflow" }],
     ...overrides,
   };
 }

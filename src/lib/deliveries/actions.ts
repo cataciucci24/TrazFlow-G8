@@ -1,5 +1,6 @@
 "use server";
 
+import type { ObservedPalletItem } from "@/lib/pallets/item-input";
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 
@@ -11,7 +12,8 @@ import { REGISTER_RECEIPT_MESSAGES, type RegisterReceiptOutcome } from "@/lib/de
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const messages: Record<DeliveryOutcome, string> = {
-  delivered: "Pallet procesado para la entrega.",
+  content_required: "Confirmá el contenido detectado de cada ítem antes de registrar la entrega.",
+  delivered: "Pallet procesado para la entrega. Las diferencias por ítem quedan registradas.",
   already_processed: "Este pallet ya fue procesado.",
   surplus_recorded: "El pallet sobrante quedó registrado.",
   pallet_not_found: "El código no corresponde a un pallet registrado.",
@@ -34,6 +36,7 @@ export async function confirmDeliveryPallet(
   orderId: string,
   scannedCode: string,
   discrepancyType: DeliveryDiscrepancyType | null,
+  items?: ObservedPalletItem[],
 ): Promise<DeliveryResult> {
   const profile = await requireUserProfile();
   if (!hasRole(profile, "driver_operator")) return { outcome: "forbidden", message: messages.forbidden, pallet: null };
@@ -42,7 +45,8 @@ export async function confirmDeliveryPallet(
     return { outcome: "invalid_input", message: messages.invalid_input, pallet: null };
   }
   const supabase = await createClient();
-  const { data, error } = await supabase.rpc("confirm_delivery_pallet", {
+  const { data, error } = await supabase.rpc("confirm_delivery_pallet_items", {
+    p_items: items ?? null,
     p_order_id: orderId,
     p_qr_code: qrCode,
     p_discrepancy_type: discrepancyType,

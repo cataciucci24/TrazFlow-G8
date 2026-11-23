@@ -18,7 +18,7 @@ import type { CronResponse } from "./erp-outbox-job.ts";
  * alcanza; con configuración por empresa habrá que filtrar acá con isErpEnabled(companyId).
  *
  * Límites: una empresa a la vez y no se arranca otra después de SYNC_START_BUDGET_MS (120 s), dentro de los
- * 300 s de maxDuration. Una sincronización de una empresa no se parte: con ERPNext, pullMasterData hace una
+ * 300 s de maxDuration. Una sincronización de una empresa no se parte: pullMasterData puede hacer una
  * llamada de stock por producto (cada una con ERP_TIMEOUT_MS). Las empresas que no entraron van primero la
  * próxima vez. Si una empresa ya tiene una sincronización en curso (manual o de otro cron), se saltea sin error.
  */

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 
 import { filterActiveDispatchDiscrepancies } from "./discrepancies.ts";
 import type { OrderDispatchDiscrepancy } from "./types.ts";

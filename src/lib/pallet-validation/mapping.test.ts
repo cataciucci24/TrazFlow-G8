@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { mapOrderPalletValidations, ORDER_PALLET_VALIDATION_SELECT } from "./mapping.ts";
+
+const content = { itemId: "i1", palletId: "p1", companyId: "c1", batchId: "b1", batchNumber: "L-1", expirationDate: null, productId: "prod1", productName: "Arroz", productSku: "ARZ", unitOfMeasure: "unidades" as const, quantity: 10, lotSourceSystem: "trazflow" as const };
 
 const location = { warehouse_code: "DEP-01", code: "B03", aisle: "B", rack: "3", level: "1", position: "1" };
 
@@ -17,19 +19,20 @@ test("mapea pallets de la orden con validación y ubicación", () => {
         id: "p1",
         qr_code: "PAL-001",
         location,
-        batches: { batch_number: "L-1", products: [{ name: "Arroz", sku: "ARZ" }] },
+        contents: [content],
       },
     },
     {
       validated_at: null,
       validated_by: null,
-      pallets: [{ id: "p2", qr_code: "PAL-002", location: null, batches: null }],
+      pallets: [{ id: "p2", qr_code: "PAL-002", location: null, contents: [] }],
     },
     { validated_at: null, validated_by: null, pallets: null },
   ]);
 
   assert.deepEqual(result, [
     {
+      contents: [content],
       id: "p1",
       qrCode: "PAL-001",
       productName: "Arroz",
@@ -40,6 +43,7 @@ test("mapea pallets de la orden con validación y ubicación", () => {
       validatedBy: "user-1",
     },
     {
+      contents: [],
       id: "p2",
       qrCode: "PAL-002",
       productName: "—",

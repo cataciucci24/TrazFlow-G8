@@ -16,7 +16,9 @@ export function allowsDecimals(unit: ProductUnit): boolean {
 export function isValidQuantity(quantity: number, unit: ProductUnit): boolean {
   if (!Number.isFinite(quantity) || quantity <= 0) return false;
   if (!allowsDecimals(unit)) return Number.isInteger(quantity);
-  return Math.abs(quantity * 100 - Math.round(quantity * 100)) < 1e-9;
+  const hundredths = Math.round(quantity * 100);
+  // El producto por 100 puede introducir error binario en cantidades grandes.
+  return Math.abs(quantity * 100 - hundredths) < 1e-9 || hundredths / 100 === quantity;
 }
 
 /** Paso del input numérico de cantidad según la unidad. */

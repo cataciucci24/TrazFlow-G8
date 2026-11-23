@@ -14,8 +14,10 @@ export async function getPalletScanDetails(code: string): Promise<PalletScanResu
   if (error) return { pallet: null, error: "No se pudo consultar la ficha del pallet. Intentá nuevamente." };
   const row = data?.[0] as PalletScanDetails | undefined;
   if (!row) return { pallet: null, error: "El pallet no existe o no está disponible para tu usuario." };
+  const items = (data as PalletScanDetails[]).map((item) => ({ product_name: item.product_name, product_sku: item.product_sku, batch_number: item.batch_number, quantity: item.quantity, unit_of_measure: item.unit_of_measure }));
   // Proyección explícita: no serializar nuevos campos de la RPC por accidente.
   return { error: null, pallet: {
+    ...(items.length > 1 ? { items } : {}),
     qr_code: row.qr_code, product_name: row.product_name, product_sku: row.product_sku,
     batch_number: row.batch_number, quantity: row.quantity, unit_of_measure: row.unit_of_measure,
     physical_location: row.physical_location, last_event_type: row.last_event_type,

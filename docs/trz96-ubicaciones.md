@@ -2,9 +2,15 @@
 
 ## Alcance y decisiones
 
+Actualización al 23/11/2026: el modelo vigente es multidepósito y admite el
+reingreso separado de TRZ-24. Las secciones de revisión al final conservan el
+registro histórico; sus menciones a Node y al hallazgo de desasociación no son
+el estado actual. La suite `trz99_dissociate_state.sql` pasó contra la base local
+migrada. Todos los tests unitarios ahora usan Vitest.
+
 > **TRZ-101:** ya no hay un único `DEP-01` fijo: los depósitos están en la tabla `warehouses` y cada ubicación pertenece a uno (FK compuesta). Los UUID, QR e historial no cambiaron. Ver la sección "Depósitos" de [`erp-sync.md`](erp-sync.md).
 
-Un depósito por empresa: `DEP-01`, sin administración de múltiples depósitos ni asignaciones de operadores. Cada ubicación guarda empresa, identificador de depósito, código y coordenadas. Para ampliar a múltiples depósitos se podrá reemplazar el identificador fijo por una relación, conservando los UUID de ubicaciones, QR e historial.
+Una empresa puede tener varios depósitos en `warehouses`; cada ubicación guarda empresa, código de depósito, código propio y coordenadas. La relación con el depósito se valida por empresa. `DEP-01` es el código inicial de empresas existentes, no una restricción del modelo. El alta de depósitos desde pantalla (TRZ-116) y la distribución configurable (TRZ-115) siguen pendientes de su merge; no forman parte de este flujo actual.
 
 - Depósito y Logística pueden crear y consultar ubicaciones. Solo `warehouse_operator` activo registra movimientos; Logística consulta el historial. Choferes no acceden al catálogo.
 - Se reutilizan `movements` y `traceability_events`: no se crea `pallet_location_events`.
@@ -12,7 +18,7 @@ Un depósito por empresa: `DEP-01`, sin administración de múltiples depósitos
 - Códigos únicos por empresa, normalizados a mayúsculas desde la aplicación. Coordenadas también únicas. No hay edición ni eliminación de ubicaciones: etiquetas y referencias permanecen estables.
 - QR: `TRZLOC:<uuid>`. El lector también acepta el código de ubicación. El catálogo muestra código legible, depósito y coordenadas; permite impresión desde el navegador.
 - Pallets existentes no requieren migración de datos ni ERP: su texto histórico se conserva hasta la primera asignación explícita.
-- Se admiten `in_warehouse` y `assigned`, estados del flujo existente anteriores al despacho. `in_transit` y estados de entrega se rechazan. El trigger de salida elimina la referencia física activa cuando se confirma el despacho; conserva el texto que escribe el flujo de despacho/entrega y todos los eventos anteriores. No implementa reingresos o devoluciones.
+- Se admiten `in_warehouse` y `assigned`, estados anteriores al despacho. `in_transit` y estados de entrega se rechazan. El trigger de salida elimina la referencia física activa al confirmar el despacho y conserva el historial. El reingreso es un flujo separado de Logística (TRZ-24): devuelve el pallet entregado a `in_warehouse` con motivo auditado; después puede ubicarse otra vez. Ver [pallets y reingreso](persona3-pallets.md).
 - RPC atómica: bloquea la fila con `FOR UPDATE`, compara la ubicación esperada por el cliente, valida empresa/rol/estado y escribe ubicación, movimiento y evento. Una confirmación obsoleta devuelve conflicto; requiere actualizar la pantalla. Reasignar al mismo lugar no genera eventos.
 - Se retira la edición de ubicación libre del formulario general y su privilegio UPDATE directo. Las escrituras normales de lote, cantidad y asociación de órdenes conservan sus columnas autorizadas.
 

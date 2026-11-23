@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 
 import { MockErpClient } from "../erp/mock-client.ts";
 import { ErpError, type DeliveryReceipt, type DeliveryReport } from "../erp/types.ts";
@@ -8,6 +8,14 @@ import { DELIVERY_RECEIPTS_BUCKET, processErpOutbox, type ErpOutboxDb, type ErpO
 /* TRZ-103: el procesador elige la operación del contrato por el prefijo de la clave. */
 
 const quiet: ErpOutboxLogger = { info: () => {}, warn: () => {}, error: () => {} };
+
+async function dispatchedMock() {
+  const client = new MockErpClient();
+  await client.reportDispatch({ contractVersion: 1, idempotencyKey: "dispatch:SAL-ORD-2026-00012", orderExternalId: "SAL-ORD-2026-00012",
+    dispatchedAt: "2026-10-28T14:00:00Z", operator: { id: "u1", name: "Depósito" },
+    lines: [{ orderLineExternalId: "SAL-ORD-2026-00012-1", palletCode: "PAL-1", productExternalId: "ACE-500", lotExternalId: "L-2026-0915", quantity: 1, uom: "Caja" }] });
+  return client;
+}
 
 type Row = { id: string; idempotency_key: string; payload: unknown; attempts: number; status: string; last_error_code?: string };
 
@@ -85,7 +93,7 @@ function receiptPayload(overrides: Partial<DeliveryReceipt & { storagePath: stri
 
 test("delivery: llama a reportDelivery con el payload guardado", async () => {
   const fake = fakeDb([{ id: "ev-d", payload: delivery() }]);
-  const erp = new MockErpClient();
+  const erp = await dispatchedMock();
   const received: DeliveryReport[] = [];
   const client = Object.assign(erp, {
     reportDelivery: (report: DeliveryReport) => { received.push(report); return MockErpClient.prototype.reportDelivery.call(erp, report); },
@@ -98,7 +106,7 @@ test("delivery: llama a reportDelivery con el payload guardado", async () => {
 
 test("delivery-receipt: descarga el archivo del bucket y lo adjunta", async () => {
   const fake = fakeDb([{ id: "ev-r", payload: receiptPayload() }], { [PATH]: new Uint8Array([1, 2, 3]) });
-  const erp = new MockErpClient();
+  const erp = await dispatchedMock();
   let got: { receipt: DeliveryReceipt; size: number } | null = null;
   const client = Object.assign(erp, {
     attachDeliveryReceipt: (receipt: DeliveryReceipt, content: Uint8Array) => {
@@ -157,7 +165,7 @@ test("payloads de entrega inválidos fallan sin llamar al ERP", async () => {
 });
 
 test("mock: reportDelivery y attachDeliveryReceipt son idempotentes por clave", async () => {
-  const erp = new MockErpClient();
+  const erp = await dispatchedMock();
   const first = await erp.reportDelivery(delivery());
   const again = await erp.reportDelivery(delivery());
   assert.equal(first.duplicate, false);
@@ -194,8 +202,21 @@ test("como chofer usa las RPC erp_outbox_driver_* con la orden", async () => {
       throw new Error(`RPC inesperada ${fn}`);
     },
   };
-  const summary = await processErpOutbox({ db, getClient: () => new MockErpClient(), logger: quiet, driverOrderId: "order-1" });
+  const erp = await dispatchedMock();
+  const summary = await processErpOutbox({ db, getClient: () => erp, logger: quiet, driverOrderId: "order-1" });
   assert.equal(summary.sent, 1);
   assert.deepEqual(calls.map(([fn]) => fn), ["erp_outbox_driver_claim", "erp_outbox_driver_mark_sent"]);
   assert.deepEqual(calls[0][1], { p_order_id: "order-1" });
+});
+
+test("entrega y adjunto esperan el despacho; el reintento conserva la referencia", async () => {
+  const erp = new MockErpClient();
+  const payload = receiptPayload();
+  await assert.rejects(erp.reportDelivery(delivery()), (error: unknown) => error instanceof ErpError && error.code === "not_ready" && error.retryable);
+  await assert.rejects(erp.attachDeliveryReceipt(payload, new Uint8Array([1])), (error: unknown) => error instanceof ErpError && error.code === "not_ready" && error.retryable);
+  const dispatch = await erp.reportDispatch({ contractVersion: 1, idempotencyKey: delivery().dispatchIdempotencyKey, orderExternalId: delivery().orderExternalId,
+    dispatchedAt: "2026-10-28T14:00:00Z", operator: { id: "u1", name: "Depósito" },
+    lines: [{ orderLineExternalId: "SAL-ORD-2026-00012-1", palletCode: "PAL-1", productExternalId: "ACE-500", lotExternalId: "L-2026-0915", quantity: 1, uom: "Caja" }] });
+  assert.equal((await erp.reportDelivery(delivery())).erpReference, dispatch.erpReference);
+  assert.equal((await erp.attachDeliveryReceipt(payload, new Uint8Array([1]))).erpReference, dispatch.erpReference);
 });

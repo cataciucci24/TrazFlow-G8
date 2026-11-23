@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 
 import { buildIntegrationsHref, EMPTY_FILTERS, isValidDay, parseIntegrationFilters, toActivityRpcArgs, totalPages } from "./filters.ts";
 
