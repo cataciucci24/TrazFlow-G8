@@ -8,7 +8,8 @@ import { erpStockErrorMessage } from "./erp-stock-errors";
 export async function returnPalletToWarehouse(qrCode: string, reason: string): Promise<{ error: string | null; success: string | null }> {
   const profile = await requireUserProfile();
   if (!hasRole(profile, "logistics_manager")) return { error: "Solo logística puede registrar reingresos.", success: null };
-  if (!qrCode.trim() || qrCode.trim().length > 512 || !reason.trim() || reason.trim().length > 1000) {
+  if (typeof qrCode !== "string" || typeof reason !== "string"
+    || !qrCode.trim() || qrCode.trim().length > 512 || !reason.trim() || reason.trim().length > 1000) {
     return { error: "Ingresá el QR y un motivo de hasta 1.000 caracteres.", success: null };
   }
   const db = await createClient();
