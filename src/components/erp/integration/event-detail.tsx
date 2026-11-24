@@ -26,17 +26,21 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   return <div className="min-w-0"><dt className="text-stone-500">{label}</dt><dd className="break-words font-medium text-slate-950">{children}</dd></div>;
 }
 
-export function EventDetail({ detail, closeHref }: { detail: IntegrationEventDetail; closeHref: string }) {
+/**
+ * Detalle de un evento. Se muestra solo en la pestaña (sin las tablas): `back` vuelve adonde se lo abrió (el resumen,
+ * desde una tarjeta, o la actividad con sus filtros).
+ */
+export function EventDetail({ detail, back }: { detail: IntegrationEventDetail; back: { href: string; label: string } }) {
   return (
     <section id="detalle" className="surface space-y-4 p-4 sm:p-5" aria-labelledby="event-detail-title">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <h2 id="event-detail-title" className="text-base font-semibold text-slate-950">
-            {detail.kind === "sync" ? "Detalle de la sincronización" : `Reporte de despacho ${detail.order.externalId ?? ""}`}
-          </h2>
-          <IntegrationBadgeView badge={activityBadge(detail.kind, detail.status)} detail={ACTIVITY_STATUS_LABELS[detail.status]} />
-        </div>
-        <Link href={closeHref} scroll={false} className="button-ghost">Cerrar detalle</Link>
+      <Link href={back.href} className="inline-flex text-sm font-bold text-[var(--brand)] hover:underline">
+        <span aria-hidden="true">←&nbsp;</span>{back.label}
+      </Link>
+      <div className="flex flex-wrap items-center gap-3">
+        <h2 id="event-detail-title" className="text-base font-semibold text-slate-950">
+          {detail.kind === "sync" ? "Detalle de la sincronización" : `Reporte de despacho ${detail.order.externalId ?? ""}`}
+        </h2>
+        <IntegrationBadgeView badge={activityBadge(detail.kind, detail.status)} detail={ACTIVITY_STATUS_LABELS[detail.status]} />
       </div>
       {detail.kind === "sync" ? <SyncDetail detail={detail} /> : <OutboxDetail detail={detail} />}
     </section>

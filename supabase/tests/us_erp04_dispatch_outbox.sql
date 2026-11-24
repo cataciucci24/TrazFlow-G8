@@ -108,7 +108,7 @@ select pg_temp.assert_true(not has_table_privilege('authenticated', 'public.erp_
 select pg_temp.assert_true(not has_table_privilege('authenticated', 'public.erp_outbox_events', 'update'), 'authenticated no actualiza el outbox');
 select pg_temp.assert_true(not has_table_privilege('authenticated', 'public.erp_outbox_events', 'delete'), 'authenticated no borra el outbox');
 select pg_temp.assert_true(not has_table_privilege('service_role', 'public.erp_outbox_events', 'update'), 'service_role escribe solo vía RPC');
-select pg_temp.assert_true(not has_function_privilege('anon', 'public.erp_outbox_claim(integer, uuid)', 'execute'), 'anon no procesa');
+select pg_temp.assert_true(not has_function_privilege('anon', 'public.erp_outbox_claim(integer, uuid, uuid)', 'execute'), 'anon no procesa');
 select pg_temp.assert_true(not has_function_privilege('anon', 'public.erp_outbox_mark_failed(uuid, integer, text, text, boolean)', 'execute'), 'anon no cierra envíos');
 select pg_temp.assert_true(not has_function_privilege('authenticated', 'public.erp_outbox_dispatch_payload(uuid, uuid, timestamptz)', 'execute'), 'el armado del payload no se expone');
 select pg_temp.assert_true(not has_function_privilege('authenticated', 'public.erp_outbox_actor_company()', 'execute'), 'los helpers no se exponen');

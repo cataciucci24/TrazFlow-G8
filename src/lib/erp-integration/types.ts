@@ -80,7 +80,19 @@ export const ERP_DOCUMENT_STATUS_LABELS: Record<ErpDocumentStatus, string> = {
   not_tracked: "Sin seguimiento",
 };
 
+/** Pestañas del panel (TRZ-112). `resumen` es la de entrada y no va en la URL. */
+export const INTEGRATION_TABS = ["resumen", "actividad", "configuracion"] as const;
+export type IntegrationTab = (typeof INTEGRATION_TABS)[number];
+
+export const INTEGRATION_TAB_LABELS: Record<IntegrationTab, string> = {
+  resumen: "Resumen",
+  actividad: "Actividad",
+  configuracion: "Configuración",
+};
+
 export type IntegrationFilters = {
+  /** Pestaña visible. */
+  tab: IntegrationTab;
   kind: ActivityKind | null;
   status: ActivityStatus | null;
   /** Fechas `YYYY-MM-DD` (hora de Argentina), ambas inclusive. */
@@ -207,3 +219,41 @@ export type IntegrationActionState = {
   status: "idle" | "success" | "warning" | "error";
   message: string | null;
 };
+
+/* ---------- TRZ-112: configuración del ERP de la empresa ---------- */
+
+/** Proveedores que se eligen en el panel. `none` = la empresa trabaja sin ERP (modo manual). */
+export const ERP_CONFIG_PROVIDERS = ["none", "erpnext", "odoo", "mock"] as const;
+export type ErpConfigProvider = (typeof ERP_CONFIG_PROVIDERS)[number];
+
+export const ERP_CONFIG_PROVIDER_LABELS: Record<ErpConfigProvider, string> = {
+  none: "Sin ERP (carga manual en TrazFlow)",
+  erpnext: "ERPNext",
+  odoo: "Odoo (solo lectura)",
+  mock: "ERP simulado (pruebas)",
+};
+
+/**
+ * Lo que el panel muestra de la configuración guardada. Nunca lleva credenciales: solo sus últimas 4 letras
+ * (`apiKeyHint`, `apiSecretHint`) para mostrarlas enmascaradas.
+ */
+export type ErpConfigView = {
+  provider: ErpConfigProvider;
+  baseUrl: string | null;
+  odooDatabase: string | null;
+  odooUsername: string | null;
+  itemGroup: string | null;
+  timeoutSeconds: number | null;
+  mockScenario: string | null;
+  mockDispatchStatus: string | null;
+  apiKeyHint: string | null;
+  apiSecretHint: string | null;
+  configuredAt: string | null;
+  /** La empresa usa hoy las variables del servidor (transición, ERP_ENV_COMPANY_ID) y no tiene nada guardado. */
+  usesServerVariables: boolean;
+  /** El ERP simulado se ofrece solo fuera de producción. */
+  allowMock: boolean;
+};
+
+/** Resultado de "Probar conexión" y "Guardar". */
+export type ErpConfigActionState = IntegrationActionState & { errors?: string[] };

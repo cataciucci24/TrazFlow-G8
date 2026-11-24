@@ -29,7 +29,7 @@ function fakeDb(rows: Array<{ id: string; payload: { idempotencyKey: string } }>
       if (fn === "erp_outbox_claim") {
         const claimed = [...events.values()].filter((row) => row.status === "pending");
         for (const row of claimed) { row.status = "processing"; row.attempts += 1; }
-        return { data: claimed.map(({ id, idempotency_key, payload, attempts }) => ({ id, idempotency_key, payload, attempts })), error: null };
+        return { data: claimed.map(({ id, idempotency_key, payload, attempts }) => ({ id, company_id: "company-a", idempotency_key, payload, attempts })), error: null };
       }
       const row = events.get(String(args.p_event_id))!;
       if (fn === "erp_outbox_mark_sent") { row.status = "sent"; return { data: true, error: null }; }
@@ -194,7 +194,7 @@ test("como chofer usa las RPC erp_outbox_driver_* con la orden", async () => {
     async rpc(fn, args) {
       calls.push([fn, args]);
       if (fn === "erp_outbox_driver_claim") {
-        const rows = claimed ? [] : [{ id: "ev-d", idempotency_key: delivery().idempotencyKey, payload: delivery(), attempts: 1 }];
+        const rows = claimed ? [] : [{ id: "ev-d", company_id: "company-a", idempotency_key: delivery().idempotencyKey, payload: delivery(), attempts: 1 }];
         claimed = true;
         return { data: rows, error: null };
       }

@@ -17,6 +17,7 @@ import {
 
 type FakeEvent = {
   id: string;
+  company_id: string;
   idempotency_key: string;
   payload: unknown;
   status: "pending" | "processing" | "sent" | "failed";
@@ -29,6 +30,7 @@ type FakeEvent = {
 };
 
 const MAX_ATTEMPTS = 10;
+const COMPANY = "company-a";
 
 function fakeDb(options: { claimError?: string; failMarkSentOnce?: boolean } = {}) {
   const events = new Map<string, FakeEvent>();
@@ -43,14 +45,15 @@ function fakeDb(options: { claimError?: string; failMarkSentOnce?: boolean } = {
         const claimed = [...events.values()]
           .filter((event) => event.due && (event.status === "pending" || event.status === "processing"))
           .filter((event) => !args.p_aggregate_id || event.id === args.p_aggregate_id)
+          .filter((event) => !args.p_company_id || event.company_id === args.p_company_id)
           .slice(0, Number(args.p_limit));
         for (const event of claimed) {
           event.status = "processing";
           event.attempts += 1;
         }
         return {
-          data: claimed.map(({ id, idempotency_key, payload, attempts }) => ({
-            id, idempotency_key, payload: structuredClone(payload), attempts,
+          data: claimed.map(({ id, company_id, idempotency_key, payload, attempts }) => ({
+            id, company_id, idempotency_key, payload: structuredClone(payload), attempts,
           })),
           error: null,
         };
@@ -88,9 +91,9 @@ function fakeDb(options: { claimError?: string; failMarkSentOnce?: boolean } = {
     db,
     calls,
     events,
-    add(id: string, payload: unknown, idempotencyKey = (payload as DispatchReport).idempotencyKey) {
+    add(id: string, payload: unknown, idempotencyKey = (payload as DispatchReport).idempotencyKey, companyId = COMPANY) {
       events.set(id, {
-        id, idempotency_key: idempotencyKey, payload, status: "pending", attempts: 0, due: true,
+        id, company_id: companyId, idempotency_key: idempotencyKey, payload, status: "pending", attempts: 0, due: true,
         last_error_code: null, last_error: null, erp_reference: null, erp_duplicate: null,
       });
     },
@@ -382,8 +385,8 @@ test("USH1: stock-import va a reportStockImport y un payload roto no llega al ER
     reportStockImport: async (sent: unknown) => { received.push(sent); return { erpReference: "STE-1", duplicate: false, acceptedAt: "2026-11-02T12:00:00.000Z" }; },
   });
   const events = [
-    { id: "e1", idempotency_key: entry.idempotencyKey, payload: entry, attempts: 1 },
-    { id: "e2", idempotency_key: "stock-import:r:3", payload: { ...entry, idempotencyKey: "stock-import:r:3", expirationDate: null }, attempts: 1 },
+    { id: "e1", company_id: COMPANY, idempotency_key: entry.idempotencyKey, payload: entry, attempts: 1 },
+    { id: "e2", company_id: COMPANY, idempotency_key: "stock-import:r:3", payload: { ...entry, idempotencyKey: "stock-import:r:3", expirationDate: null }, attempts: 1 },
   ];
   const calls: [string, Record<string, unknown>][] = [];
   const db = { rpc: async (fn: string, args: Record<string, unknown>) => {
@@ -396,4 +399,81 @@ test("USH1: stock-import va a reportStockImport y un payload roto no llega al ER
   assert.equal(summary.sent, 1);
   assert.equal(summary.failed, 1);
   assert.equal(calls.find(([fn]) => fn === "erp_outbox_mark_failed")![1].p_retryable, false);
+});
+
+/* ---------- TRZ-112: cada evento sale por el ERP de su empresa ---------- */
+
+test("TRZ-112: eventos de dos empresas salen cada uno por el ERP de su empresa, un cliente por empresa", async () => {
+  const fake = fakeDb();
+  const order14 = report({
+    idempotencyKey: "dispatch:SAL-ORD-2026-00014",
+    orderExternalId: "SAL-ORD-2026-00014",
+    lines: [{ orderLineExternalId: null, palletCode: "PAL-0003", productExternalId: "ARR-1KG", lotExternalId: "ARR-2026-08", quantity: 10, uom: "Caja" }],
+  });
+  // La misma orden externa (y la misma clave) en las dos empresas: cada una tiene su ERP.
+  fake.add("a1", report(), undefined, "A");
+  fake.add("b1", report(), undefined, "B");
+  fake.add("a2", order14, undefined, "A");
+  const clients = { A: spyClient(), B: spyClient() };
+  const asked: string[] = [];
+  const summary = await processErpOutbox({
+    db: fake.db,
+    getClient: (companyId) => { asked.push(companyId); return clients[companyId as "A" | "B"].client; },
+    logger: quiet,
+  });
+  assert.equal(summary.sent, 3);
+  assert.equal(summary.duplicates, 0);
+  assert.deepEqual(asked.sort(), ["A", "B"], "un cliente por empresa y por corrida");
+  assert.deepEqual(clients.A.received.map((sent) => sent.idempotencyKey), ["dispatch:SAL-ORD-2026-00012", "dispatch:SAL-ORD-2026-00014"]);
+  assert.deepEqual(clients.B.received.map((sent) => sent.idempotencyKey), ["dispatch:SAL-ORD-2026-00012"], "la misma orden externa en otra empresa no se pisa");
+});
+
+test("TRZ-112: si el ERP de una empresa no se puede armar, solo fallan sus eventos", async () => {
+  const fake = fakeDb();
+  fake.add("a1", report(), undefined, "A");
+  fake.add("b1", report(), undefined, "B");
+  const summary = await processErpOutbox({
+    db: fake.db,
+    getClient: async (companyId) => {
+      if (companyId === "A") throw new ErpError("config", "Faltan la API key o el API secret del ERP.");
+      return new MockErpClient();
+    },
+    logger: quiet,
+  });
+  assert.equal(summary.sent, 1);
+  assert.equal(summary.failed, 1);
+  assert.equal(fake.events.get("a1")?.status, "failed");
+  assert.equal(fake.events.get("a1")?.last_error_code, "config");
+  assert.equal(fake.events.get("b1")?.status, "sent");
+});
+
+test("TRZ-112: con companyId pide p_company_id y no envía eventos de otra empresa aunque la base los devuelva", async () => {
+  const calls: [string, Record<string, unknown>][] = [];
+  const db: ErpOutboxDb = {
+    async rpc(fn, args) {
+      calls.push([fn, args]);
+      if (fn === "erp_outbox_claim") {
+        return { data: [{ id: "x", company_id: "B", idempotency_key: report().idempotencyKey, payload: report(), attempts: 1 }], error: null };
+      }
+      throw new Error(`RPC inesperada ${fn}`);
+    },
+  };
+  let created = false;
+  const summary = await processErpOutbox({ db, companyId: "A", getClient: () => { created = true; return new MockErpClient(); }, logger: quiet });
+  assert.equal(calls[0][1].p_company_id, "A");
+  assert.equal(created, false);
+  assert.equal(summary.sent, 0);
+  assert.equal(summary.unrecorded, 1);
+  assert.deepEqual(calls.map(([fn]) => fn), ["erp_outbox_claim"], "no lo marca: lo retoma su empresa");
+});
+
+test("TRZ-112: una fila sin empresa no se procesa", async () => {
+  const db: ErpOutboxDb = {
+    async rpc(fn) {
+      if (fn === "erp_outbox_claim") return { data: [{ id: "x", idempotency_key: report().idempotencyKey, payload: report(), attempts: 1 }], error: null };
+      throw new Error(`RPC inesperada ${fn}`);
+    },
+  };
+  const summary = await processErpOutbox({ db, getClient: () => new MockErpClient(), logger: quiet });
+  assert.equal(summary.claimed, 0);
 });

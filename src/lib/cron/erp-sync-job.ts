@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { ErpClient } from "../erp/client.ts";
+import type { ErpProvider } from "../erp/types.ts";
 import type { ErpOutboxLogger } from "../erp-outbox/processor.ts";
 import { ErpSyncStartError, syncCompanyFromErp, type ErpSyncDb } from "../erp-sync/sync.ts";
 import type { ErpSyncStatus } from "../erp-sync/types.ts";
@@ -14,8 +15,8 @@ import type { CronResponse } from "./erp-outbox-job.ts";
  * usuario: la ejecución queda como `automatic` y sin triggered_by.
  *
  * Qué empresas: las que devuelve erp_sync_auto_companies (al menos una sincronización previa o un depósito
- * vinculado al ERP), primero las que hace más que no se sincronizan. Mientras isErpEnabled sea global, eso
- * alcanza; con configuración por empresa habrá que filtrar acá con isErpEnabled(companyId).
+ * vinculado al ERP), primero las que hace más que no se sincronizan. TRZ-112: cada una con SU ERP; las que hoy
+ * no tienen ERP configurado se saltean (`skipped_no_erp`).
  *
  * Límites: una empresa a la vez y no se arranca otra después de SYNC_START_BUDGET_MS (120 s), dentro de los
  * 300 s de maxDuration. Una sincronización de una empresa no se parte: pullMasterData puede hacer una
@@ -27,23 +28,24 @@ export const SYNC_START_BUDGET_MS = 120_000;
 
 export type ErpSyncCronCompanyResult = {
   companyId: string;
-  result: ErpSyncStatus | "skipped_running" | "skipped_time" | "error";
+  result: ErpSyncStatus | "skipped_running" | "skipped_time" | "skipped_no_erp" | "error";
   runId: string | null;
 };
 
 export type ErpSyncCronBody =
   | { ok: false; error: "unauthorized" | "not_configured" | "companies_failed" }
-  | { ok: true; erp: false; message: string }
   | { ok: true; erp: true; companies: ErpSyncCronCompanyResult[] };
+
+/** ERP de una empresa para sincronizar: proveedor (para auditar en erp_sync_runs) y cliente. null = sin ERP. */
+export type ErpSyncCronContext = { provider: ErpProvider; client: ErpClient };
 
 export type ErpSyncCronParams = {
   authorization: string | null;
   secret: string | undefined;
-  erpEnabled: () => Promise<boolean>;
-  /** Cliente con service_role. Se crea solo si hay ERP. */
+  /** Cliente con service_role. */
   createDb: () => ErpSyncDb;
-  getClient: (companyId: string) => ErpClient;
-  provider: string;
+  /** ERP de la empresa (getCompanyErpContext). Puede lanzar si la configuración guardada es inválida. */
+  getContext: (companyId: string) => Promise<ErpSyncCronContext | null>;
   logger: ErpOutboxLogger;
   sync?: typeof syncCompanyFromErp;
   now?: () => number;
@@ -54,10 +56,6 @@ export async function runErpSyncCron(params: ErpSyncCronParams): Promise<CronRes
     params.logger.warn("sync_unauthorized", {});
     return { status: 401, body: { ok: false, error: "unauthorized" } };
   }
-  if (!(await params.erpEnabled())) {
-    return { status: 200, body: { ok: true, erp: false, message: "Sin ERP configurado: no se sincroniza." } };
-  }
-
   let db: ErpSyncDb;
   try {
     db = params.createDb();
@@ -87,24 +85,38 @@ export async function runErpSyncCron(params: ErpSyncCronParams): Promise<CronRes
       continue;
     }
     const companyStartedAt = now();
+    let context: ErpSyncCronContext | null;
+    try {
+      context = await params.getContext(companyId);
+    } catch {
+      companies.push({ companyId, result: "error", runId: null });
+      params.logger.error("sync_company_config_failed", { companyId, code: "config" });
+      continue;
+    }
+    if (!context) {
+      companies.push({ companyId, result: "skipped_no_erp", runId: null });
+      continue;
+    }
+    const erp = context;
     try {
       const run = await sync({
         db,
         companyId,
         actorId: null,
-        provider: params.provider,
-        getClient: () => params.getClient(companyId),
+        provider: erp.provider,
+        getClient: () => erp.client,
       });
       companies.push({ companyId, result: run.status, runId: run.id });
-      params.logger.info("sync_company_done", { status: run.status, durationMs: now() - companyStartedAt });
+      params.logger.info("sync_company_done", { companyId, status: run.status, durationMs: now() - companyStartedAt });
     } catch (error) {
       if (error instanceof ErpSyncStartError && error.code === "55P03") {
         companies.push({ companyId, result: "skipped_running", runId: null });
-        params.logger.info("sync_company_skipped", { status: "running" });
+        params.logger.info("sync_company_skipped", { companyId, status: "running" });
         continue;
       }
       companies.push({ companyId, result: "error", runId: null });
       params.logger.error("sync_company_failed", {
+        companyId,
         code: error instanceof ErpSyncStartError ? error.code ?? undefined : "unknown",
         durationMs: now() - companyStartedAt,
       });

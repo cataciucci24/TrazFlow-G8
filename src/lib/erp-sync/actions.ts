@@ -3,8 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { hasRole, requireUserProfile } from "@/lib/auth/session";
-import { getErpClient } from "@/lib/erp";
-import { configuredErpProvider, isErpEnabled } from "@/lib/erp-sync/enabled";
+import { getCompanyErpContext, isErpError, type ErpContext } from "@/lib/erp";
 import { ErpSyncStartError, syncCompanyFromErp } from "@/lib/erp-sync/sync";
 import { describeErpSyncRun, type ErpSyncActionState } from "@/lib/erp-sync/types";
 import { createClient } from "@/lib/supabase/server";
@@ -27,13 +26,19 @@ export async function syncErpNow(): Promise<ErpSyncActionState> {
   if (!hasRole(profile, "logistics_manager")) {
     return { status: "error", message: "Solo logística puede sincronizar con el ERP.", run: null };
   }
-  if (!(await isErpEnabled(profile.companyId))) {
-    return {
-      status: "error",
-      message: "La integración con el ERP no está configurada para esta instalación (falta ERP_PROVIDER en el servidor).",
-      run: null,
-    };
+  let erp: ErpContext | null;
+  try {
+    erp = await getCompanyErpContext(profile.companyId);
+  } catch (error) {
+    const message = isErpError(error) && error.code === "config"
+      ? `La configuración del ERP de tu empresa no es válida: ${error.message}`
+      : "No se pudo leer la configuración del ERP de tu empresa. Intentá nuevamente.";
+    return { status: "error", message, run: null };
   }
+  if (!erp) {
+    return { status: "error", message: "Tu empresa no tiene un ERP configurado. Configuralo en Integración ERP.", run: null };
+  }
+  const context = erp;
 
   const supabase = await createClient();
   try {
@@ -41,8 +46,8 @@ export async function syncErpNow(): Promise<ErpSyncActionState> {
       db: { rpc: (fn, args) => supabase.rpc(fn, args) },
       companyId: profile.companyId,
       actorId: profile.id,
-      provider: configuredErpProvider(),
-      getClient: () => getErpClient(profile.companyId),
+      provider: context.provider,
+      getClient: () => context.client,
     });
     for (const path of SYNCED_PATHS) revalidatePath(path);
     return { status: run.status === "running" ? "error" : run.status, message: describeErpSyncRun(run), run };

@@ -1,4 +1,14 @@
-import { ACTIVITY_KINDS, ACTIVITY_STATUSES, type ActivityKind, type ActivityStatus, type IntegrationFilters } from "./types.ts";
+import {
+  ACTIVITY_KIND_LABELS,
+  ACTIVITY_KINDS,
+  ACTIVITY_STATUS_LABELS,
+  ACTIVITY_STATUSES,
+  INTEGRATION_TABS,
+  type ActivityKind,
+  type ActivityStatus,
+  type IntegrationFilters,
+  type IntegrationTab,
+} from "./types.ts";
 
 export const INTEGRATIONS_PATH = "/dashboard/integrations";
 export const ACTIVITY_PAGE_SIZE = 20;
@@ -12,7 +22,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 type SearchParams = Record<string, string | string[] | undefined>;
 
 export const EMPTY_FILTERS: IntegrationFilters = {
-  kind: null, status: null, from: null, to: null, search: null, page: 1, unreportedPage: 1, event: null,
+  tab: "resumen", kind: null, status: null, from: null, to: null, search: null, page: 1, unreportedPage: 1, event: null,
 };
 
 function first(value: string | string[] | undefined): string {
@@ -21,6 +31,10 @@ function first(value: string | string[] | undefined): string {
 
 function isKind(value: string): value is ActivityKind {
   return ACTIVITY_KINDS.some((kind) => kind === value);
+}
+
+function isTab(value: string): value is IntegrationTab {
+  return INTEGRATION_TABS.some((tab) => tab === value);
 }
 
 function isStatus(value: string): value is ActivityStatus {
@@ -45,6 +59,12 @@ function parsePage(value: string): number {
 export function parseIntegrationFilters(params: SearchParams): { filters: IntegrationFilters; problems: string[] } {
   const problems: string[] = [];
   const filters: IntegrationFilters = { ...EMPTY_FILTERS };
+
+  const tab = first(params.tab);
+  if (tab) {
+    if (isTab(tab)) filters.tab = tab;
+    else problems.push("La pestaña pedida no existe; se muestra el resumen.");
+  }
 
   const kind = first(params.kind);
   if (kind) {
@@ -91,6 +111,8 @@ export function parseIntegrationFilters(params: SearchParams): { filters: Integr
     if (separator > 0 && isKind(eventKind) && UUID.test(eventId)) filters.event = { kind: eventKind, id: eventId.toLowerCase() };
     else problems.push("El evento pedido no es válido.");
   }
+  // El detalle de un evento vive en la pestaña Actividad (links viejos sin `tab` también llegan ahí).
+  if (filters.event) filters.tab = "actividad";
 
   return { filters, problems };
 }
@@ -118,6 +140,7 @@ export function toActivityRpcArgs(filters: IntegrationFilters, pageSize = ACTIVI
 export function buildIntegrationsHref(filters: IntegrationFilters, changes: Partial<IntegrationFilters> = {}): string {
   const next = { ...filters, ...changes };
   const query = new URLSearchParams();
+  if (next.tab !== "resumen") query.set("tab", next.tab);
   if (next.kind) query.set("kind", next.kind);
   if (next.status) query.set("status", next.status);
   if (next.from) query.set("from", next.from);
@@ -128,6 +151,23 @@ export function buildIntegrationsHref(filters: IntegrationFilters, changes: Part
   if (next.event) query.set("event", `${next.event.kind}:${next.event.id}`);
   const search = query.toString();
   return search ? `${INTEGRATIONS_PATH}?${search}` : INTEGRATIONS_PATH;
+}
+
+/** URL de una pestaña, sin filtros. */
+export function integrationTabHref(tab: IntegrationTab): string {
+  return tab === "resumen" ? INTEGRATIONS_PATH : `${INTEGRATIONS_PATH}?tab=${tab}`;
+}
+
+/** Los filtros activos en palabras, para el tag que los quita ("Fallido · Reporte de despacho"). */
+export function describeActivityFilters(filters: IntegrationFilters): string[] {
+  const parts: string[] = [];
+  if (filters.status) parts.push(ACTIVITY_STATUS_LABELS[filters.status]);
+  if (filters.kind) parts.push(ACTIVITY_KIND_LABELS[filters.kind]);
+  if (filters.from && filters.to) parts.push(`${filters.from} a ${filters.to}`);
+  else if (filters.from) parts.push(`Desde ${filters.from}`);
+  else if (filters.to) parts.push(`Hasta ${filters.to}`);
+  if (filters.search) parts.push(`“${filters.search}”`);
+  return parts;
 }
 
 export function hasActivityFilters(filters: IntegrationFilters): boolean {

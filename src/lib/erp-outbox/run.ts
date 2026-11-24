@@ -10,7 +10,8 @@ import type { ErpOutboxRunSummary } from "@/lib/erp-outbox/types";
  * limitan los eventos a su empresa. Se llama después de cada confirmación de despacho, así que manda el
  * reporte recién creado y, de paso, reintenta los que ya cumplieron su backoff.
  *
- * Sin ERP configurado no se envía nada y los eventos quedan pendientes. Nunca lanza: una falla del ERP o de
+ * Cada evento sale por el ERP de su empresa (TRZ-112). Sin ERP configurado no se envía nada y los eventos quedan
+ * pendientes. Nunca lanza: una falla del ERP o de
  * la base no tiene que afectar a quien confirmó el despacho.
  */
 export async function processCompanyErpOutbox(params: {
@@ -21,7 +22,8 @@ export async function processCompanyErpOutbox(params: {
   try {
     return await processErpOutbox({
       db: params.db,
-      getClient: () => getErpClient(params.companyId),
+      getClient: (companyId) => getErpClient(companyId),
+      companyId: params.companyId,
     });
   } catch {
     // processErpOutbox ya dejó el motivo en el log (sin datos sensibles). Los eventos siguen pendientes.
@@ -44,7 +46,7 @@ export async function processDriverDeliveryEvents(params: {
   try {
     return await processErpOutbox({
       db: params.db,
-      getClient: () => getErpClient(params.companyId),
+      getClient: (companyId) => getErpClient(companyId),
       driverOrderId: params.orderId,
     });
   } catch {

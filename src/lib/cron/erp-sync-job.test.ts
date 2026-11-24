@@ -33,10 +33,8 @@ function params(overrides: Partial<ErpSyncCronParams> = {}): ErpSyncCronParams {
   return {
     authorization: `Bearer ${SECRET}`,
     secret: SECRET,
-    erpEnabled: async () => true,
     createDb: () => companiesDb([]),
-    getClient: () => new MockErpClient(),
-    provider: "mock",
+    getContext: async () => ({ provider: "mock", client: new MockErpClient() }),
     logger,
     ...overrides,
   };
@@ -52,15 +50,30 @@ test("401 sin secreto, con secreto incorrecto o sin CRON_SECRET; no sincroniza n
   assert.equal(synced, false);
 });
 
-test("sin ERP no sincroniza y no falla", async () => {
-  let created = false;
+test("TRZ-112: las empresas sin ERP se saltean sin sincronizar", async () => {
+  const synced: string[] = [];
   const result = await runErpSyncCron(params({
-    erpEnabled: async () => false,
-    createDb: () => { created = true; return companiesDb(["a"]); },
+    createDb: () => companiesDb(["sin-erp", "con-erp"]),
+    getContext: async (companyId) => companyId === "con-erp" ? { provider: "mock", client: new MockErpClient() } : null,
+    sync: async (p) => { synced.push(p.companyId); return run(`run-${p.companyId}`); },
   }));
   assert.equal(result.status, 200);
-  assert.equal(result.body.ok && result.body.erp, false);
-  assert.equal(created, false);
+  assert.ok(result.body.ok && result.body.erp);
+  assert.deepEqual(synced, ["con-erp"]);
+  assert.deepEqual(result.body.companies.map((c) => [c.companyId, c.result]), [["sin-erp", "skipped_no_erp"], ["con-erp", "success"]]);
+});
+
+test("TRZ-112: una configuración inválida marca error en esa empresa y sigue con las demás", async () => {
+  const result = await runErpSyncCron(params({
+    createDb: () => companiesDb(["rota", "ok"]),
+    getContext: async (companyId) => {
+      if (companyId === "rota") throw new Error("Faltan las credenciales");
+      return { provider: "mock", client: new MockErpClient() };
+    },
+    sync: async (p) => run(`run-${p.companyId}`),
+  }));
+  assert.ok(result.body.ok && result.body.erp);
+  assert.deepEqual(result.body.companies.map((c) => c.result), ["error", "success"]);
 });
 
 test("sincroniza varias empresas sin usuario, con service_role, en el orden que da la base", async () => {
@@ -69,7 +82,10 @@ test("sincroniza varias empresas sin usuario, con service_role, en el orden que 
   const clients: string[] = [];
   const result = await runErpSyncCron(params({
     createDb: () => db,
-    getClient: (companyId) => { clients.push(companyId); return new MockErpClient(); },
+    getContext: async (companyId) => {
+      clients.push(companyId);
+      return { provider: companyId === "company-a" ? "odoo" : "erpnext", client: new MockErpClient() };
+    },
     sync: async (p) => { calls.push(p); p.getClient(); return run(`run-${p.companyId}`, p.companyId === "company-a" ? "partial" : "success"); },
   }));
   assert.equal(result.status, 200);
@@ -79,11 +95,11 @@ test("sincroniza varias empresas sin usuario, con service_role, en el orden que 
     { companyId: "company-a", result: "partial", runId: "run-company-a" },
   ]);
   assert.deepEqual(calls.map((call) => [call.companyId, call.actorId, call.provider]), [
-    ["company-b", null, "mock"],
-    ["company-a", null, "mock"],
+    ["company-b", null, "erpnext"],
+    ["company-a", null, "odoo"],
   ]);
   assert.ok(calls.every((call) => call.db === db), "todas con el cliente service_role");
-  assert.deepEqual(clients, ["company-b", "company-a"], "el cliente ERP se pide por empresa");
+  assert.deepEqual(clients, ["company-b", "company-a"], "TRZ-112: el ERP (y el proveedor auditado) se piden por empresa");
 });
 
 test("una empresa con una sincronización en curso se saltea sin error y sigue con las demás", async () => {

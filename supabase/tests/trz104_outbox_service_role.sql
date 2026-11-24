@@ -29,10 +29,10 @@ grant all on trz104_claimed to service_role, authenticated;
 
 /* ---------- Privilegios ---------- */
 
-select pg_temp.assert_true(has_function_privilege('service_role', 'public.erp_outbox_claim(integer, uuid)', 'execute'), 'service_role toma eventos');
+select pg_temp.assert_true(has_function_privilege('service_role', 'public.erp_outbox_claim(integer, uuid, uuid)', 'execute'), 'service_role toma eventos');
 select pg_temp.assert_true(has_function_privilege('service_role', 'public.erp_outbox_mark_sent(uuid, integer, text, boolean)', 'execute'), 'service_role cierra envíos');
 select pg_temp.assert_true(has_function_privilege('service_role', 'public.erp_outbox_mark_failed(uuid, integer, text, text, boolean)', 'execute'), 'service_role registra fallas');
-select pg_temp.assert_true(not has_function_privilege('anon', 'public.erp_outbox_claim(integer, uuid)', 'execute'), 'anon no procesa');
+select pg_temp.assert_true(not has_function_privilege('anon', 'public.erp_outbox_claim(integer, uuid, uuid)', 'execute'), 'anon no procesa');
 select pg_temp.assert_true(not has_table_privilege('service_role', 'public.erp_outbox_events', 'update'), 'service_role escribe solo vía RPC');
 
 /* ---------- Claim con service_role ---------- */
