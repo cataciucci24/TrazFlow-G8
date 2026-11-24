@@ -23,8 +23,10 @@ export type RetryOutcome =
 export async function retryFailedErpEvent(params: {
   db: ErpOutboxDb;
   eventId: string;
+  /** Empresa de quien reintenta: el envío sale por el ERP de esa empresa (TRZ-112). */
+  companyId: string;
   /** null = no procesar ahora (p. ej. sin ERP configurado): queda pendiente. */
-  getClient: (() => ErpClient) | null;
+  getClient: ((companyId: string) => ErpClient | Promise<ErpClient>) | null;
   timeoutMs?: number;
   logger?: ErpOutboxLogger;
 }): Promise<RetryOutcome> {
@@ -41,6 +43,7 @@ export async function retryFailedErpEvent(params: {
     const summary = await processErpOutbox({
       db: params.db,
       getClient: params.getClient,
+      companyId: params.companyId,
       aggregateId: data,
       limit: 1,
       timeoutMs: params.timeoutMs ?? PANEL_REPORT_TIMEOUT_MS,
@@ -56,7 +59,8 @@ export async function retryFailedErpEvent(params: {
 /** Procesa ya los reportes vencidos de la empresa (pendientes cuyo backoff llegó). */
 export async function processDueErpEvents(params: {
   db: ErpOutboxDb;
-  getClient: () => ErpClient;
+  companyId: string;
+  getClient: (companyId: string) => ErpClient | Promise<ErpClient>;
   limit?: number;
   timeoutMs?: number;
   logger?: ErpOutboxLogger;
@@ -65,6 +69,7 @@ export async function processDueErpEvents(params: {
     return await processErpOutbox({
       db: params.db,
       getClient: params.getClient,
+      companyId: params.companyId,
       limit: params.limit ?? PANEL_PROCESS_LIMIT,
       timeoutMs: params.timeoutMs ?? PANEL_REPORT_TIMEOUT_MS,
       logger: params.logger,

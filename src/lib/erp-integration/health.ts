@@ -12,7 +12,7 @@ export const HEALTHCHECK_TIMEOUT_MS = 5_000;
  * el panel. Nunca lanza. Solo devuelve proveedor y latencia, o el código y el mensaje sanitizado del error.
  */
 export async function checkErpHealth(params: {
-  getClient: () => ErpClient;
+  getClient: () => ErpClient | Promise<ErpClient>;
   timeoutMs?: number;
   now?: () => Date;
 }): Promise<ErpHealthState> {
@@ -20,7 +20,7 @@ export async function checkErpHealth(params: {
   const now = params.now ?? (() => new Date());
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    const client = params.getClient();
+    const client = await params.getClient();
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(
         () => reject(new ErpError("timeout", `El ERP no respondió al control de conexión en ${Math.round(timeoutMs / 1000)} s.`)),

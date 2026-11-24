@@ -1,4 +1,5 @@
-import type { ActivityKind, ActivityStatus, ErpHealthState, IntegrationBadge, IntegrationSummary } from "./types.ts";
+import { buildIntegrationsHref, EMPTY_FILTERS, integrationTabHref } from "./filters.ts";
+import type { ActivityKind, ActivityStatus, ErpHealthState, IntegrationBadge, IntegrationSummary, SyncRunStatus } from "./types.ts";
 
 /** Badge de una fila de actividad. Una sincronización parcial cuenta como fallida: tuvo registros con error. */
 export function activityBadge(kind: ActivityKind, status: ActivityStatus): IntegrationBadge {
@@ -70,4 +71,103 @@ export function overallIntegrationStatus(params: {
         : stale.length ? "stale"
           : "healthy";
   return { badge, reasons };
+}
+
+/* ---------- TRZ-112: tarjetas del resumen ---------- */
+
+export type StatusCardTone = "critical" | "caution" | null;
+
+/** Una tarjeta del resumen: qué muestra y adónde lleva al hacer clic. */
+export type StatusCard = {
+  key: "connection" | "sync" | "reports";
+  label: string;
+  value: string;
+  details: string[];
+  tone: StatusCardTone;
+  href: string;
+  /** Texto del link, al pie de la tarjeta. */
+  cta: string;
+};
+
+const SYNC_VALUES: Record<SyncRunStatus, { value: string; tone: StatusCardTone }> = {
+  running: { value: "En curso", tone: null },
+  success: { value: "Exitosa", tone: null },
+  partial: { value: "Con errores", tone: "critical" },
+  failed: { value: "Fallida", tone: "critical" },
+};
+
+/**
+ * Las tres tarjetas del resumen (Conexión, Sincronización, Reportes al ERP). Cada una lleva adonde se resuelve lo
+ * que muestra: la configuración, el detalle de la última sincronización o la actividad filtrada por lo más urgente.
+ * `formatDate` formatea las fechas (la de la app vive en un componente).
+ */
+export function integrationStatusCards(params: {
+  health: ErpHealthState;
+  summary: IntegrationSummary;
+  staleAfterHours: number;
+  now: Date;
+  formatDate: (iso: string) => string;
+}): StatusCard[] {
+  const { health, summary, formatDate } = params;
+
+  const connection: StatusCard = health.status === "ok"
+    ? {
+        key: "connection", label: "Conexión", value: "Activa", tone: null,
+        details: [`${health.provider} · ${health.latencyMs} ms`, `Verificada ${formatDate(health.checkedAt)}`],
+        href: integrationTabHref("configuracion"), cta: "Ver configuración",
+      }
+    : {
+        key: "connection", label: "Conexión", value: "Sin conexión", tone: "critical",
+        details: [health.message, `Verificada ${formatDate(health.checkedAt)}`],
+        href: integrationTabHref("configuracion"), cta: "Revisar configuración",
+      };
+
+  const run = summary.lastRun;
+  const stale = isSyncStale(summary.lastSuccessAt, params.now, params.staleAfterHours);
+  const syncDetails: string[] = [];
+  let syncValue = "Nunca";
+  let syncTone: StatusCardTone = "caution";
+  if (run) {
+    ({ value: syncValue, tone: syncTone } = SYNC_VALUES[run.status]);
+    syncDetails.push(formatDate(run.finishedAt ?? run.startedAt));
+    if (run.status !== "success" && summary.lastSuccessAt) syncDetails.push(`Última exitosa: ${formatDate(summary.lastSuccessAt)}`);
+  }
+  if (stale && run) {
+    syncDetails.push(`Desactualizada (más de ${params.staleAfterHours} h)`);
+    syncTone = syncTone ?? "caution";
+  }
+  if (!run) syncDetails.push("Todavía no se sincronizó con el ERP.");
+  const sync: StatusCard = {
+    key: "sync", label: "Sincronización", value: syncValue, tone: syncTone, details: syncDetails,
+    // `volver=resumen`: el detalle ofrece volver al resumen, que es de donde se vino (`from` es el filtro de fecha).
+    href: run
+      ? `${buildIntegrationsHref(EMPTY_FILTERS, { tab: "actividad", event: { kind: "sync", id: run.id } })}&volver=resumen`
+      : buildIntegrationsHref(EMPTY_FILTERS, { tab: "actividad", kind: "sync" }),
+    cta: run ? "Ver detalle" : "Ver sincronizaciones",
+  };
+
+  const waiting = summary.pendingCount + summary.processingCount;
+  const reportDetails = [`${summary.sentCount} enviados · ${waiting} en espera · ${summary.failedCount} fallidos`];
+  if (summary.unreportedCount > 0) reportDetails.push(`${summary.unreportedCount} despachada(s) sin reportar`);
+  const dispatches = { ...EMPTY_FILTERS, tab: "actividad" as const, kind: "dispatch_confirmed" as const };
+  const reports: StatusCard = summary.failedCount > 0
+    ? {
+        key: "reports", label: "Reportes al ERP", value: `${summary.failedCount} fallido${summary.failedCount === 1 ? "" : "s"}`,
+        tone: "critical", details: reportDetails,
+        href: buildIntegrationsHref(dispatches, { status: "failed" }),
+        cta: `Ver ${summary.failedCount === 1 ? "el fallido" : "los fallidos"}`,
+      }
+    : waiting > 0
+      ? {
+          key: "reports", label: "Reportes al ERP", value: `${waiting} en espera`, tone: "caution", details: reportDetails,
+          href: buildIntegrationsHref(dispatches, { status: "pending" }), cta: "Ver los que esperan",
+        }
+      : {
+          key: "reports", label: "Reportes al ERP", value: summary.unreportedCount > 0 ? `${summary.unreportedCount} sin reportar` : "Al día",
+          tone: summary.unreportedCount > 0 ? "caution" : null, details: reportDetails,
+          href: summary.unreportedCount > 0 ? integrationTabHref("actividad") : buildIntegrationsHref(dispatches),
+          cta: summary.unreportedCount > 0 ? "Ver despachadas sin reportar" : "Ver reportes",
+        };
+
+  return [connection, sync, reports];
 }

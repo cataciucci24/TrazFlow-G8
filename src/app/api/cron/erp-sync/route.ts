@@ -1,7 +1,6 @@
 import { consoleCronLogger } from "@/lib/cron/logger";
 import { runErpSyncCron } from "@/lib/cron/erp-sync-job";
-import { getErpClient } from "@/lib/erp";
-import { configuredErpProvider, isErpEnabled } from "@/lib/erp-sync/enabled";
+import { getCompanyErpContext } from "@/lib/erp";
 import { createServiceClient } from "@/lib/supabase/service";
 
 /**
@@ -18,14 +17,12 @@ export async function GET(request: Request) {
   const result = await runErpSyncCron({
     authorization: request.headers.get("authorization"),
     secret: process.env.CRON_SECRET,
-    // isErpEnabled es global hoy (ignora la empresa).
-    erpEnabled: () => isErpEnabled(""),
     createDb: () => {
       const supabase = createServiceClient();
       return { rpc: (fn, args) => supabase.rpc(fn, args) };
     },
-    getClient: (companyId) => getErpClient(companyId),
-    provider: configuredErpProvider(),
+    // TRZ-112: cada empresa con su ERP; las que no tienen se saltean.
+    getContext: (companyId) => getCompanyErpContext(companyId),
     logger: consoleCronLogger,
   });
   return Response.json(result.body, { status: result.status, headers: { "Cache-Control": "no-store" } });

@@ -41,6 +41,10 @@ import { emptyErpOutboxRunSummary, type ErpOutboxRunSummary } from "./types.ts";
  *
  * USH1 sumó:
  *   stock-import:…  → reportStockImport (crea producto y lote si faltan, y deja el stock en borrador)
+ *
+ * TRZ-112: cada empresa tiene su ERP. erp_outbox_claim devuelve la empresa de cada evento y el cliente se pide
+ * por esa empresa (getClient(companyId)), una vez por empresa y por corrida. Un evento nunca sale por el ERP de
+ * otra empresa.
  */
 
 /** Bucket privado de los remitos firmados (20261028130000_trz103_delivery_receipts.sql). */
@@ -68,6 +72,8 @@ export type ErpOutboxDb = {
  */
 export type ErpOutboxLogFields = {
   eventId?: string;
+  /** TRZ-112: empresa del evento o de la corrida (un id, no datos de la empresa). */
+  companyId?: string;
   attempt?: number;
   provider?: string;
   code?: string;
@@ -87,7 +93,7 @@ export type ErpOutboxLogger = {
 };
 
 const LOG_FIELDS: ReadonlyArray<keyof ErpOutboxLogFields> = [
-  "eventId", "attempt", "provider", "code", "message", "status", "erpReference", "duplicate", "durationMs", "claimed",
+  "eventId", "companyId", "attempt", "provider", "code", "message", "status", "erpReference", "duplicate", "durationMs", "claimed",
 ];
 
 /** Copia solo los campos permitidos: aunque alguien pase un objeto de más, no llega al log. */
@@ -111,8 +117,16 @@ export const DEFAULT_REPORT_TIMEOUT_MS = 30_000;
 export type ProcessErpOutboxParams = {
   /** Cliente autenticado como un usuario de logística o depósito: solo procesa eventos de su empresa. */
   db: ErpOutboxDb;
-  /** Se llama una vez por corrida y solo si hay algo para enviar. */
-  getClient: () => ErpClient;
+  /**
+   * Cliente del ERP de una empresa (TRZ-112). Se llama una vez por empresa y por corrida, y solo si esa empresa
+   * tiene algo para enviar. Si lanza, los eventos de esa empresa se marcan con ese error (backoff o failed).
+   */
+  getClient: (companyId: string) => ErpClient | Promise<ErpClient>;
+  /**
+   * Solo los eventos de esta empresa (p_company_id). Con la sesión de un usuario la base ya lo limita a su
+   * empresa; el cron (service_role) lo pasa siempre para procesar empresa por empresa.
+   */
+  companyId?: string;
   /** Máximo de eventos por corrida (la base lo limita a 50). */
   limit?: number;
   /** Solo los eventos de esta orden. Sin valor, todos los vencidos de la empresa. */
@@ -149,6 +163,7 @@ type SendResult = { erpReference: string; duplicate: boolean };
 
 type ClaimedEvent = {
   id: string;
+  companyId: string;
   idempotencyKey: string;
   payload: unknown;
   attempts: number;
@@ -170,10 +185,10 @@ export async function processErpOutbox(params: ProcessErpOutboxParams): Promise<
     rpcs.claim,
     driver
       ? { p_order_id: params.driverOrderId }
-      : { p_limit: params.limit ?? 10, p_aggregate_id: params.aggregateId ?? null },
+      : { p_limit: params.limit ?? 10, p_aggregate_id: params.aggregateId ?? null, p_company_id: params.companyId ?? null },
   );
   if (claimed.error) {
-    logger.error("claim_failed", { code: claimed.error.code });
+    logger.error("claim_failed", { code: claimed.error.code, companyId: params.companyId });
     throw new ErpOutboxClaimError(
       claimed.error.code === "42501"
         ? "No tenés permisos para procesar reportes al ERP."
@@ -185,19 +200,36 @@ export async function processErpOutbox(params: ProcessErpOutboxParams): Promise<
   const events = parseClaimedEvents(claimed.data);
   summary.claimed = events.length;
   if (!events.length) return summary;
-  logger.info("claimed", { claimed: events.length });
+  logger.info("claimed", { claimed: events.length, companyId: params.companyId });
 
-  let client: ErpClient | null = null;
-  let clientFailure: Failure | null = null;
-  try {
-    client = params.getClient();
-  } catch (error) {
-    clientFailure = classify(error);
+  // Un cliente por empresa y por corrida. Si no se puede armar (configuración inválida, base caída), todos los
+  // eventos de esa empresa se cierran con ese error.
+  const clients = new Map<string, Promise<{ client: ErpClient | null; failure: Failure | null }>>();
+  function clientFor(companyId: string) {
+    let entry = clients.get(companyId);
+    if (!entry) {
+      entry = (async () => {
+        try {
+          return { client: await params.getClient(companyId), failure: null };
+        } catch (error) {
+          return { client: null, failure: classify(error) };
+        }
+      })();
+      clients.set(companyId, entry);
+    }
+    return entry;
   }
 
   for (const event of events) {
     const startedAt = Date.now();
-    const base = { eventId: event.id, attempt: event.attempts, provider: client?.provider };
+    if (params.companyId && event.companyId !== params.companyId) {
+      // La base no debería devolverlo (p_company_id). Si pasa, no se envía ni se toca: lo retoma su empresa.
+      summary.unrecorded += 1;
+      logger.error("foreign_event_skipped", { eventId: event.id, companyId: event.companyId });
+      continue;
+    }
+    const { client, failure: clientFailure } = await clientFor(event.companyId);
+    const base = { eventId: event.id, companyId: event.companyId, attempt: event.attempts, provider: client?.provider };
     let result: SendResult | null = null;
     let failure: Failure | null = clientFailure;
 
@@ -261,9 +293,11 @@ function parseClaimedEvents(data: unknown): ClaimedEvent[] {
   if (!Array.isArray(data)) return [];
   return data.flatMap((row) => {
     if (!row || typeof row !== "object") return [];
-    const { id, idempotency_key: idempotencyKey, payload, attempts } = row as Record<string, unknown>;
-    if (typeof id !== "string" || typeof idempotencyKey !== "string" || typeof attempts !== "number") return [];
-    return [{ id, idempotencyKey, payload, attempts }];
+    const { id, company_id: companyId, idempotency_key: idempotencyKey, payload, attempts } = row as Record<string, unknown>;
+    if (typeof id !== "string" || typeof companyId !== "string" || typeof idempotencyKey !== "string" || typeof attempts !== "number") {
+      return [];
+    }
+    return [{ id, companyId, idempotencyKey, payload, attempts }];
   });
 }
 

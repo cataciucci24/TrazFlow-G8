@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { INTEGRATIONS_PATH, MAX_SEARCH_LENGTH } from "@/lib/erp-integration/filters";
+import { describeActivityFilters, integrationTabHref, INTEGRATIONS_PATH, MAX_SEARCH_LENGTH } from "@/lib/erp-integration/filters";
 import {
   ACTIVITY_KIND_LABELS,
   ACTIVITY_KINDS,
@@ -9,10 +9,23 @@ import {
   type IntegrationFilters,
 } from "@/lib/erp-integration/types";
 
-/** Filtros por GET: quedan en la URL, se pueden compartir y funcionan sin JavaScript. */
-export function ActivityFilters({ filters, active }: { filters: IntegrationFilters; active: boolean }) {
+/** Tag con los filtros activos; la cruz los quita y vuelve a la actividad completa. */
+export function ActiveFiltersTag({ filters }: { filters: IntegrationFilters }) {
+  return (
+    <Link href={integrationTabHref("actividad")}
+      className="inline-flex min-h-9 items-center gap-2 rounded-full border border-stone-300 bg-white px-3 text-sm font-semibold text-slate-800 hover:border-stone-500">
+      {describeActivityFilters(filters).join(" · ")}
+      <span aria-hidden="true" className="text-base leading-none text-stone-500">×</span>
+      <span className="sr-only">Quitar filtros</span>
+    </Link>
+  );
+}
+
+/** Filtros por GET: quedan en la URL, se pueden compartir y funcionan sin JavaScript. Solo sin filtros activos. */
+export function ActivityFilters({ filters }: { filters: IntegrationFilters }) {
   return (
     <form method="get" action={INTEGRATIONS_PATH} className="filter-panel" aria-label="Filtros de actividad">
+      <input type="hidden" name="tab" value="actividad" />
       <div className="filter-grid">
         <label className="form-label">Estado
           <select name="status" defaultValue={filters.status ?? ""} className="form-control mt-2">
@@ -39,7 +52,6 @@ export function ActivityFilters({ filters, active }: { filters: IntegrationFilte
       </div>
       <div className="mobile-button-group mt-3 flex flex-wrap gap-2">
         <button type="submit" className="button-primary">Aplicar filtros</button>
-        {active ? <Link href={INTEGRATIONS_PATH} className="button-ghost">Limpiar filtros</Link> : null}
       </div>
     </form>
   );

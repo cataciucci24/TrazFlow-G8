@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 
-import { buildIntegrationsHref, EMPTY_FILTERS, isValidDay, parseIntegrationFilters, toActivityRpcArgs, totalPages } from "./filters.ts";
+import { buildIntegrationsHref, describeActivityFilters, EMPTY_FILTERS, integrationTabHref, isValidDay, parseIntegrationFilters, toActivityRpcArgs, totalPages } from "./filters.ts";
 
 const ID = "6f1c2a52-1d5e-4b55-9a0e-2a5a8c1f0b11";
 
@@ -18,7 +18,7 @@ test("lee estado, tipo, rango, búsqueda, páginas y evento", () => {
   });
   assert.deepEqual(problems, []);
   assert.deepEqual(filters, {
-    kind: "dispatch_confirmed", status: "failed", from: "2026-10-01", to: "2026-10-15", search: "SAL-ORD-12",
+    tab: "actividad", kind: "dispatch_confirmed", status: "failed", from: "2026-10-01", to: "2026-10-15", search: "SAL-ORD-12",
     page: 3, unreportedPage: 2, event: { kind: "dispatch_confirmed", id: ID },
   });
 });
@@ -83,4 +83,34 @@ test("cantidad de páginas", () => {
   assert.equal(totalPages(0, 20), 1);
   assert.equal(totalPages(20, 20), 1);
   assert.equal(totalPages(21, 20), 2);
+});
+
+test("TRZ-112: pestañas del panel", () => {
+  assert.equal(parseIntegrationFilters({}).filters.tab, "resumen");
+  assert.equal(parseIntegrationFilters({ tab: "configuracion" }).filters.tab, "configuracion");
+  const invalid = parseIntegrationFilters({ tab: "otra" });
+  assert.equal(invalid.filters.tab, "resumen");
+  assert.equal(invalid.problems.length, 1);
+  // Un link a un evento (también los viejos, sin tab) abre la pestaña Actividad.
+  const event = parseIntegrationFilters({ event: "dispatch_confirmed:3f2b6c1e-8d4a-4b7e-9c2f-1a2b3c4d5e6f" });
+  assert.equal(event.filters.tab, "actividad");
+  assert.equal(buildIntegrationsHref({ ...EMPTY_FILTERS, tab: "actividad" }, { page: 2 }), "/dashboard/integrations?tab=actividad&page=2");
+  assert.equal(buildIntegrationsHref({ ...EMPTY_FILTERS, tab: "actividad", status: "failed" }, { tab: "resumen" }), "/dashboard/integrations?status=failed");
+  assert.equal(integrationTabHref("resumen"), "/dashboard/integrations");
+  assert.equal(integrationTabHref("configuracion"), "/dashboard/integrations?tab=configuracion");
+});
+
+test("TRZ-112: el tag describe los filtros activos", () => {
+  assert.deepEqual(describeActivityFilters(EMPTY_FILTERS), []);
+  assert.deepEqual(
+    describeActivityFilters({ ...EMPTY_FILTERS, status: "failed", kind: "dispatch_confirmed", from: "2026-10-01", search: "SAL-ORD" }),
+    ["Fallido", "Reporte de despacho", "Desde 2026-10-01", "“SAL-ORD”"],
+  );
+  assert.deepEqual(describeActivityFilters({ ...EMPTY_FILTERS, from: "2026-10-01", to: "2026-10-15" }), ["2026-10-01 a 2026-10-15"]);
+});
+
+test("TRZ-112: el link de la tarjeta Sincronización no choca con el filtro de fecha", () => {
+  const { filters, problems } = parseIntegrationFilters({ tab: "actividad", event: "sync:3f2b6c1e-8d4a-4b7e-9c2f-1a2b3c4d5e6f", volver: "resumen" });
+  assert.deepEqual(problems, []);
+  assert.equal(filters.from, null);
 });

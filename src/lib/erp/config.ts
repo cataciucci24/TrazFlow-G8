@@ -89,15 +89,7 @@ function readRemoteConnection(env: Env, required: readonly string[]): { baseUrl:
   const missing = required.filter((name) => !env[name]?.trim());
   if (missing.length) throw new ErpError("config", `Faltan variables de entorno del ERP: ${missing.join(", ")}.`);
 
-  let baseUrl: URL;
-  try {
-    baseUrl = new URL(env.ERP_BASE_URL!.trim());
-  } catch {
-    throw new ErpError("config", "ERP_BASE_URL no es una URL válida.");
-  }
-  if (baseUrl.protocol !== "http:" && baseUrl.protocol !== "https:") {
-    throw new ErpError("config", "ERP_BASE_URL debe usar http o https.");
-  }
+  const baseUrl = normalizeErpBaseUrl(env.ERP_BASE_URL!, "ERP_BASE_URL");
 
   const rawTimeout = env.ERP_TIMEOUT_MS?.trim();
   const timeoutMs = rawTimeout ? Number(rawTimeout) : DEFAULT_TIMEOUT_MS;
@@ -105,5 +97,93 @@ function readRemoteConnection(env: Env, required: readonly string[]): { baseUrl:
     throw new ErpError("config", "ERP_TIMEOUT_MS debe ser un entero positivo en milisegundos.");
   }
 
-  return { baseUrl: baseUrl.origin + baseUrl.pathname.replace(/\/+$/, ""), timeoutMs };
+  return { baseUrl, timeoutMs };
+}
+
+/** URL http(s) del ERP, sin barra final. `label` es cómo se nombra el dato en el mensaje de error. */
+export function normalizeErpBaseUrl(value: string, label = "La URL del ERP"): string {
+  let url: URL;
+  try {
+    url = new URL(value.trim());
+  } catch {
+    throw new ErpError("config", `${label} no es una URL válida.`);
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new ErpError("config", `${label} debe usar http o https.`);
+  }
+  return url.origin + url.pathname.replace(/\/+$/, "");
+}
+
+/* ---------- TRZ-112: configuración guardada por empresa ---------- */
+
+/**
+ * Conexión de una empresa tal como la guarda erp_company_settings + Vault (erp_company_connection en
+ * 20261124100000_trz112_company_erp.sql). `credentials` viene descifrada: este objeto nunca sale del servidor.
+ */
+export type CompanyErpConnection = {
+  provider: string | null;
+  baseUrl?: string | null;
+  odooDatabase?: string | null;
+  odooUsername?: string | null;
+  itemGroup?: string | null;
+  timeoutMs?: number | null;
+  mockScenario?: string | null;
+  mockDispatchStatus?: string | null;
+  credentials?: { apiKey?: string | null; apiSecret?: string | null } | null;
+};
+
+/** Límites del timeout configurable desde el panel (los mismos que el check de la base). */
+export const ERP_TIMEOUT_MIN_MS = 1_000;
+export const ERP_TIMEOUT_MAX_MS = 60_000;
+
+function text(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+/**
+ * Valida la conexión guardada de una empresa y la convierte en ErpConfig. Mensajes en términos del panel (no de
+ * variables de entorno). Lanza ErpError("config") si falta algo o es inválido.
+ */
+export function parseCompanyErpConnection(raw: unknown): ErpConfig {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new ErpError("config", "La configuración del ERP de la empresa no es válida.");
+  }
+  const connection = raw as CompanyErpConnection;
+  const provider = text(connection.provider);
+  if (!provider || !isErpProvider(provider)) {
+    throw new ErpError("config", "La empresa no tiene un proveedor de ERP válido.");
+  }
+
+  if (provider === "mock") {
+    const scenario = text(connection.mockScenario) ?? "ok";
+    if (!isMockScenario(scenario)) throw new ErpError("config", `Escenario del mock inválido: "${scenario}".`);
+    const dispatchStatus = text(connection.mockDispatchStatus) ?? "confirmed";
+    if (!isMockDispatchStatus(dispatchStatus)) {
+      throw new ErpError("config", `Estado del remito del mock inválido: "${dispatchStatus}".`);
+    }
+    return { provider, mockScenario: scenario, mockDispatchStatus: dispatchStatus };
+  }
+
+  const rawUrl = text(connection.baseUrl);
+  if (!rawUrl) throw new ErpError("config", "Falta la URL del ERP.");
+  const baseUrl = normalizeErpBaseUrl(rawUrl);
+
+  const timeoutMs = connection.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  if (!Number.isInteger(timeoutMs) || timeoutMs < ERP_TIMEOUT_MIN_MS || timeoutMs > ERP_TIMEOUT_MAX_MS) {
+    throw new ErpError("config", `El timeout del ERP debe estar entre ${ERP_TIMEOUT_MIN_MS} y ${ERP_TIMEOUT_MAX_MS} ms.`);
+  }
+
+  const apiKey = text(connection.credentials?.apiKey);
+  if (provider === "odoo") {
+    const database = text(connection.odooDatabase);
+    const username = text(connection.odooUsername);
+    if (!database || !username) throw new ErpError("config", "Faltan la base de datos o el usuario de Odoo.");
+    if (!apiKey) throw new ErpError("config", "Falta la API key del ERP.");
+    return { provider, baseUrl, database, username, apiKey, timeoutMs };
+  }
+
+  const apiSecret = text(connection.credentials?.apiSecret);
+  if (!apiKey || !apiSecret) throw new ErpError("config", "Faltan la API key o el API secret del ERP.");
+  const itemGroup = text(connection.itemGroup);
+  return { provider, baseUrl, apiKey, apiSecret, timeoutMs, ...(itemGroup ? { itemGroup } : {}) };
 }

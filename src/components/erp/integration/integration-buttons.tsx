@@ -2,9 +2,10 @@
 
 import { useState, useTransition } from "react";
 
-import { InlineAlert } from "@/components/ui/design-system";
+import { InlineAlert, PageHeader } from "@/components/ui/design-system";
 import { useFeedback } from "@/components/ui/feedback";
 import { processErpOutboxNow, retryErpOutboxEvent } from "@/lib/erp-integration/actions";
+import { syncErpNow } from "@/lib/erp-sync/actions";
 import type { IntegrationActionState } from "@/lib/erp-integration/types";
 
 const IDLE: IntegrationActionState = { status: "idle", message: null };
@@ -50,18 +51,42 @@ export function RetryEventButton({ eventId }: { eventId: string }) {
   );
 }
 
-/** Envía ya los reportes pendientes cuyo próximo intento venció. */
-export function ProcessPendingButton() {
-  const { state, isPending, trigger } = useIntegrationAction(
+const SYNC_ALERT = { success: "success", partial: "warning", failed: "error", error: "error" } as const;
+
+/**
+ * Encabezado del panel (TRZ-112): título, descripción y las acciones "Sincronizar ahora" y "Enviar pendientes
+ * ahora". El resultado de la última acción va debajo del encabezado, de lado a lado y arriba de las pestañas, para
+ * que nunca mueva ni comprima el título. El detalle queda en las tarjetas (la acción refresca la página) y en
+ * Actividad.
+ */
+export function IntegrationPageHeader({ title, description }: { title: string; description: string }) {
+  const sync = useIntegrationAction(async () => {
+    const result = await syncErpNow();
+    return { status: result.status === "idle" ? "error" : SYNC_ALERT[result.status], message: result.message };
+  }, "No se pudo completar la sincronización con el ERP. Intentá nuevamente.");
+  const pending = useIntegrationAction(
     () => processErpOutboxNow(),
     "No se pudieron enviar los reportes pendientes. Intentá nuevamente.",
   );
+  const [last, setLast] = useState<"sync" | "pending" | null>(null);
+  const busy = sync.isPending || pending.isPending;
+  const state = last === "sync" ? sync.state : last === "pending" ? pending.state : IDLE;
+
   return (
-    <div className="space-y-2">
-      <button type="button" onClick={trigger} disabled={isPending} aria-busy={isPending} className="button-secondary">
-        {isPending ? "Enviando…" : "Enviar pendientes ahora"}
-      </button>
+    <>
+      <PageHeader title={title} description={description} action={
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className="button-primary" disabled={busy} aria-busy={sync.isPending}
+            onClick={() => { setLast("sync"); sync.trigger(); }}>
+            {sync.isPending ? "Sincronizando…" : "Sincronizar ahora"}
+          </button>
+          <button type="button" className="button-secondary" disabled={busy} aria-busy={pending.isPending}
+            onClick={() => { setLast("pending"); pending.trigger(); }}>
+            {pending.isPending ? "Enviando…" : "Enviar pendientes ahora"}
+          </button>
+        </div>
+      } />
       <Result state={state} />
-    </div>
+    </>
   );
 }

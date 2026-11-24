@@ -87,6 +87,18 @@ html { scroll-padding-top: 6rem; }
 .summary-critical .summary-label, .summary-critical .summary-value { color: #991b1b; }
 .summary-caution .summary-label, .summary-caution .summary-value { color: #854d0e; }
 .summary-upcoming .summary-label, .summary-upcoming .summary-value { color: #1e40af; }
+/* TRZ-112: tarjetas del resumen de integración. Llevan adonde se resuelve lo que muestran. */
+.status-card { display: flex; height: 100%; flex-direction: column; gap: 0.25rem; padding: 1.25rem; border: 1px solid var(--border); border-top: 3px solid var(--border-strong); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); color: inherit; text-decoration: none; transition: box-shadow 150ms ease, border-color 150ms ease; }
+.status-card:hover { border-color: var(--border-strong); box-shadow: 0 6px 18px rgb(15 23 42 / 0.08); }
+.status-card-critical { border-top-color: #d92d20; }
+.status-card-caution { border-top-color: #dc9900; }
+.status-card-title { color: var(--foreground); font-size: 1.125rem; font-weight: 750; }
+.status-card-status { color: var(--foreground); font-size: 0.875rem; font-weight: 700; }
+.status-card-critical .status-card-status { color: #b42318; }
+.status-card-caution .status-card-status { color: #854d0e; }
+.status-card-detail { color: var(--muted); font-size: 0.875rem; overflow-wrap: anywhere; }
+.status-card-cta { margin-top: auto; padding-top: 0.75rem; color: var(--brand); font-size: 0.875rem; font-weight: 700; }
+.status-card:hover .status-card-cta { text-decoration: underline; }
 
 /* El tono pinta toda la tarjeta: relleno suave, borde y texto en el color del tono. */
 .compact-summary-card { display: flex; min-height: 3.25rem; align-items: center; justify-content: space-between; gap: 0.75rem; border: 1px solid color-mix(in srgb, var(--tone-fg) 32%, transparent); border-radius: var(--radius); background: var(--tone-bg); color: var(--tone-fg); padding: 0.6rem 0.9rem; }
