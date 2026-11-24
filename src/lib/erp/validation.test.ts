@@ -59,3 +59,33 @@ test("content_mismatch: contentDifferences obligatorio y solo ahí, nunca expect
   assert.match(deliveryReportProblems(delivery(2, [{ palletCode: "P-0007", type: "content_mismatch", contentDifferences: [{ expected: null, detected: { ...unknown, observedSku: null } }] }])).join(), /hace falta observedSku/);
   assert.match(deliveryReportProblems({ ...valid, contractVersion: 1 }).join(), /requiere contractVersion 2/);
 });
+
+test("payloads mal formados: los validadores devuelven problemas y nunca lanzan", () => {
+  const scan = {
+    contractVersion: 2, idempotencyKey: "pallet-scan:SO-0042:P-0007:1", scanIdempotencyKey: "pallet-scan:SO-0042:P-0007:1",
+    action: "scan", orderExternalId: "SO-0042", palletCode: "P-0007", at: "2026-11-24T12:40:00.000Z", items: [null, null],
+  } as unknown as PalletScanReport;
+  const delivery = (discrepancies: unknown, lines: unknown = [{ palletCode: "P-0007", outcome: "delivered" }]) => ({
+    contractVersion: 2, idempotencyKey: "delivery:SO-0042", orderExternalId: "SO-0042", dispatchIdempotencyKey: "dispatch:SO-0042",
+    deliveredAt: "2026-11-24T16:20:00.000Z", driver: { id: "u-31", name: null }, needsReview: true, lines, discrepancies,
+  }) as unknown as DeliveryReport;
+
+  let problems: string[] = [];
+  assert.doesNotThrow(() => { problems = palletScanReportProblems(scan); });
+  assert.deepEqual(problems, ["items[0] no es un objeto", "items[1] no es un objeto"]);
+
+  assert.doesNotThrow(() => { problems = dispatchReportProblems(dispatch(2, [null] as unknown as DispatchReport["lines"])); });
+  assert.deepEqual(problems, ["lines[0] no es un objeto"]);
+
+  assert.doesNotThrow(() => { problems = deliveryReportProblems(delivery([], [null])); });
+  assert.deepEqual(problems, ["lines[0] no es un objeto"]);
+
+  assert.doesNotThrow(() => { problems = deliveryReportProblems(delivery([null])); });
+  assert.deepEqual(problems, ["discrepancies[0] no es un objeto"]);
+
+  assert.doesNotThrow(() => { problems = deliveryReportProblems(delivery([{ palletCode: "P-0007", type: "content_mismatch", contentDifferences: [null, "x"] }])); });
+  assert.deepEqual(problems, [
+    "discrepancies[0].contentDifferences[0] no es un objeto",
+    "discrepancies[0].contentDifferences[1] no es un objeto",
+  ]);
+});

@@ -217,6 +217,18 @@ test("un error inesperado no filtra detalles a la auditoría", async () => {
   assert.equal(run.errorMessage, "Error inesperado durante la sincronización.");
 });
 
+test("datos maestros y órdenes en contrato v1 se sincronizan (TRZ-111 acepta 1 y 2)", async () => {
+  const { db, calls } = fakeDb();
+  const client = new MockErpClient();
+  const pullMasterData = client.pullMasterData.bind(client);
+  const pullDispatchOrders = client.pullDispatchOrders.bind(client);
+  client.pullMasterData = async () => ({ ...(await pullMasterData()), contractVersion: 1 });
+  client.pullDispatchOrders = async () => (await pullDispatchOrders()).map((order) => ({ ...order, contractVersion: 1 as const }));
+  const run = await syncCompanyFromErp({ ...base, db, getClient: () => client });
+  assert.equal(run.status, "success");
+  assert.ok(calls.some((call) => call.fn === "erp_sync_apply_orders"));
+});
+
 test("una versión de contrato desconocida corta la sincronización", async () => {
   const { db } = fakeDb();
   const client = new MockErpClient();
@@ -224,7 +236,7 @@ test("una versión de contrato desconocida corta la sincronización", async () =
   client.pullMasterData = async () => ({ ...(await original()), contractVersion: (ERP_CONTRACT_VERSION + 1) as never });
   const run = await syncCompanyFromErp({ ...base, db, getClient: () => client });
   assert.equal(run.status, "failed");
-  assert.match(run.errorMessage ?? "", new RegExp(`versión de contrato ${ERP_CONTRACT_VERSION + 1}`));
+  assert.match(run.errorMessage ?? "", new RegExp(`versión de contrato ${ERP_CONTRACT_VERSION + 1}; TrazFlow acepta 1, 2`));
 });
 
 test("si la base falla al aplicar, se audita sin exponer el error crudo", async () => {

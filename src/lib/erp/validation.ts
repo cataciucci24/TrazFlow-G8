@@ -26,29 +26,33 @@ export function dispatchReportProblems(report: DispatchReport): string[] {
   if (!isSupportedContractVersion(report.contractVersion)) {
     problems.push(`contractVersion ${String(report.contractVersion)} no soportada`);
   }
-  if (!report.idempotencyKey?.trim()) problems.push("idempotencyKey es obligatoria");
-  if (!report.orderExternalId?.trim()) problems.push("orderExternalId es obligatorio");
-  if (Number.isNaN(Date.parse(report.dispatchedAt))) problems.push("dispatchedAt no es una fecha ISO 8601");
-  if (!report.operator?.id?.trim()) problems.push("operator.id es obligatorio");
-  if (!report.lines?.length) problems.push("el despacho no tiene líneas");
+  if (!text(report.idempotencyKey)) problems.push("idempotencyKey es obligatoria");
+  if (!text(report.orderExternalId)) problems.push("orderExternalId es obligatorio");
+  if (typeof report.dispatchedAt !== "string" || Number.isNaN(Date.parse(report.dispatchedAt))) problems.push("dispatchedAt no es una fecha ISO 8601");
+  if (!text(report.operator?.id)) problems.push("operator.id es obligatorio");
+  if (!Array.isArray(report.lines) || !report.lines.length) problems.push("el despacho no tiene líneas");
 
   // v1: un pallet por línea. v2 (pallets mixtos): una línea por ítem, identificada por pallet + producto + lote.
   const seen = new Set<string>();
-  report.lines?.forEach((line, index) => {
+  arrayOf(report.lines).forEach((line, index) => {
     const at = `lines[${index}]`;
+    if (!isObject(line)) {
+      problems.push(`${at} no es un objeto`);
+      return;
+    }
     const identity = report.contractVersion === 1
       ? line.palletCode
       : [line.palletCode, line.productExternalId, line.lotExternalId].join("\u0000");
-    if (!line.palletCode?.trim()) problems.push(`${at}.palletCode es obligatorio`);
+    if (!text(line.palletCode)) problems.push(`${at}.palletCode es obligatorio`);
     else if (seen.has(identity)) {
       problems.push(report.contractVersion === 1
         ? `${at}.palletCode ${line.palletCode} está repetido`
         : `${at}: pallet ${line.palletCode}, producto ${line.productExternalId} y lote ${line.lotExternalId} repetidos (hay que sumarlos en una línea)`);
     } else seen.add(identity);
-    if (!line.productExternalId?.trim()) problems.push(`${at}.productExternalId es obligatorio`);
-    if (!line.lotExternalId?.trim()) problems.push(`${at}.lotExternalId es obligatorio`);
-    if (!Number.isFinite(line.quantity) || line.quantity <= 0) problems.push(`${at}.quantity debe ser mayor a cero`);
-    if (!line.uom?.trim()) problems.push(`${at}.uom es obligatoria`);
+    if (!text(line.productExternalId)) problems.push(`${at}.productExternalId es obligatorio`);
+    if (!text(line.lotExternalId)) problems.push(`${at}.lotExternalId es obligatorio`);
+    if (!positiveQuantity(line.quantity)) problems.push(`${at}.quantity debe ser mayor a cero`);
+    if (!text(line.uom)) problems.push(`${at}.uom es obligatoria`);
   });
 
   return problems;
@@ -128,12 +132,20 @@ export function deliveryReportProblems(report: DeliveryReport): string[] {
   if (!Array.isArray(report.lines) || !report.lines.length) problems.push("la entrega no tiene pallets");
   if (!Array.isArray(report.discrepancies)) problems.push("discrepancies debe ser una lista");
 
-  report.lines?.forEach?.((line, index) => {
+  arrayOf(report.lines).forEach((line, index) => {
+    if (!isObject(line)) {
+      problems.push(`lines[${index}] no es un objeto`);
+      return;
+    }
     if (typeof line?.palletCode !== "string" || !line.palletCode.trim()) problems.push(`lines[${index}].palletCode es obligatorio`);
     if (!DELIVERY_PALLET_OUTCOMES.some((outcome) => outcome === line?.outcome)) problems.push(`lines[${index}].outcome inválido`);
   });
-  report.discrepancies?.forEach?.((difference, index) => {
+  arrayOf(report.discrepancies).forEach((difference, index) => {
     const at = `discrepancies[${index}]`;
+    if (!isObject(difference)) {
+      problems.push(`${at} no es un objeto`);
+      return;
+    }
     if (!DELIVERY_DISCREPANCY_TYPES.some((type) => type === difference?.type)) problems.push(`${at}.type inválido`);
     else if (difference.type === "content_mismatch") {
       if (report.contractVersion === 1) problems.push(`${at}: content_mismatch requiere contractVersion 2`);
@@ -148,7 +160,7 @@ export function deliveryReportProblems(report: DeliveryReport): string[] {
       problems.push(`${at}.contentDifferences solo va con content_mismatch`);
     }
   });
-  const hasDifferences = (report.discrepancies?.length ?? 0) > 0 || report.lines?.some?.((line) => line?.outcome !== "delivered");
+  const hasDifferences = arrayOf(report.discrepancies).length > 0 || arrayOf(report.lines).some((line) => line?.outcome !== "delivered");
   if (hasDifferences && report.needsReview !== true) problems.push("una entrega con diferencias tiene que quedar para revisión");
   return problems;
 }
@@ -236,7 +248,11 @@ export function palletScanReportProblems(scan: PalletScanReport): string[] {
     // v2: todos los ítems del pallet, sin producto + lote repetido.
     if (!Array.isArray(scan.items) || !scan.items.length) problems.push("items debe tener al menos un ítem");
     const seen = new Set<string>();
-    scan.items?.forEach?.((item, index) => {
+    arrayOf(scan.items).forEach((item, index) => {
+      if (!isObject(item)) {
+        problems.push(`items[${index}] no es un objeto`);
+        return;
+      }
       problems.push(...palletItemProblems(item, `items[${index}]`));
       const identity = `${item?.productExternalId}\u0000${item?.lotExternalId}`;
       if (seen.has(identity)) problems.push(`items[${index}]: producto ${item.productExternalId} y lote ${item.lotExternalId} repetidos`);
@@ -267,12 +283,22 @@ export function palletScanItems(scan: PalletScanReport): PalletItem[] {
   return [{ productExternalId: scan.productExternalId, lotExternalId: scan.lotExternalId, quantity: scan.quantity, uom: scan.uom }];
 }
 
+/** Los payloads llegan del outbox como JSON: un elemento puede ser null o cualquier cosa. */
+function isObject<T>(value: T): value is T & object {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+/** Lo que haya en un campo que debería ser lista; si no es lista, ningún elemento (el problema se reporta aparte). */
+function arrayOf<T>(value: T[] | undefined): T[] {
+  return Array.isArray(value) ? value : [];
+}
+
 function positiveQuantity(value: unknown): boolean {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
 }
 
 function palletItemProblems(item: PalletItem | null | undefined, at: string): string[] {
-  if (!item || typeof item !== "object") return [`${at} no es un objeto`];
+  if (!isObject(item)) return [`${at} no es un objeto`];
   const problems: string[] = [];
   for (const field of ["productExternalId", "lotExternalId", "uom"] as const) {
     if (!text(item[field])) problems.push(`${at}.${field} es obligatorio`);
@@ -283,12 +309,13 @@ function palletItemProblems(item: PalletItem | null | undefined, at: string): st
 
 /** `expected` null = sobrante, `detected` null = faltante; nunca los dos. Lo no identificado va como texto observado. */
 function contentDifferenceProblems(difference: ContentDifference | null | undefined, at: string): string[] {
-  if (!difference || typeof difference !== "object") return [`${at} no es un objeto`];
+  if (!isObject(difference)) return [`${at} no es un objeto`];
   const problems: string[] = [];
   if (difference.expected == null && difference.detected == null) problems.push(`${at}: expected y detected no pueden ser los dos null`);
   if (difference.expected != null) problems.push(...palletItemProblems(difference.expected, `${at}.expected`));
   const detected = difference.detected;
-  if (detected != null) {
+  if (detected != null && !isObject(detected)) problems.push(`${at}.detected no es un objeto`);
+  else if (detected != null) {
     for (const field of ["productExternalId", "lotExternalId", "observedSku", "observedLot"] as const) {
       if (detected[field] !== null && !text(detected[field])) problems.push(`${at}.detected.${field} debe ser texto o null`);
     }
