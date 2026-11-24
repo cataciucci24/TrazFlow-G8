@@ -84,6 +84,13 @@ describe("contenido canónico de pallets", () => {
 
 describe("entrada de ítems", () => {
   const batch = "11100000-0000-0000-0000-000000000031";
+  it("no rechaza kilos grandes con dos decimales por error binario", () => {
+    expect(validPalletItems([{ batch_id: batch, quantity: 1234567.89 }])).toBe(true);
+    expect(validPalletItems([{ batch_id: batch, quantity: 1234567.891 }])).toBe(false);
+  });
+  it("rechaza arrays con posiciones vacías", () => {
+    expect(validPalletItems(new Array(1))).toBe(false);
+  });
   it("acepta uno o varios lotes y valida cantidades finitas", () => {
     expect(validPalletItems([{ batch_id: batch, quantity: 2.5 }])).toBe(true);
     for (const quantity of [0, -1, NaN, Infinity, 1.001, "2"]) expect(validPalletItems([{ batch_id: batch, quantity }])).toBe(false);

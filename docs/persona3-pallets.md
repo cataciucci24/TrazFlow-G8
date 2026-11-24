@@ -5,7 +5,7 @@
 - Ola 0: vista `pallet_contents`, interfaz compartida y adaptación de las lecturas existentes.
 - TRZ-111, ola 1: tabla de ítems, migración de los pallets existentes, armado atómico, stock ERP por ítem, validación de despacho y recepción por ítem, inventario, consultas por lote y un QR por pallet.
 - TRZ-24: reingreso completo por logística, escaneando o ingresando el QR, con motivo obligatorio y auditoría. Un reenvío usa otra orden.
-- Ola 2 pendiente de personas 2 y 5: adaptar contrato ERP §5 y productores/consumidores del outbox para informar una línea por ítem. No se modificaron `src/lib/erp`, configuración por empresa ni el contrato publicado.
+- Ola 2 en preparación: TRZ-112 de persona 5 ya está integrado (PR #94). Hay helpers internos probados para despacho y scan/unscan v2; los productores activos siguen en v1. Falta integrar el contrato/adaptadores de persona 2, completar recepción/remitos y ejecutar la prueba conjunta antes de retirar TM111. No se modificaron `src/lib/erp`, configuración por empresa ni el contrato publicado.
 
 ## Interfaz para el equipo
 
@@ -68,7 +68,9 @@ Persona 2 debe confirmar, después del trabajo de persona 5 en outbox/config/pan
 
 Aplicar las migraciones nuevas en orden, antes de desplegar la aplicación. La de ola 0 es `20261122100000_pallet_contents.sql`. Las de TRZ-111 son `20261122110000_mixed_pallet_items.sql` y `20261122110100_pallet_item_checks.sql`. El evento de reingreso se agrega en `20261122120000_pallet_return_event.sql`, separado de su uso en `20261122120100_pallet_return.sql` porque PostgreSQL exige confirmar el valor del enum antes de usarlo.
 
-No se aplicaron cambios a Supabase remoto. No se cambiaron configuración de seeds, scripts de package.json ni configuración de tests, que pertenecen a persona 1.
+Las cinco migraciones se aplicaron el 22/11/2026 al proyecto remoto `prhsdpghhsjcmvlgtxgr` (TrazFlow, rama `main`, etiquetada `Production` en Supabase), con autorización explícita del usuario para esa base exacta. Se ejecutaron por separado y se registraron en `supabase_migrations.schema_migrations`, dentro de la misma transacción de cada migración. No se cargaron seeds ni datos de prueba. No se cambiaron configuración de seeds, scripts de package.json ni configuración de tests, que pertenecen a persona 1.
+
+La verificación remota posterior confirmó cinco versiones registradas, los 10 pallets existentes conservados con 10 ítems, cero pallets sin ítems, cero diferencias entre lote/cantidad originales y contenido migrado, cero asociaciones sin snapshot, las cuatro RPC nuevas disponibles, RLS de ítems activo y las funciones internas sin permiso de ejecución para `authenticated`. Se solicitó la recarga del esquema de PostgREST.
 
 Validación realizada:
 
@@ -88,8 +90,77 @@ psql "$LOCAL_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/trz111_mixed_pal
 
 Usar una base local migrada: el archivo crea fixtures dentro de una transacción y hace rollback. Verifica permisos, aislamiento entre empresas, stock ERP del ítem secundario, reversión del armado fallido, comparación por ítem, invalidación de una validación obsoleta, recepción con diferencia, reingreso idempotente y reasignación sin borrar la entrega anterior.
 
-No se probaron cámara/impresión en un navegador ni el despliegue real de PostgREST/Supabase. Las pruebas embebidas no reemplazan una prueba de concurrencia con dos sesiones independientes; el tope reutiliza los locks de `erp_stock_balances` y el armado toma los lotes en orden de UUID.
+Se verificaron las migraciones y sus estructuras en Supabase remoto. Al validar la entrega inicial quedaban pendientes los flujos de la aplicación en navegador; la revisión posterior se detalla abajo. Las pruebas embebidas no reemplazan una prueba de concurrencia con dos sesiones independientes; el tope reutiliza los locks de `erp_stock_balances` y el armado toma los lotes en orden de UUID.
 
 Se corrigió una línea de portabilidad en `src/lib/erp-sync/server-boundary.test.ts`: la comprobación de límites de servidor normaliza los separadores de rutas Windows antes de aplicar la expresión regular. No cambia la regla de seguridad ni la configuración de tests; persona 1 puede conservar esa normalización al migrarlo a Vitest.
 
-Aviso para persona 1: el build informa una alerta de seguridad para la versión instalada de Next.js; coordinar la actualización fuera de esta entrega de pallets.
+El aviso de seguridad anterior correspondía a la versión instalada al validar la entrega inicial. Persona 1 ya actualizó Next.js a 16.4.6 en `develop`.
+
+## Revisión de cierre del 23/11/2026
+
+La entrega inicial de persona 3 ya está integrada en `develop` mediante la PR #87. La revisión continúa en `codex/persona3-cierre`, creada desde `origin/develop` (`abc95ad`), con cambios limitados a pallets y su documentación.
+
+Se corrigieron validaciones de las acciones de armado y reingreso: depósitos, QR y motivos con tipos incorrectos devuelven un error controlado antes de escribir; el depósito respeta su límite de 40 caracteres. La validación de cantidades reutiliza la regla compartida de unidades, evitando rechazar kilos grandes con dos decimales por precisión binaria, y rechaza arrays con posiciones vacías. Se agregaron 29 casos de prueba en archivos de persona 3, incluidos permisos, lotes ERP de la empresa, fallos de stock, reingreso idempotente y respuestas de error sin éxito falso.
+
+Verificación actual: `npm test` aprobó 588 pruebas, con 6 omitidas por la suite existente; TypeScript, ESLint, build de producción y la comprobación de versiones únicas de las 75 migraciones aprobaron. Playwright aprobó 9 pruebas de `driver-delivery`, `responsive-dashboard` y `main-integration`: recepción por QR, validación de despacho, contenido mixto en trazabilidad/remito y pantallas entre 320 y 1280 px. Se usaron los fixtures locales existentes; no se probó el recorrido mixto completo contra la base remota, una cámara física ni una impresora. Estas correcciones no requieren otra migración ni modifican la base remota.
+
+### Pedidos concretos al equipo para cerrar la ola 2
+
+- **Persona 2:** acordar la identidad de cada línea de ítem, permitir repetir `palletCode` entre líneas del mismo pallet y definir la versión del contrato §5. Confirmar soporte de esas líneas en los adaptadores y sus validadores para despacho y entrega. Hoy el contrato sigue en versión 1, su validador rechaza `palletCode` repetido y los métodos de despacho/entrega de Odoo siguen sin implementación.
+- **Persona 5 — resuelto en PR #94:** TRZ-112 ya está integrado. El contexto ERP se obtiene por empresa y el outbox conserva su idempotencia por empresa. Persona 3 construye los payloads sobre esa interfaz; no quedan pedidos de ruteo/configuración pendientes para persona 5.
+- **Persona 1 — resuelto en PR #93:** incorporó fixtures para `create_pallet_with_items`, `return_pallet_to_warehouse` y varios ítems esperados/detectados, junto con la suite `npm run test:e2e:pallets`. Cubre armado → despacho → recepción exacta o con diferencias → reingreso → nueva orden. La PR ya está en `develop` y se integró en `codex/persona3-cierre`. Esta dependencia de cobertura queda resuelta; no habilita el contrato ERP de mixtos ni reemplaza las pruebas SQL.
+
+Personas 4, 6 y 7 no bloquean este cierre. El reingreso deja el pallet sin posición para ubicarlo por el flujo existente; trazabilidad/remitos pueden consumir `contents.ts` y los snapshots de las órdenes; el QR conserva su identidad actual.
+
+Mientras falten las dependencias de personas 2 y 5 se mantiene el rechazo `TM111` al despacho mixto por ERP. La siguiente entrega de persona 3 debe cambiar el payload, ajustar el contrato coordinado, probar los consumidores y recién entonces retirar esa restricción.
+
+### Verificación tras integrar la PR #93 de persona 1
+
+Las 61 pruebas de pallets y fixtures pasaron (`npx vitest run src/lib/pallets tests/unit/pallet-contents.test.ts tests/unit/pallets-fixture.test.ts`). Los dos recorridos de `npm run test:e2e:pallets` se completaron: la primera ejecución aprobó el caso con diferencias y falló el exacto por `page.goto: net::ERR_ABORTED` al abrir el detalle de entrega después del login del chofer; `npm run test:e2e:pallets -- --last-failed` aprobó el caso exacto completo.
+
+Observación para persona 1: el helper `login` de `tests/e2e/mixed-pallets.spec.ts` espera únicamente salir de `/login`, pero el flujo pasa por `/complete-registration`, `/dashboard` y finalmente `/dashboard/deliveries`. La navegación siguiente puede competir con esa redirección. Conviene esperar la URL y el contenido final del rol antes del siguiente `page.goto`. No se modificaron las pruebas compartidas desde persona 3. Es una falla intermitente de sincronización observada, no un bloqueo funcional de pallets.
+
+La cobertura se ejecutó exclusivamente con fixtures locales, sin escribir en Supabase remoto. Quedan pendientes las dependencias ERP de personas 2 y 5 descritas arriba.
+
+## Acuerdo de persona 3 sobre la propuesta ERP v2
+
+Persona 3 acepta la propuesta de persona 2 como base de la ola 2. Este apartado registra nuestra decisión de integración; no publica todavía el contrato ni reemplaza el documento con los DTO y ejemplos definitivos que prepara persona 2.
+
+1. **Despacho:** mantener el reporte por orden y la forma de sus líneas. En v2, permitir varias líneas con el mismo `palletCode`; la identidad dentro del reporte es la tupla `(palletCode, productExternalId, lotExternalId)`. Repetir esa tupla es error. Usar identificadores externos, no nombres ni SKU como identidad. Un pallet monolote conserva una sola línea.
+2. **Pick List:** aceptar un reporte por pallet con `items[]` tanto para `scan` como para `unscan`. La operación se acepta o falla para el pallet completo; un array no garantiza por sí solo atomicidad en el ERP, así que el adaptador debe evitar escrituras parciales y contemplar conflictos concurrentes. El `unscan` referencia la clave del scan original y revierte exactamente sus ítems guardados, aunque el contenido actual del pallet haya cambiado. Una nueva ronda de validación tiene otra identidad de scan; un reintento conserva la misma.
+3. **Entrega:** conservar el resultado por pallet y admitir `content_mismatch` tanto en su resultado como en las diferencias, con `needsReview = true`. El detalle debe poder expresar más de un ítem afectado y distinguir esperado/detectado. Cuando el producto o lote detectado sea desconocido, conservar el dato observado sin inventar IDs externos. Persona 2 debe precisar los campos opcionales de ese detalle y mostrar ejemplos de faltante, sobrante, producto/lote incorrecto y cantidad distinta.
+4. **Compatibilidad:** emitir los nuevos eventos como v2 y seguir procesando los eventos v1 almacenados, con su semántica original. La compatibilidad debe cubrir tipos, validadores, clasificación del outbox y adaptadores; revisar también las comprobaciones de versión de la sincronización si sus respuestas pasan a v2. No reescribir eventos v1 pendientes ni generar claves nuevas al reintentarlos. Si el adaptador normaliza v1 a un array de un ítem, esa conversión no modifica el payload persistido.
+
+### Preparación de los productores de persona 3
+
+- `order_pallets.expected_items` conserva el contenido asignado a esa orden. `dispatch_items` conserva lo validado y `reception_items` lo normalizado en recepción. Los snapshots contienen IDs locales de producto/lote y cantidad; no contienen por sí solos los IDs externos ni la unidad ERP.
+- Construir el reporte de despacho desde el snapshot validado de la relación con esa orden, comprobado contra el esperado. Resolver IDs externos y unidad ERP dentro de la empresa y congelarlos al encolar el payload, en la misma transacción de la operación. No reconstruir un evento pendiente desde el contenido vigente del pallet ni desde un catálogo actualizado durante el reintento.
+- Guardar el contenido completo de cada scan en su evento para poder revertirlo posteriormente. No usar `pallets.batch_id` ni `pallets.quantity` como contenido del mixto. Conservar las familias actuales de claves (`dispatch:`, `pallet-scan:`, `pallet-unscan:`, `delivery:`); coordinar con persona 5 el aislamiento de esas identidades por empresa y con persona 2 su formato definitivo.
+- Para la recepción, combinar el snapshot esperado, el normalizado y los datos observados de los eventos. Un faltante o sobrante no puede desaparecer por no tener correspondencia en el catálogo ERP. El payload queda congelado antes de reingresar o reasignar el pallet.
+- Preparar los casos de integración: dos ítems del mismo QR; repetición inválida de una tupla; scan/unscan completos con error en el segundo ítem; reintento sin duplicados; unscan después de editar/reingresar; recepción con varias diferencias e ítems desconocidos; replay de v1; dos empresas con iguales IDs externos; snapshots anteriores conservados después de una nueva orden.
+
+Persona 2 puede avanzar con contrato/adaptadores sin esperar TRZ-112. Persona 3 implementará los productores cuando estén definidos esos DTO y esté integrada la separación por empresa de persona 5. La protección `TM111` se mantiene hasta verificar los productores y consumidores juntos; no se cambió código ni se aplicaron migraciones con este acuerdo.
+
+## Avance del 24/11/2026 sobre TRZ-112
+
+La PR #94 de persona 5 está mergeada en `develop` (`44eaf3e`) y se integró en la rama `codex/persona3-erp-v2`. Ya no se necesita ningún cambio de persona 5 para resolver el cliente por empresa ni para la unicidad del outbox. No se tocaron su procesador, claim, cron, configuración o credenciales.
+
+La migración nueva `20261124110000_trz111_erp_v2_preparation.sql` agrega tres funciones internas sin permisos de API:
+
+- `erp_pallet_items_v2`: resuelve IDs externos/unidades desde un snapshot de la orden, filtrando por empresa, rechazando cantidades/identidades inválidas y consolidando por producto/lote.
+- `erp_outbox_dispatch_payload_v2`: construye un reporte por orden con una línea por ítem validado, manteniendo un solo QR por pallet y comprobando la empresa del operador.
+- `erp_pallet_scan_event_v2`: recibe explícitamente el snapshot de la relación y genera eventos por pallet con `items[]`. El unscan copia el payload del scan original, también cuando ese scan es v1; no consulta el catálogo ni el contenido actual para revertirlo. Las claves mantienen el aislamiento por empresa de TRZ-112.
+
+Es preparación inactiva: los triggers y funciones públicas vigentes siguen usando v1, los eventos existentes no se reescriben y TM111 conserva ambas protecciones. No se aplicó esta migración a Supabase remoto.
+
+### Verificación y trabajo restante
+
+Se cargaron las migraciones en PostgreSQL embebido (PGlite temporal), con stubs de `auth`/`storage`; se excluyeron las tres migraciones cron/pg_net y pgcrypto, como en la verificación inicial. Vault de persona 5 no se invocó ni se simuló su cifrado. Pasaron siete suites SQL: la nueva `trz111_erp_v2_preparation`, `trz111_mixed_pallets_and_return`, `us_erp04_dispatch_outbox`, `trz103_delivery_receipts`, `trz100_dispatch_quantity_match`, `trz100_erp_stock_balances` y `us_erp01_ops07_driver_delivery`. Se contrastaron seis payloads producidos por SQL contra los validadores reales de la rama `origin/feat/TRZ-111-contrato-v2-erp` de persona 2, sin modificar ni integrar esa rama. Esto no reemplaza probar el adaptador ERP real ni el stack completo de Supabase.
+
+`npm test` aprobó 635 pruebas (6 omitidas por la suite existente) y `npm run check:migrations` confirmó versiones únicas en las 77 migraciones. No se añadieron dependencias al proyecto: el motor embebido y los módulos temporales usados para contrastar el contrato se retiraron tras verificar.
+
+Queda por resolver antes de activar v2:
+
+1. **Contrato de recepción:** la rama de persona 2 exige `detected.quantity > 0` y `detected.uom` no vacío. La recepción existente admite 0/null y productos desconocidos cuya unidad ERP no se conoce. Hay que acordar una representación explícita sin inventar cantidad ni unidad ni descartar observaciones. Un faltante confirmado puede representarse con `detected: null`; cantidad desconocida no equivale a ausencia. El contrato de esa rama mantiene `lines[].outcome` en `delivered/missing/damaged`: un pallet físicamente recibido con diferencia se informa como `delivered` más `content_mismatch` en `discrepancies` y `needsReview: true`, conservando el estado interno de la base.
+2. **Orden de cierre de recepción (persona 3):** `confirm_delivery_pallet_legacy` puede cerrar la orden y disparar `enqueue_erp_delivery_report` antes de que el wrapper guarde `reception_items` y el evento `reception` del último pallet. La activación de entrega v2 debe encolar solo después de persistir esos datos en la misma transacción. Es necesario probar explícitamente el último pallet con diferencias y varios pallets.
+3. Completar payload de entrega y versión del remito firmado; conectar los helpers de despacho/scan a los productores activos, pasando el snapshot de la relación incluso al borrar o invalidar una validación. Integrar primero el contrato de persona 2 y probar productor + adaptador + outbox por empresa, incluidos reintentos v1, antes de retirar TM111.
