@@ -193,7 +193,7 @@ begin
   perform pg_temp.assert_true(event.next_attempt_at <= now(), 'se puede enviar enseguida');
   perform pg_temp.assert_true(event.created_by = 'f1000000-0000-0000-0000-000000000001', 'queda quién confirmó');
   perform pg_temp.assert_true(event.payload->>'idempotencyKey' = event.idempotency_key, 'el payload lleva la misma clave');
-  perform pg_temp.assert_true((event.payload->>'contractVersion')::int = 1, 'versión de contrato');
+  perform pg_temp.assert_true((event.payload->>'contractVersion')::int = 2, 'los despachos nuevos usan contrato v2');
   perform pg_temp.assert_true(event.payload->>'orderExternalId' = 'SO-1', 'orden externa');
   perform pg_temp.assert_true((event.payload->>'dispatchedAt')::timestamptz = date_trunc('milliseconds', confirmed), 'dispatchedAt es la hora de confirmación');
   perform pg_temp.assert_true(event.payload->>'dispatchedAt' like '%Z', 'dispatchedAt en UTC');
