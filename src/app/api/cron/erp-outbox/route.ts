@@ -1,7 +1,7 @@
 import { consoleCronLogger } from "@/lib/cron/logger";
 import { runErpOutboxCron } from "@/lib/cron/erp-outbox-job";
 import { getErpClient } from "@/lib/erp";
-import { isErpEnabled } from "@/lib/erp-sync/enabled";
+import { isErpEnabled, readProvider } from "@/lib/erp-sync/enabled";
 import { createServiceClient } from "@/lib/supabase/service";
 
 /**
@@ -18,15 +18,14 @@ export async function GET(request: Request) {
   const result = await runErpOutboxCron({
     authorization: request.headers.get("authorization"),
     secret: process.env.CRON_SECRET,
-    // Hoy la configuración del ERP es global: un solo cliente para todas las empresas. Cuando sea por empresa,
-    // hay que agrupar los eventos por company_id y pedir getErpClient(companyId) para cada grupo.
-    erpEnabled: () => isErpEnabled(""),
     createDb: () => {
       const supabase = createServiceClient();
       // storage: para adjuntar los remitos firmados (TRZ-103) que el chofer no pudo enviar.
       return { rpc: (fn, args) => supabase.rpc(fn, args), storage: supabase.storage };
     },
-    getClient: () => getErpClient(),
+    // TRZ-112: empresa por empresa, cada una con su ERP (configuración guardada o, en transición, ERP_ENV_COMPANY_ID).
+    erpEnabled: (companyId, db) => isErpEnabled(companyId, (id) => readProvider(db, id)),
+    getClient: (companyId) => getErpClient(companyId),
     logger: consoleCronLogger,
   });
   return Response.json(result.body, { status: result.status, headers: { "Cache-Control": "no-store" } });

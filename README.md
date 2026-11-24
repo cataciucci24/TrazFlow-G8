@@ -30,9 +30,10 @@ Database changes are applied with the Supabase migrations. Existing `distributor
 
 ## ERP integration
 
-The ERP is the source of truth for products, lots, stock and orders. The app talks to it only through the `ErpClient` interface in `src/lib/erp` (`getErpClient(companyId)`), and the provider is chosen with server-only environment variables:
+The ERP is the source of truth for products, lots, stock and orders. The app talks to it only through the `ErpClient` interface in `src/lib/erp` (`getErpClient(companyId)`). Since TRZ-112 **each company configures its own ERP** in **Integración ERP → Configuración** (credentials encrypted in Supabase Vault); see [`docs/erp-por-empresa.md`](docs/erp-por-empresa.md). The server-only variables below are a transition fallback that applies **only** to the company in `ERP_ENV_COMPANY_ID`, and only while that company has nothing saved in the panel:
 
 ```bash
+ERP_ENV_COMPANY_ID=5eed0000-0000-0000-0000-000000000001   # local seed: TrazFlow Demo
 ERP_PROVIDER=mock            # unset = company works without ERP; "mock", "erpnext" or "odoo" enables the sync
 ERP_MOCK_SCENARIO=ok         # mock only: ok | timeout | unauthorized | validation | server_error
 ERP_BASE_URL=http://localhost:8080   # erpnext only
@@ -45,7 +46,7 @@ The contract (payloads, external ids, error codes, idempotency key and ERPNext s
 
 ### Syncing master data and orders (US-ERP-03)
 
-`ERP_PROVIDER` must be set **explicitly** for the integration to be on (`isErpEnabled` in `src/lib/erp-sync/enabled.ts`). `getErpClient` still falls back to the mock, but an unset variable means "this installation has no ERP": the manual product/lot/pallet forms keep working and the sync action answers with a clear message. Copy [`.env.example`](.env.example) to `.env.local` and set `ERP_PROVIDER=mock` to try the flow:
+A company has ERP when it saved one in the panel, or when it is the `ERP_ENV_COMPANY_ID` company and `ERP_PROVIDER` is set (`isErpEnabled` in `src/lib/erp-sync/enabled.ts`). Without ERP the manual product/lot/pallet forms keep working and the sync action answers with a clear message. Copy [`.env.example`](.env.example) to `.env.local` and set `ERP_ENV_COMPANY_ID` + `ERP_PROVIDER=mock`, or choose **ERP simulado** in the panel (not offered in production), to try the flow:
 
 1. Apply the migrations (`npx supabase db reset` on a local database).
 2. Sign in as a logistics manager and open **Pallets**. Under *Integración ERP*, check that `Depósito Central - SRV` is linked to `DEP-01` (the local seed already creates this mapping).
@@ -79,10 +80,14 @@ Run the app against the **local** Supabase stack (Docker), not the shared cloud 
 2. Create `.env.development.local` (git-ignored, read only by `next dev`, takes precedence over `.env.local`) with the values from `npx supabase status`:
 
    ```bash
+   ERP_ENV_COMPANY_ID=5eed0000-0000-0000-0000-000000000001
    ERP_PROVIDER=mock
    NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
    NEXT_PUBLIC_SUPABASE_ANON_KEY=<ANON_KEY or PUBLISHABLE_KEY>
+   SUPABASE_SERVICE_ROLE_KEY=<SERVICE_ROLE_KEY>   # server only; reads each company's ERP credentials
    ```
+
+   Do not leave an empty `SUPABASE_SERVICE_ROLE_KEY=` here: this file wins over `.env.local`.
 
 3. Run `npm run dev` and restart it whenever a `.env*` file changes (Next.js reads them only at startup).
 
@@ -98,7 +103,8 @@ Run the app against the **local** Supabase stack (Docker), not the shared cloud 
 
 Troubleshooting:
 
-- *"La integración con el ERP no está configurada"*: `ERP_PROVIDER` is missing or the dev server was not restarted.
+- *"Tu empresa todavía no tiene un ERP"*: configure it in **Integración ERP → Configuración**, or set `ERP_ENV_COMPANY_ID` + `ERP_PROVIDER` and restart the dev server.
+- *"El servidor no tiene acceso a la configuración del ERP de las empresas"*: `SUPABASE_SERVICE_ROLE_KEY` is missing or empty (check `.env.development.local`).
 - *"No pudimos cargar esta pantalla"*: the local database is missing migrations. Run `npx supabase migration up --local --include-all`, or `npx supabase db reset` to rebuild it (this erases local data).
 - Accounts from the cloud database do not exist locally; use the seeded users above. Mail sent by the local stack (sign-up confirmations) goes to Mailpit at http://127.0.0.1:54324.
 

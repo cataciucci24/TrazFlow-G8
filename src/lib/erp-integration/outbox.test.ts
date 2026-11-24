@@ -11,6 +11,7 @@ const SILENT: ErpOutboxLogger = { info() {}, warn() {}, error() {} };
 const MAX_ATTEMPTS = 10;
 const EVENT_ID = "e1";
 const ORDER_ID = "o1";
+const COMPANY = "c1";
 
 function report(): DispatchReport {
   return {
@@ -47,7 +48,7 @@ function fakeDb(event: Partial<Event> = {}, errors: Record<string, string> = {})
           if (!due) return { data: [], error: null };
           state.status = "processing";
           state.attempts += 1;
-          return { data: [{ id: state.id, idempotency_key: state.idempotency_key, payload: structuredClone(state.payload), attempts: state.attempts }], error: null };
+          return { data: [{ id: state.id, company_id: COMPANY, idempotency_key: state.idempotency_key, payload: structuredClone(state.payload), attempts: state.attempts }], error: null };
         }
         case "erp_outbox_mark_sent":
           state.status = "sent";
@@ -69,12 +70,16 @@ test("reintento: vuelve a pendiente y se envía en el momento, con el mismo payl
   const original = client.reportDispatch.bind(client);
   client.reportDispatch = async (r) => { sent.push(r); return original(r); };
 
-  const result = await retryFailedErpEvent({ db: fake.db, eventId: EVENT_ID, getClient: () => client, logger: SILENT });
+  const asked: string[] = [];
+  const result = await retryFailedErpEvent({
+    db: fake.db, eventId: EVENT_ID, companyId: COMPANY, getClient: (companyId) => { asked.push(companyId); return client; }, logger: SILENT,
+  });
+  assert.deepEqual(asked, [COMPANY], "TRZ-112: el reintento sale por el ERP de la empresa del evento");
 
   assert.equal(result.outcome, "requeued");
   assert.equal(result.outcome === "requeued" && result.summary?.sent, 1);
   assert.deepEqual(fake.calls.map((call) => call.fn), ["erp_outbox_retry_failed", "erp_outbox_claim", "erp_outbox_mark_sent"]);
-  assert.deepEqual(fake.calls[1].args, { p_limit: 1, p_aggregate_id: ORDER_ID });
+  assert.deepEqual(fake.calls[1].args, { p_limit: 1, p_aggregate_id: ORDER_ID, p_company_id: COMPANY });
   assert.equal(JSON.stringify(sent[0]), fake.original, "el payload enviado es el original");
   assert.equal(JSON.stringify(fake.state.payload), fake.original, "el payload guardado no cambia");
   assert.equal(fake.state.status, "sent");
@@ -84,7 +89,7 @@ test("reintento: vuelve a pendiente y se envía en el momento, con el mismo payl
 test("con los intentos agotados, si el envío extra falla vuelve a failed (no queda en processing)", async () => {
   const fake = fakeDb({ attempts: MAX_ATTEMPTS });
   const result = await retryFailedErpEvent({
-    db: fake.db, eventId: EVENT_ID, getClient: () => new MockErpClient({ scenario: "timeout" }), logger: SILENT,
+    db: fake.db, eventId: EVENT_ID, companyId: COMPANY, getClient: () => new MockErpClient({ scenario: "timeout" }), logger: SILENT,
   });
   assert.equal(fake.state.status, "failed");
   assert.equal(fake.state.attempts, MAX_ATTEMPTS + 1);
@@ -98,14 +103,14 @@ test("con los intentos agotados, si el envío extra falla vuelve a failed (no qu
 test("con intentos disponibles, un timeout deja el reporte pendiente con reintento automático", async () => {
   const fake = fakeDb({ attempts: 2 });
   const hanging = { provider: "mock", reportDispatch: () => new Promise(() => {}) } as unknown as ErpClient;
-  const result = await retryFailedErpEvent({ db: fake.db, eventId: EVENT_ID, getClient: () => hanging, timeoutMs: 20, logger: SILENT });
+  const result = await retryFailedErpEvent({ db: fake.db, eventId: EVENT_ID, companyId: COMPANY, getClient: () => hanging, timeoutMs: 20, logger: SILENT });
   assert.equal(fake.state.status, "pending");
   assert.equal(describeRetry(result).status, "warning");
 });
 
 test("sin ERP configurado solo se reencola: no se llama al ERP ni se toma el evento", async () => {
   const fake = fakeDb();
-  const result = await retryFailedErpEvent({ db: fake.db, eventId: EVENT_ID, getClient: null, logger: SILENT });
+  const result = await retryFailedErpEvent({ db: fake.db, eventId: EVENT_ID, companyId: COMPANY, getClient: null, logger: SILENT });
   assert.deepEqual(fake.calls.map((call) => call.fn), ["erp_outbox_retry_failed"]);
   assert.equal(fake.state.status, "pending");
   assert.match(describeRetry(result).message ?? "", /quedó pendiente/);
@@ -114,7 +119,7 @@ test("sin ERP configurado solo se reencola: no se llama al ERP ni se toma el eve
 test("errores de la RPC de reintento", async () => {
   for (const [code, outcome] of [["42501", "forbidden"], ["P0002", "not_found"], ["55000", "not_failed"], ["08006", "error"]] as const) {
     const fake = fakeDb({}, { erp_outbox_retry_failed: code });
-    const result = await retryFailedErpEvent({ db: fake.db, eventId: EVENT_ID, getClient: () => new MockErpClient(), logger: SILENT });
+    const result = await retryFailedErpEvent({ db: fake.db, eventId: EVENT_ID, companyId: COMPANY, getClient: () => new MockErpClient(), logger: SILENT });
     assert.equal(result.outcome, outcome, code);
     assert.equal(fake.calls.length, 1, "si el reintento falla no se procesa nada");
   }
@@ -124,28 +129,28 @@ test("errores de la RPC de reintento", async () => {
 
 test("un evento que no está fallido no se reintenta", async () => {
   const fake = fakeDb({ status: "pending" });
-  const result = await retryFailedErpEvent({ db: fake.db, eventId: EVENT_ID, getClient: () => new MockErpClient(), logger: SILENT });
+  const result = await retryFailedErpEvent({ db: fake.db, eventId: EVENT_ID, companyId: COMPANY, getClient: () => new MockErpClient(), logger: SILENT });
   assert.equal(result.outcome, "not_failed");
 });
 
 test("si no se puede procesar después del reintento, el reporte queda pendiente", async () => {
   const fake = fakeDb({}, { erp_outbox_claim: "08006" });
-  const result = await retryFailedErpEvent({ db: fake.db, eventId: EVENT_ID, getClient: () => new MockErpClient(), logger: SILENT });
+  const result = await retryFailedErpEvent({ db: fake.db, eventId: EVENT_ID, companyId: COMPANY, getClient: () => new MockErpClient(), logger: SILENT });
   assert.deepEqual(result, { outcome: "requeued", summary: null });
   assert.equal(fake.state.status, "pending");
 });
 
 test("enviar pendientes: procesa los vencidos con límite y timeout acotados", async () => {
   const fake = fakeDb({ status: "pending" });
-  const result = await processDueErpEvents({ db: fake.db, getClient: () => new MockErpClient(), logger: SILENT });
+  const result = await processDueErpEvents({ db: fake.db, companyId: COMPANY, getClient: () => new MockErpClient(), logger: SILENT });
   assert.ok(!("error" in result));
   assert.equal(!("error" in result) && result.sent, 1);
-  assert.deepEqual(fake.calls[0].args, { p_limit: 5, p_aggregate_id: null });
+  assert.deepEqual(fake.calls[0].args, { p_limit: 5, p_aggregate_id: null, p_company_id: COMPANY });
 });
 
 test("enviar pendientes: sin permisos devuelve un mensaje claro", async () => {
   const fake = fakeDb({ status: "pending" }, { erp_outbox_claim: "42501" });
-  assert.deepEqual(await processDueErpEvents({ db: fake.db, getClient: () => new MockErpClient(), logger: SILENT }),
+  assert.deepEqual(await processDueErpEvents({ db: fake.db, companyId: COMPANY, getClient: () => new MockErpClient(), logger: SILENT }),
     { error: "No tenés permisos para procesar reportes al ERP." });
 });
 

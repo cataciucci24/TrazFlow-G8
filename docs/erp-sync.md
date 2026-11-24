@@ -29,8 +29,10 @@ lotes además tienen `external_active` (`false` = deshabilitado en el ERP; no se
 
 ## Cuándo está habilitada
 
-`isErpEnabled(companyId)` (`src/lib/erp-sync/enabled.ts`) es la única función que decide. Hoy devuelve `true` si
-`ERP_PROVIDER` está definido explícitamente. Con ERP habilitado:
+`isErpEnabled(companyId)` (`src/lib/erp-sync/enabled.ts`) es la única función que decide. Desde TRZ-112 es **por
+empresa**: devuelve `true` si la empresa guardó su ERP en Integración ERP → Configuración, o si es la empresa de
+`ERP_ENV_COMPANY_ID` y `ERP_PROVIDER` está definido (transición). Ver [ERP por empresa](erp-por-empresa.md). Con ERP
+habilitado:
 
 - Se ocultan los formularios de alta de producto y lote (`createLot` también lo rechaza en el servidor).
 - **Pallets (TRZ-100 / TRZ-111):** Logística y Depósito pueden usar el armado por ítems
@@ -110,7 +112,7 @@ corre el mismo flujo de arriba para cada empresa con ERP, sin usuario. Durante e
 - **Trabajo limitado:** una empresa a la vez y no arranca otra pasados los 120 s (`maxDuration` es 300 s); las que
   quedaron afuera van primero la próxima vez. La sincronización de una empresa no se parte: con ERPNext,
   `pullMasterData` hace una llamada de stock por producto, cada una con `ERP_TIMEOUT_MS` (10 s por defecto).
-- **Sin ERP** (`ERP_PROVIDER` vacío): responde 200 y no sincroniza.
+- **Sin ERP:** las empresas sin ERP configurado se saltean (`skipped_no_erp`); cada una se sincroniza con su ERP.
 
 ## Reglas que protegen el trabajo local
 
