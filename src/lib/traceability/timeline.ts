@@ -160,3 +160,26 @@ export function buildTimeline(rows: TimelineEventRow[], origins: TimelinePalletO
     return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
   });
 }
+
+export const TIMELINE_EXPORT_HEADERS = ["Fecha y hora", "Evento", "Detalle", "Usuario", "Pallet", "Orden"] as const;
+
+const EXPORT_DATE = new Intl.DateTimeFormat("es-AR", {
+  dateStyle: "short",
+  timeStyle: "medium",
+  timeZone: "America/Argentina/Buenos_Aires",
+});
+
+/**
+ * TRZ-59: filas para exportar la línea de tiempo (las mismas entradas y el mismo orden que en pantalla). La
+ * orden va completa, no recortada como en la vista.
+ */
+export function timelineExportRows(entries: TimelineEntry[]): string[][] {
+  return entries.map((entry) => [
+    EXPORT_DATE.format(new Date(entry.at)),
+    entry.title,
+    entry.description ?? "",
+    entry.actor ?? (entry.eventType === "pallet_created" ? "Alta en TrazFlow" : ""),
+    entry.palletCode ?? "",
+    entry.orderId ?? "",
+  ]);
+}

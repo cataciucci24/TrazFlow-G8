@@ -2,6 +2,7 @@ import { PalletContentList } from "@/components/pallets/content-list";
 import Link from "next/link";
 import { PalletQrButton } from "@/components/pallets/pallet-qr-button";
 import { EventTimeline } from "@/components/traceability/event-timeline";
+import { TimelineExportActions } from "@/components/traceability/timeline-export";
 import type { TimelineEntry } from "@/lib/traceability/timeline";
 
 import type { PalletTraceability as PalletTraceabilityData } from "@/lib/traceability/types";
@@ -22,14 +23,14 @@ export function PalletTraceability({
   const { pallet } = traceability;
 
   return (
-    <div className="list-content space-y-6">
+    <div className="print-root list-content space-y-6">
       <section className="section-stack">
         <div className="section-header">
           <div className="min-w-0">
             <div className="flex items-center gap-5">
               <h2 className="section-title min-w-0 break-all">Pallet {pallet.qrCode}</h2>
-              <PalletQrButton pallet={pallet} variant="icon" />
-              {canPrint && <Link href={`/dashboard/pallets/print?ids=${pallet.id}`} className="button-secondary button-sm">Imprimir etiqueta</Link>}
+              <span className="no-print"><PalletQrButton pallet={pallet} variant="icon" /></span>
+              {canPrint && <Link href={`/dashboard/pallets/print?ids=${pallet.id}`} className="no-print button-secondary button-sm">Imprimir etiqueta</Link>}
             </div>
             <p className="section-description">Identificación y estado actual del pallet.</p>
           </div>
@@ -59,8 +60,8 @@ export function PalletTraceability({
         </dl>
       </section>
 
-      <Link href={`/dashboard/locations?pallet=${pallet.id}`} className="button-secondary w-fit">Consultar o actualizar ubicación</Link>
-      <EventTimeline entries={timeline} />
+      <Link href={`/dashboard/locations?pallet=${pallet.id}`} className="no-print button-secondary w-fit">Consultar o actualizar ubicación</Link>
+      <EventTimeline entries={timeline} action={<TimelineExportActions excelHref={`/dashboard/traceability/export?qr=${encodeURIComponent(pallet.qrCode)}`} />} />
     </div>
   );
 }
