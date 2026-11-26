@@ -22,7 +22,7 @@ function toPlan(row: PlanRow): SubscriptionPlan {
   };
 }
 
-/** RLS restricts reads to active logistics managers. No company gets a default plan. */
+/** RLS restricts reads to active logistics managers. Companies created in the app pick their plan at sign-up (TRZ-112). */
 export const getCompanyPlan = cache(async (companyId: string): Promise<CompanyPlanResult> => {
   try {
     const supabase = await createClient();

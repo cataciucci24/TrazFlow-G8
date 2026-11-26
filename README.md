@@ -126,11 +126,11 @@ flowchart LR
   Outbox --> Contract
 ```
 
-The current providers are mock, ERPNext and Odoo. Odoo supports health checks and master-data reads; order reads and write operations are not supported yet. See [Odoo setup and limitations](docs/odoo-deploy.md). Per-company credentials remain pending in TRZ-112. The ERP C4 level 3 is assigned to TRZ-125.
+The current providers are mock, ERPNext and Odoo. Odoo supports health checks and master-data reads; order reads and write operations are not supported yet. See [Odoo setup and limitations](docs/odoo-deploy.md). Each company configures its own ERP credentials (TRZ-112). The ERP C4 level 3 is assigned to TRZ-125.
 
 ## Onboarding and decisions
 
-See [operator onboarding](docs/onboarding.md), [current roles](docs/modelo-de-roles.md) and [architecture decisions](docs/decisiones/). A recipient is business data; drivers are assigned to dispatch orders, not linked to recipient accounts.
+A new company signs itself up from `/register` → **Dar de alta mi empresa** (name + CUIT); after confirming the email it picks a plan (Starter or Growth) and its first user becomes the logistics manager. The company starts without ERP and with a `DEP-01` warehouse (TRZ-112). Others join an existing company and wait for its logistics manager's approval. See [operator onboarding](docs/onboarding.md), [current roles](docs/modelo-de-roles.md) and [architecture decisions](docs/decisiones/). A recipient is business data; drivers are assigned to dispatch orders, not linked to recipient accounts.
 
 Final sprint review (TRZ-124) must incorporate the remaining company/warehouse features when merged, link the final ERP component diagram (TRZ-125), and include a cross-check by another team member. The public URL was verified to reach the login page; local seeded users are not production demo accounts.
 

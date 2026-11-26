@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { BrandLogo } from "@/components/brand-mark";
@@ -117,6 +118,8 @@ export default async function AccessStatusPage() {
                 <div><dt className="text-stone-500">Rol solicitado</dt><dd className="mt-1 font-semibold text-slate-950">{roles[request.requestedRole]}</dd></div>
                 <div><dt className="text-stone-500">Fecha de solicitud</dt><dd className="mt-1 font-semibold text-slate-950"><time dateTime={request.createdAt}>{new Intl.DateTimeFormat("es-AR", { dateStyle: "long", timeZone: "America/Argentina/Buenos_Aires" }).format(new Date(request.createdAt))}</time></dd></div>
               </dl>
+              {request.status === "rejected" && <p className="text-sm text-stone-600">¿Tu empresa todavía no usa TrazFlow?{" "}
+                <Link href="/complete-registration?mode=new" className="font-semibold text-slate-950 underline underline-offset-2">Dar de alta mi empresa</Link></p>}
             </>
           ) : (
             <p className="text-sm text-stone-600">No encontramos una solicitud de acceso asociada a tu cuenta.</p>

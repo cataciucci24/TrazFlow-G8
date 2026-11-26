@@ -8,16 +8,24 @@ import { registrationErrorMessage } from "@/components/ui/feedback-messages";
 import { signUp } from "@/lib/auth/actions";
 import { RegistrationFields as RegistrationOptions } from "@/components/registration-fields";
 import { NAME_MAX_LENGTH, normalizeName } from "@/lib/registration/name";
+import { NewCompanyFields } from "@/components/new-company-fields";
+import { normalizeCompanyName, type RegistrationMode } from "@/lib/registration/company";
+import { normalizeCuit } from "@/lib/registration/cuit";
 
 type Props = { companies: { id: string; name: string }[]; error?: string };
 
 export function RegisterWizard({ companies, error }: Props) {
   const [step, setStep] = useState(1);
-  const [data, setData] = useState({ name: "", email: "", password: "", companyId: "", role: "" });
+  const [mode, setMode] = useState<RegistrationMode>("join");
+  const [data, setData] = useState({ name: "", email: "", password: "", companyId: "", role: "", companyName: "", taxId: "" });
 
   const set = (k: keyof typeof data) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
       setData((d) => ({ ...d, [k]: e.target.value }));
+  const taxIdInvalid = data.taxId.trim() !== "" && normalizeCuit(data.taxId) === null;
+  const ready = mode === "new"
+    ? normalizeCompanyName(data.companyName) !== null && normalizeCuit(data.taxId) !== null
+    : Boolean(data.companyId && data.role);
 
   return (
     <form className="space-y-6" action={signUp}>
@@ -28,6 +36,9 @@ export function RegisterWizard({ companies, error }: Props) {
       <input type="hidden" name="password" value={data.password} />
       <input type="hidden" name="companyId" value={data.companyId} />
       <input type="hidden" name="role" value={data.role} />
+      <input type="hidden" name="mode" value={mode} />
+      <input type="hidden" name="companyName" value={data.companyName} />
+      <input type="hidden" name="taxId" value={data.taxId} />
 
       <RegistrationFields>
       <p className="text-xs font-semibold text-stone-500">Paso {step} de 2</p>
@@ -59,18 +70,48 @@ export function RegisterWizard({ companies, error }: Props) {
 
       {step === 2 && (
         <>
-          <RegistrationOptions companies={companies} companyId={data.companyId} role={data.role}
-            onCompanyChange={set("companyId")} onRoleChange={set("role")} />
-          <p className="text-sm text-stone-500">Primero confirmarás tu email. Después de iniciar sesión podrás enviar la solicitud.</p>
+          <fieldset className="space-y-2">
+            <legend className="text-sm font-semibold text-stone-600">¿Cómo querés usar TrazFlow?</legend>
+            <ModeOption mode="join" current={mode} onSelect={setMode} title="Sumarme a una empresa"
+              description="Tu empresa ya usa TrazFlow: su responsable logístico aprueba tu acceso." />
+            <ModeOption mode="new" current={mode} onSelect={setMode} title="Dar de alta mi empresa"
+              description="Tu empresa todavía no usa TrazFlow: vas a ser su responsable logístico." />
+          </fieldset>
+          {mode === "join" ? (
+            <RegistrationOptions companies={companies} companyId={data.companyId} role={data.role}
+              onCompanyChange={set("companyId")} onRoleChange={set("role")} />
+          ) : (
+            <NewCompanyFields companyName={data.companyName} taxId={data.taxId} taxIdInvalid={taxIdInvalid}
+              onCompanyNameChange={set("companyName")} onTaxIdChange={set("taxId")} />
+          )}
+          <p className="text-sm text-stone-500">{mode === "join"
+            ? "Primero confirmarás tu email. Después de iniciar sesión podrás enviar la solicitud."
+            : "Primero confirmarás tu email. Después de iniciar sesión vas a elegir el plan y crear la empresa."}</p>
           <div className="flex gap-3">
             <button type="button" className="w-1/3 text-sm font-semibold text-stone-600 underline"
               onClick={() => setStep(1)}>Volver</button>
-            <RegistrationSubmit disabled={!data.companyId || !data.role} />
+            <RegistrationSubmit disabled={!ready} />
           </div>
         </>
       )}
       </RegistrationFields>
     </form>
+  );
+}
+
+function ModeOption({ mode, current, onSelect, title, description }: {
+  mode: RegistrationMode; current: RegistrationMode; onSelect: (mode: RegistrationMode) => void;
+  title: string; description: string;
+}) {
+  return (
+    <label className="surface flex cursor-pointer gap-3 p-4 has-[:checked]:border-sky-600 has-[:checked]:ring-1 has-[:checked]:ring-sky-600">
+      <input type="radio" name="registrationMode" value={mode} checked={current === mode}
+        onChange={() => onSelect(mode)} className="mt-1" />
+      <span className="min-w-0">
+        <span className="block font-semibold text-stone-950">{title}</span>
+        <span className="mt-1 block text-sm text-stone-600">{description}</span>
+      </span>
+    </label>
   );
 }
 
