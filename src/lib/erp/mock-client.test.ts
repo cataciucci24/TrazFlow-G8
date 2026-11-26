@@ -126,7 +126,8 @@ test("errores de validación del ERP devuelven 422", async () => {
 
 test("un reporte mal formado se rechaza antes de llegar al ERP", async () => {
   await rejectsWith(client().reportDispatch(report({ lines: [] })), "validation");
-  const repeated = report();
+  // Regla v1: un pallet por línea (en v2 el pallet se repite, una línea por ítem).
+  const repeated = { ...report(), contractVersion: 1 as const };
   repeated.lines[1].palletCode = repeated.lines[0].palletCode;
   await rejectsWith(client().reportDispatch(repeated), "validation");
 });

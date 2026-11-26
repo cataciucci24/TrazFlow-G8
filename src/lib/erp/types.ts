@@ -5,10 +5,20 @@
  * Este módulo no tiene secretos ni llamadas de red, así que se puede importar como tipo desde cualquier lado.
  */
 
-/** Versión del contrato. Cambia solo ante cambios incompatibles de los payloads. */
-export const ERP_CONTRACT_VERSION = 1;
+/**
+ * Versión del contrato. Cambia solo ante cambios incompatibles de los payloads. La 2 (TRZ-111, pallets mixtos) suma
+ * ítems por pallet: ver docs/erp-contract-mixtos.md. Los eventos nuevos salen con esta versión.
+ */
+export const ERP_CONTRACT_VERSION = 2;
 
-export type ErpContractVersion = typeof ERP_CONTRACT_VERSION;
+/** Versiones que aceptan validadores y adaptadores: los eventos v1 ya guardados en el outbox se procesan tal cual. */
+export const ERP_CONTRACT_VERSIONS = [1, 2] as const;
+
+export type ErpContractVersion = (typeof ERP_CONTRACT_VERSIONS)[number];
+
+export function isSupportedContractVersion(value: unknown): value is ErpContractVersion {
+  return ERP_CONTRACT_VERSIONS.some((version) => version === value);
+}
 
 export const ERP_PROVIDERS = ["mock", "erpnext", "odoo"] as const;
 
@@ -167,9 +177,35 @@ export function isDispatchDocumentState(value: unknown): value is DispatchDocume
 export const DELIVERY_PALLET_OUTCOMES = ["delivered", "missing", "damaged"] as const;
 export type DeliveryPalletOutcome = (typeof DELIVERY_PALLET_OUTCOMES)[number];
 
-/** Diferencias que registra el chofer (delivery_discrepancies.discrepancy_type). */
-export const DELIVERY_DISCREPANCY_TYPES = ["missing", "surplus", "damaged", "wrong_order"] as const;
+/** Diferencias que registra el chofer (delivery_discrepancies.discrepancy_type). `content_mismatch` es solo v2. */
+export const DELIVERY_DISCREPANCY_TYPES = ["missing", "surplus", "damaged", "wrong_order", "content_mismatch"] as const;
 export type DeliveryDiscrepancyKind = (typeof DELIVERY_DISCREPANCY_TYPES)[number];
+
+/** Lo que el chofer encontró en el pallet (v2). Sin id del ERP, va el texto tal cual se cargó: nunca se inventa un id. */
+export type ObservedItem = {
+  /** null si lo que se cargó no se pudo identificar en el ERP. */
+  productExternalId: string | null;
+  lotExternalId: string | null;
+  observedSku: string | null;
+  observedLot: string | null;
+  /** > 0 cuando se conoce; null conserva una cantidad no informada. Cero conocido = detected: null. */
+  quantity: number | null;
+  /** null si no se pudo identificar la unidad, sin inferirla del ítem esperado. */
+  uom: string | null;
+};
+
+/** Una diferencia de contenido (v2): `expected` null = sobrante, `detected` null = faltante. Nunca los dos null. */
+export type ContentDifference = {
+  expected: PalletItem | null;
+  detected: ObservedItem | null;
+};
+
+export type DeliveryDiscrepancy = {
+  palletCode: string | null;
+  type: DeliveryDiscrepancyKind;
+  /** Obligatorio y no vacío si type = content_mismatch; prohibido en los demás. */
+  contentDifferences?: ContentDifference[];
+};
 
 /**
  * Entrega cerrada por el chofer: resultado por pallet y diferencias. Un reporte por orden, con la clave
@@ -185,7 +221,7 @@ export type DeliveryReport = {
   /** true si la entrega cerró con diferencias: el ERP la tiene que dejar marcada para revisión. */
   needsReview: boolean;
   lines: Array<{ palletCode: string; outcome: DeliveryPalletOutcome }>;
-  discrepancies: Array<{ palletCode: string | null; type: DeliveryDiscrepancyKind }>;
+  discrepancies: DeliveryDiscrepancy[];
 };
 
 /**
@@ -265,12 +301,22 @@ export type StockImportReport = {
   requestedBy: { id: string; name: string | null };
 };
 
+/** Snapshot de un ítem físico del pallet (v2). */
+export type PalletItem = {
+  productExternalId: string;
+  lotExternalId: string;
+  /** > 0 */
+  quantity: number;
+  uom: string;
+};
+
 /**
  * Un pallet escaneado en el despacho (scan) o que dejó de estarlo (unscan: se desasoció o se corrigió su cantidad).
  * scanIdempotencyKey es la clave del escaneo al que se refiere; en un scan es la misma idempotencyKey.
+ * v1: un solo producto y lote, como está guardado en el outbox.
  */
-export type PalletScanReport = {
-  contractVersion: ErpContractVersion;
+export type PalletScanReportV1 = {
+  contractVersion: 1;
   /** pallet-scan:{orden}:{pallet}:{n} o pallet-unscan:{orden}:{pallet}:{n} */
   idempotencyKey: string;
   action: "scan" | "unscan";
@@ -283,6 +329,24 @@ export type PalletScanReport = {
   uom: string;
   at: string;
 };
+
+/**
+ * v2 (TRZ-111): todos los ítems del pallet. En un unscan, `items` es la copia exacta de los del scan original
+ * (`scanIdempotencyKey`), aunque el pallet haya cambiado después.
+ */
+export type PalletScanReportV2 = {
+  contractVersion: 2;
+  idempotencyKey: string;
+  action: "scan" | "unscan";
+  scanIdempotencyKey: string;
+  orderExternalId: string;
+  palletCode: string;
+  /** ≥ 1, sin producto + lote repetido. */
+  items: PalletItem[];
+  at: string;
+};
+
+export type PalletScanReport = PalletScanReportV1 | PalletScanReportV2;
 
 /* ---------- Política de salida de lotes (TRZ-65) ---------- */
 

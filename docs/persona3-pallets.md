@@ -5,7 +5,26 @@
 - Ola 0: vista `pallet_contents`, interfaz compartida y adaptación de las lecturas existentes.
 - TRZ-111, ola 1: tabla de ítems, migración de los pallets existentes, armado atómico, stock ERP por ítem, validación de despacho y recepción por ítem, inventario, consultas por lote y un QR por pallet.
 - TRZ-24: reingreso completo por logística, escaneando o ingresando el QR, con motivo obligatorio y auditoría. Un reenvío usa otra orden.
-- Ola 2 en preparación: TRZ-112 de persona 5 ya está integrado (PR #94). Hay helpers internos probados para despacho y scan/unscan v2; los productores activos siguen en v1. Falta integrar el contrato/adaptadores de persona 2, completar recepción/remitos y ejecutar la prueba conjunta antes de retirar TM111. No se modificaron `src/lib/erp`, configuración por empresa ni el contrato publicado.
+- Ola 2 integrada el 26/11/2026: contrato/adaptadores v2 de persona 2 y productores pendientes de `codex/persona3-erp-v2`, sobre TRZ-112. Incluye despacho por ítem, scan/unscan, recepción del último pallet y remito firmado. El contrato preserva observaciones con cantidad/unidad desconocida. La migración `20261126150000_trz111_enable_mixed_erp.sql` retira TM111 manteniendo los controles de contenido. Los apartados fechados anteriores documentan el estado histórico.
+
+## Cierre de integración del 26/11/2026
+
+Se integraron las ramas pendientes de persona 3, el contrato ERP v2, TRZ-116 y la documentación C4 del ERP en `codex/persona3-integracion-final`, desde `develop`. El conflicto de documentación de la rama inicial se resolvió conservando el estado más reciente.
+
+TRZ-116 incluye la solución de locks acordada: `return_pallet_to_warehouse` bloquea pallet → depósito → saldos ERP ordenados por lote. La comprobación del depósito conserva el resultado `warehouse_inactive` y el reingreso sigue siendo completo, idempotente y auditable. No se modificaron las migraciones históricas de reingreso.
+
+La prueba SQL de remitos esperaba que ningún chofer pudiera leerlos. TRZ-52 ahora autoriza al chofer asignado; se actualizó esa expectativa sin cambiar las políticas de permisos.
+
+Se corrigió un replay tardío: una ronda de scan ya revertida no vuelve a cargar el pallet al reintentarse, tanto en mock como en ERPNext. Los eventos v1 conservan sus identidades y payloads.
+
+Pruebas adicionales optativas, exclusivamente contra el contenedor Supabase local:
+
+```powershell
+$env:TRAZFLOW_SQL_INTEGRATION='1'
+npx vitest run src/lib/pallets/erp-v2-integration.test.ts src/lib/pallets/return-concurrency.test.ts
+```
+
+La primera usa payloads de los productores SQL reales, el procesador real del outbox y un adaptador mock aislado por empresa; prueba replay v1/v2 y observaciones incompletas. ERPNext se verifica con HTTP simulado. La segunda usa dos sesiones PostgreSQL independientes y demuestra que un reingreso esperando el depósito todavía no tomó los saldos ERP; el armado concurrente y el reingreso terminan correctamente. Sus fixtures se limpian exclusivamente en la base local. Esto no afirma una prueba contra un ERPNext/Odoo real; las escrituras Odoo conservan las limitaciones del adaptador existente.
 
 ## Interfaz para el equipo
 
@@ -53,7 +72,7 @@ Se aceptan `delivered` y `delivery_discrepancy`, y `received` histórico. Se reg
 
 El pallet vuelve a `in_warehouse`, al depósito original activo y sin posición física asignada. Se ubica después por el flujo existente de ubicaciones. Aparece nuevamente entre los disponibles para asociar a otra orden. Con lotes ERP se conserva el tope por saldo: el ERP debe reflejar el stock devuelto antes de admitirlo en depósito; la RPC no inventa saldo ERP ni realiza transferencias entre depósitos.
 
-## Dependencia de ola 2
+## Dependencia de ola 2 (histórico, resuelta el 26/11)
 
 Mientras el contrato y los adaptadores no soporten varias líneas con el mismo `palletCode`, se rechaza asociar/confirmar mixtos en órdenes con `external_id` ERP (`TM111`). Esto impide publicar únicamente el primer ítem. Se pueden armar mixtos contra saldos ERP, pero su despacho mediante una orden ERP queda pendiente de la integración acordada. Las órdenes manuales usan el flujo completo de mixtos; las órdenes ERP monolote siguen funcionando.
 
@@ -164,3 +183,31 @@ Queda por resolver antes de activar v2:
 1. **Contrato de recepción:** la rama de persona 2 exige `detected.quantity > 0` y `detected.uom` no vacío. La recepción existente admite 0/null y productos desconocidos cuya unidad ERP no se conoce. Hay que acordar una representación explícita sin inventar cantidad ni unidad ni descartar observaciones. Un faltante confirmado puede representarse con `detected: null`; cantidad desconocida no equivale a ausencia. El contrato de esa rama mantiene `lines[].outcome` en `delivered/missing/damaged`: un pallet físicamente recibido con diferencia se informa como `delivered` más `content_mismatch` en `discrepancies` y `needsReview: true`, conservando el estado interno de la base.
 2. **Orden de cierre de recepción (persona 3):** `confirm_delivery_pallet_legacy` puede cerrar la orden y disparar `enqueue_erp_delivery_report` antes de que el wrapper guarde `reception_items` y el evento `reception` del último pallet. La activación de entrega v2 debe encolar solo después de persistir esos datos en la misma transacción. Es necesario probar explícitamente el último pallet con diferencias y varios pallets.
 3. Completar payload de entrega y versión del remito firmado; conectar los helpers de despacho/scan a los productores activos, pasando el snapshot de la relación incluso al borrar o invalidar una validación. Integrar primero el contrato de persona 2 y probar productor + adaptador + outbox por empresa, incluidos reintentos v1, antes de retirar TM111.
+
+## Productores completos y prueba conjunta del 24/11/2026
+
+La migración `20261124120000_trz111_erp_delivery_payloads.sql` completa los productores y queda **pendiente de liberación**, sin aplicar al remoto. Requiere integrar la rama de contrato de persona 2 y resolver la incompatibilidad detallada abajo antes de desplegar. TM111 sigue activa.
+
+- Despacho y scan/unscan quedan conectados a v2. Un scan lleva todos los ítems; el unscan usa los ítems del evento original, incluso si ese evento es v1, y el borrado de la relación no impide revertirlo.
+- `order_pallets.erp_dispatch_items` conserva IDs locales y externos, SKU/lote, cantidad y unidad del despacho. Un cambio posterior en el catálogo no altera lo esperado ni su correspondencia con lo detectado. La API no puede preasignar ese snapshot al insertar una relación.
+- Entrega informa resultado por pallet y `contentDifferences` por ítem, con esperado/detectado, faltantes, sobrantes y texto de lo desconocido. `content_mismatch` se traduce al resultado físico `delivered`, acompañado de la diferencia y `needsReview: true`; el estado interno de la base no cambia.
+- Se movió el cierre de orden desde la función interna al wrapper, después de persistir `reception_items` y el evento `reception`. El reporte encolado contiene también el último pallet. Un reintento no agrega recepciones ni vuelve a cerrar la orden.
+- Remitos firmados emiten v2 y conservan las validaciones existentes de chofer, empresa, Storage, límites e idempotencia. Se corrigió además la búsqueda interna del QR en recepción para que no devuelva información de un pallet de otra empresa.
+
+La nueva suite `supabase/tests/trz111_erp_v2_delivery.sql` ensaya el retiro de TM111 **exclusivamente dentro de su transacción con rollback**, conservando las validaciones de contenido. Verifica dos empresas con igual orden externa, mixto y mono en una orden, invalidación/revalidación, recepción exacta del primero y diferencia en el último, catálogo cambiado después del despacho, reintento, remito firmado, reingreso y nueva orden sin modificar el historial. El retiro ensayado no forma parte de la migración de producción.
+
+Pasaron once suites SQL en PGlite temporal: las dos suites ERP v2 de persona 3, `trz111_mixed_pallets_and_return`, `us_erp04_dispatch_outbox`, `trz103_delivery_receipts`, `us_erp01_ops07_driver_delivery`, `trz100_dispatch_quantity_match`, `trz100_erp_stock_balances`, `us5_confirm_dispatch`, `us3_pallet_validation` y `trz99_dissociate_state`. Se usaron los mismos stubs/exclusiones documentados arriba, sin invocar Vault ni escribir en Supabase remoto.
+
+Diez payloads reales de la prueba conjunta pasaron los validadores y el mock de la rama de persona 2, incluido un despacho v1 guardado antes del despliegue (el remito se proyectó al DTO de archivo que usa el procesador). Se repitió cada operación para comprobar duplicados sin nuevas escrituras; cada empresa tuvo su cliente independiente. Otros nueve payloads de preparación pasaron sus validadores, incluido unscan sobre un evento v1.
+
+Además se ejecutó el **procesador real de TRZ-112**, sin modificarlo, contra sus RPC SQL reales en el motor embebido y los adaptadores mock de la rama de persona 2. Se reemplazaron únicamente sus imports del contrato por los de esa rama para ensayar la integración aún no mergeada. Se inyectó un timeout y se procesaron los reintentos: **10 eventos enviados, dos empresas, dos reintentos**, sin reescribir el payload v1. Storage se representó con los objetos/metadatos locales y bytes del tamaño declarado. Esto verifica productores, procesamiento, ruteo y mock; no constituye una prueba del ERP real ni del stack completo de Supabase.
+
+La suite habitual mantiene 635 pruebas unitarias aprobadas (6 omitidas) y hay 78 migraciones con versiones únicas. No se cambiaron dependencias ni configuración de tests del proyecto.
+
+### Único bloqueo externo reproducido: observaciones incompletas
+
+Un cero de un ítem conocido se representa como faltante (`detected: null`), manteniendo el cero original en auditoría. Cantidad desconocida no equivale a cero ni a faltante. Un SKU desconocido puede tener cantidad positiva sin que se conozca su unidad ERP. Los productores conservan esos valores como `null`, junto con `observedSku` y `observedLot`.
+
+La rama actual de persona 2 rechaza esos payloads con `detected.quantity debe ser mayor a 0` y `detected.uom es obligatoria`. La prueba conjunta reproduce el rechazo por separado de los casos válidos, sin ocultarlo como una integración aprobada. Persona 2 debe acordar y admitir una representación explícita de observaciones incompletas; las cantidades/unidades de los ítems esperados siguen siendo estrictas.
+
+Una vez integrado ese ajuste y su contrato, falta repetir el caso con desconocidos contra validadores/adaptadores y outbox, y agregar la migración que retire las dos protecciones TM111 conservando los controles de contenido. No queda trabajo pendiente de persona 1 o 5 para ese paso. No desplegar esta rama antes de esa coordinación.

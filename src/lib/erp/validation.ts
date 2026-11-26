@@ -1,6 +1,6 @@
 import {
-  ERP_CONTRACT_VERSION,
   ErpError,
+  isSupportedContractVersion,
   isDispatchDocumentState,
   type DispatchDocumentStatus,
   type DispatchReport,
@@ -10,7 +10,9 @@ import {
   DELIVERY_RECEIPT_MAX_BYTES,
   type DeliveryReceipt,
   type DeliveryReport,
+  type ContentDifference,
   type ErpWarehouse,
+  type PalletItem,
   type PalletScanReport,
   type StockEntryReport,
   type StockImportReport,
@@ -21,25 +23,36 @@ import {
 export function dispatchReportProblems(report: DispatchReport): string[] {
   const problems: string[] = [];
 
-  if (report.contractVersion !== ERP_CONTRACT_VERSION) {
+  if (!isSupportedContractVersion(report.contractVersion)) {
     problems.push(`contractVersion ${String(report.contractVersion)} no soportada`);
   }
-  if (!report.idempotencyKey?.trim()) problems.push("idempotencyKey es obligatoria");
-  if (!report.orderExternalId?.trim()) problems.push("orderExternalId es obligatorio");
-  if (Number.isNaN(Date.parse(report.dispatchedAt))) problems.push("dispatchedAt no es una fecha ISO 8601");
-  if (!report.operator?.id?.trim()) problems.push("operator.id es obligatorio");
-  if (!report.lines?.length) problems.push("el despacho no tiene líneas");
+  if (!text(report.idempotencyKey)) problems.push("idempotencyKey es obligatoria");
+  if (!text(report.orderExternalId)) problems.push("orderExternalId es obligatorio");
+  if (typeof report.dispatchedAt !== "string" || Number.isNaN(Date.parse(report.dispatchedAt))) problems.push("dispatchedAt no es una fecha ISO 8601");
+  if (!text(report.operator?.id)) problems.push("operator.id es obligatorio");
+  if (!Array.isArray(report.lines) || !report.lines.length) problems.push("el despacho no tiene líneas");
 
-  const pallets = new Set<string>();
-  report.lines?.forEach((line, index) => {
+  // v1: un pallet por línea. v2 (pallets mixtos): una línea por ítem, identificada por pallet + producto + lote.
+  const seen = new Set<string>();
+  arrayOf(report.lines).forEach((line, index) => {
     const at = `lines[${index}]`;
-    if (!line.palletCode?.trim()) problems.push(`${at}.palletCode es obligatorio`);
-    else if (pallets.has(line.palletCode)) problems.push(`${at}.palletCode ${line.palletCode} está repetido`);
-    else pallets.add(line.palletCode);
-    if (!line.productExternalId?.trim()) problems.push(`${at}.productExternalId es obligatorio`);
-    if (!line.lotExternalId?.trim()) problems.push(`${at}.lotExternalId es obligatorio`);
-    if (!Number.isFinite(line.quantity) || line.quantity <= 0) problems.push(`${at}.quantity debe ser mayor a cero`);
-    if (!line.uom?.trim()) problems.push(`${at}.uom es obligatoria`);
+    if (!isObject(line)) {
+      problems.push(`${at} no es un objeto`);
+      return;
+    }
+    const identity = report.contractVersion === 1
+      ? line.palletCode
+      : [line.palletCode, line.productExternalId, line.lotExternalId].join("\u0000");
+    if (!text(line.palletCode)) problems.push(`${at}.palletCode es obligatorio`);
+    else if (seen.has(identity)) {
+      problems.push(report.contractVersion === 1
+        ? `${at}.palletCode ${line.palletCode} está repetido`
+        : `${at}: pallet ${line.palletCode}, producto ${line.productExternalId} y lote ${line.lotExternalId} repetidos (hay que sumarlos en una línea)`);
+    } else seen.add(identity);
+    if (!text(line.productExternalId)) problems.push(`${at}.productExternalId es obligatorio`);
+    if (!text(line.lotExternalId)) problems.push(`${at}.lotExternalId es obligatorio`);
+    if (!positiveQuantity(line.quantity)) problems.push(`${at}.quantity debe ser mayor a cero`);
+    if (!text(line.uom)) problems.push(`${at}.uom es obligatoria`);
   });
 
   return problems;
@@ -101,7 +114,7 @@ export function assertValidErpWarehouses(warehouses: unknown): asserts warehouse
 
 function commonDeliveryProblems(value: { contractVersion: unknown; idempotencyKey?: string; orderExternalId?: string; dispatchIdempotencyKey?: string }): string[] {
   const problems: string[] = [];
-  if (value.contractVersion !== ERP_CONTRACT_VERSION) problems.push(`contractVersion ${String(value.contractVersion)} no soportada`);
+  if (!isSupportedContractVersion(value.contractVersion)) problems.push(`contractVersion ${String(value.contractVersion)} no soportada`);
   if (typeof value.idempotencyKey !== "string" || !value.idempotencyKey.trim()) problems.push("idempotencyKey es obligatoria");
   if (typeof value.orderExternalId !== "string" || !value.orderExternalId.trim()) problems.push("orderExternalId es obligatorio");
   if (typeof value.dispatchIdempotencyKey !== "string" || !value.dispatchIdempotencyKey.trim()) {
@@ -119,14 +132,35 @@ export function deliveryReportProblems(report: DeliveryReport): string[] {
   if (!Array.isArray(report.lines) || !report.lines.length) problems.push("la entrega no tiene pallets");
   if (!Array.isArray(report.discrepancies)) problems.push("discrepancies debe ser una lista");
 
-  report.lines?.forEach?.((line, index) => {
+  arrayOf(report.lines).forEach((line, index) => {
+    if (!isObject(line)) {
+      problems.push(`lines[${index}] no es un objeto`);
+      return;
+    }
     if (typeof line?.palletCode !== "string" || !line.palletCode.trim()) problems.push(`lines[${index}].palletCode es obligatorio`);
     if (!DELIVERY_PALLET_OUTCOMES.some((outcome) => outcome === line?.outcome)) problems.push(`lines[${index}].outcome inválido`);
   });
-  report.discrepancies?.forEach?.((difference, index) => {
-    if (!DELIVERY_DISCREPANCY_TYPES.some((type) => type === difference?.type)) problems.push(`discrepancies[${index}].type inválido`);
+  arrayOf(report.discrepancies).forEach((difference, index) => {
+    const at = `discrepancies[${index}]`;
+    if (!isObject(difference)) {
+      problems.push(`${at} no es un objeto`);
+      return;
+    }
+    if (!DELIVERY_DISCREPANCY_TYPES.some((type) => type === difference?.type)) problems.push(`${at}.type inválido`);
+    else if (difference.type === "content_mismatch") {
+      if (report.contractVersion === 1) problems.push(`${at}: content_mismatch requiere contractVersion 2`);
+      if (!Array.isArray(difference.contentDifferences) || !difference.contentDifferences.length) {
+        problems.push(`${at}.contentDifferences es obligatorio con content_mismatch`);
+      } else {
+        difference.contentDifferences.forEach((content, contentIndex) => {
+          problems.push(...contentDifferenceProblems(content, `${at}.contentDifferences[${contentIndex}]`));
+        });
+      }
+    } else if (difference.contentDifferences !== undefined) {
+      problems.push(`${at}.contentDifferences solo va con content_mismatch`);
+    }
   });
-  const hasDifferences = (report.discrepancies?.length ?? 0) > 0 || report.lines?.some?.((line) => line?.outcome !== "delivered");
+  const hasDifferences = arrayOf(report.discrepancies).length > 0 || arrayOf(report.lines).some((line) => line?.outcome !== "delivered");
   if (hasDifferences && report.needsReview !== true) problems.push("una entrega con diferencias tiene que quedar para revisión");
   return problems;
 }
@@ -165,7 +199,7 @@ function text(value: unknown): boolean {
 
 export function stockEntryReportProblems(entry: StockEntryReport): string[] {
   const problems: string[] = [];
-  if (entry.contractVersion !== ERP_CONTRACT_VERSION) problems.push(`contractVersion ${String(entry.contractVersion)} no soportada`);
+  if (!isSupportedContractVersion(entry.contractVersion)) problems.push(`contractVersion ${String(entry.contractVersion)} no soportada`);
   if (!text(entry.idempotencyKey) || !entry.idempotencyKey.startsWith("stock-entry:")) problems.push("idempotencyKey inválida");
   if (!STOCK_ENTRY_TYPES.some((type) => type === entry.entryType)) problems.push("entryType inválido");
   for (const field of ["productExternalId", "lotExternalId", "warehouseExternalId", "uom", "reason"] as const) {
@@ -183,7 +217,7 @@ export function assertValidStockEntryReport(entry: StockEntryReport): void {
 
 export function stockImportReportProblems(entry: StockImportReport): string[] {
   const problems: string[] = [];
-  if (entry.contractVersion !== ERP_CONTRACT_VERSION) problems.push(`contractVersion ${String(entry.contractVersion)} no soportada`);
+  if (!isSupportedContractVersion(entry.contractVersion)) problems.push(`contractVersion ${String(entry.contractVersion)} no soportada`);
   if (!text(entry.idempotencyKey) || !entry.idempotencyKey.startsWith("stock-import:")) problems.push("idempotencyKey inválida");
   for (const field of ["sku", "productName", "lotNumber", "warehouseExternalId", "uom"] as const) {
     if (!text(entry[field])) problems.push(`${field} es obligatorio`);
@@ -201,16 +235,36 @@ export function assertValidStockImportReport(entry: StockImportReport): void {
 
 export function palletScanReportProblems(scan: PalletScanReport): string[] {
   const problems: string[] = [];
-  if (scan.contractVersion !== ERP_CONTRACT_VERSION) problems.push(`contractVersion ${String(scan.contractVersion)} no soportada`);
+  if (!isSupportedContractVersion(scan.contractVersion)) problems.push(`contractVersion ${String(scan.contractVersion)} no soportada`);
   if (scan.action !== "scan" && scan.action !== "unscan") problems.push("action inválida");
   const prefix = scan.action === "unscan" ? "pallet-unscan:" : "pallet-scan:";
   if (!text(scan.idempotencyKey) || !scan.idempotencyKey.startsWith(prefix)) problems.push("idempotencyKey inválida");
   if (!text(scan.scanIdempotencyKey) || !scan.scanIdempotencyKey.startsWith("pallet-scan:")) problems.push("scanIdempotencyKey inválida");
   if (scan.action === "scan" && scan.scanIdempotencyKey !== scan.idempotencyKey) problems.push("un escaneo se refiere a sí mismo");
-  for (const field of ["orderExternalId", "palletCode", "productExternalId", "lotExternalId", "uom"] as const) {
+  for (const field of ["orderExternalId", "palletCode"] as const) {
     if (!text(scan[field])) problems.push(`${field} es obligatorio`);
   }
-  if (typeof scan.quantity !== "number" || !Number.isFinite(scan.quantity) || scan.quantity <= 0) problems.push("quantity debe ser mayor a 0");
+  if (scan.contractVersion === 2) {
+    // v2: todos los ítems del pallet, sin producto + lote repetido.
+    if (!Array.isArray(scan.items) || !scan.items.length) problems.push("items debe tener al menos un ítem");
+    const seen = new Set<string>();
+    arrayOf(scan.items).forEach((item, index) => {
+      if (!isObject(item)) {
+        problems.push(`items[${index}] no es un objeto`);
+        return;
+      }
+      problems.push(...palletItemProblems(item, `items[${index}]`));
+      const identity = `${item?.productExternalId}\u0000${item?.lotExternalId}`;
+      if (seen.has(identity)) problems.push(`items[${index}]: producto ${item.productExternalId} y lote ${item.lotExternalId} repetidos`);
+      seen.add(identity);
+    });
+  } else {
+    for (const field of ["productExternalId", "lotExternalId", "uom"] as const) {
+      if (!text((scan as Record<string, unknown>)[field])) problems.push(`${field} es obligatorio`);
+    }
+    const quantity = (scan as { quantity?: unknown }).quantity;
+    if (typeof quantity !== "number" || !Number.isFinite(quantity) || quantity <= 0) problems.push("quantity debe ser mayor a 0");
+  }
   if (typeof scan.at !== "string" || Number.isNaN(Date.parse(scan.at))) problems.push("at no es una fecha ISO 8601");
   return problems;
 }
@@ -218,4 +272,58 @@ export function palletScanReportProblems(scan: PalletScanReport): string[] {
 export function assertValidPalletScanReport(scan: PalletScanReport): void {
   const problems = palletScanReportProblems(scan);
   if (problems.length) throw new ErpError("validation", `Escaneo de despacho inválido: ${problems.join("; ")}`);
+}
+
+/**
+ * Ítems de un escaneo en la forma v2. Un evento v1 (un producto y un lote, como quedó guardado en el outbox) se
+ * normaliza a un solo ítem; el payload no se modifica.
+ */
+export function palletScanItems(scan: PalletScanReport): PalletItem[] {
+  if (scan.contractVersion === 2) return scan.items;
+  return [{ productExternalId: scan.productExternalId, lotExternalId: scan.lotExternalId, quantity: scan.quantity, uom: scan.uom }];
+}
+
+/** Los payloads llegan del outbox como JSON: un elemento puede ser null o cualquier cosa. */
+function isObject<T>(value: T): value is T & object {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+/** Lo que haya en un campo que debería ser lista; si no es lista, ningún elemento (el problema se reporta aparte). */
+function arrayOf<T>(value: T[] | undefined): T[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function positiveQuantity(value: unknown): boolean {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+
+function palletItemProblems(item: PalletItem | null | undefined, at: string): string[] {
+  if (!isObject(item)) return [`${at} no es un objeto`];
+  const problems: string[] = [];
+  for (const field of ["productExternalId", "lotExternalId", "uom"] as const) {
+    if (!text(item[field])) problems.push(`${at}.${field} es obligatorio`);
+  }
+  if (!positiveQuantity(item.quantity)) problems.push(`${at}.quantity debe ser mayor a 0`);
+  return problems;
+}
+
+/** `expected` null = sobrante, `detected` null = faltante; nunca los dos. Lo no identificado va como texto observado. */
+function contentDifferenceProblems(difference: ContentDifference | null | undefined, at: string): string[] {
+  if (!isObject(difference)) return [`${at} no es un objeto`];
+  const problems: string[] = [];
+  if (difference.expected == null && difference.detected == null) problems.push(`${at}: expected y detected no pueden ser los dos null`);
+  if (difference.expected != null) problems.push(...palletItemProblems(difference.expected, `${at}.expected`));
+  const detected = difference.detected;
+  if (detected != null && !isObject(detected)) problems.push(`${at}.detected no es un objeto`);
+  else if (detected != null) {
+    for (const field of ["productExternalId", "lotExternalId", "observedSku", "observedLot"] as const) {
+      if (detected[field] !== null && !text(detected[field])) problems.push(`${at}.detected.${field} debe ser texto o null`);
+    }
+    if (detected.productExternalId === null && !text(detected.observedSku)) {
+      problems.push(`${at}.detected: sin productExternalId hace falta observedSku`);
+    }
+    if (detected.uom !== null && !text(detected.uom)) problems.push(`${at}.detected.uom debe ser texto o null`);
+    if (detected.quantity !== null && !positiveQuantity(detected.quantity)) problems.push(`${at}.detected.quantity debe ser mayor a 0 o null`);
+  }
+  return problems;
 }
