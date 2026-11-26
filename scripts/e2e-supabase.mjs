@@ -106,6 +106,8 @@ createServer(async (req, res) => {
   if (url.pathname === '/rest/v1/erp_sync_runs' || url.pathname === '/rest/v1/erp_company_settings') return send(null);
   if (url.pathname === '/rest/v1/rpc/get_expiration_thresholds') return send([{ critical_days: 30, caution_days: 60, upcoming_days: 90 }]);
   if (url.pathname === '/rest/v1/rpc/erp_stock_overview') return send([]);
+  // TRZ-112: sin proveedor guardado; cada suite decide el fallback ERP por su entorno.
+  if (url.pathname === '/rest/v1/rpc/erp_company_provider') return send(null);
   if (url.pathname === '/rest/v1/rpc/erp_outbox_driver_claim') return send([]);
   if (url.pathname === '/rest/v1/rpc/erp_integration_summary') return send([{ pending_count: 1, unreported_count: 1 }]);
   if (url.pathname === '/rest/v1/rpc/erp_dispatched_unreported') return send([{ order_id: orderId, order_external_id: 'ERP-ORDEN-DEMO-001', order_status: 'confirmed', confirmed_at: '2026-10-25T12:00:00Z', distributor_name: 'Destinatario Demo', event_id: '40000000-0000-4000-8000-000000000001', event_status: 'failed', attempts: 1, last_error_code: 'timeout', next_attempt_at: null, total_count: 1 }]);
