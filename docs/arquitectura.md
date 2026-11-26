@@ -51,5 +51,5 @@ acciones los procesan con reintentos e idempotencia.
 | Reglas de acceso | [modelo de roles](modelo-de-roles.md), migraciones RLS/RPC en [supabase](../supabase/migrations) |
 | Contrato y tests compartidos | [contrato](erp-contract.md), [contract-suite.ts](../src/lib/erp/contract-suite.ts) |
 
-El diagrama de componentes del módulo ERP, nivel 3 con fuente e imagen, corresponde
-a Guille en TRZ-125 y todavía no está en develop. Enlazar aquí su entrega al integrarla.
+El diagrama de componentes del módulo ERP (nivel 3, con fuente Mermaid e imagen) está en
+[arquitectura-erp-componentes.md](arquitectura-erp-componentes.md) (TRZ-125).
