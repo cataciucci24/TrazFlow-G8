@@ -96,7 +96,7 @@ export function runErpClientContract(name: string, makeClient: () => ErpClient, 
           palletCode: "PAL-CONTRACT", productExternalId: line.productExternalId, lotExternalId: lot.externalId, quantity: 1, uom: line.uom }] };
       const stock: StockEntryReport = { contractVersion: ERP_CONTRACT_VERSION, idempotencyKey: "stock-entry:contract", entryType: "receipt", productExternalId: line.productExternalId,
         lotExternalId: lot.externalId, warehouseExternalId: line.warehouseExternalId, quantity: 1, uom: line.uom, reason: "Contrato", requestedAt: at, requestedBy: dispatch.operator };
-      const scan: PalletScanReport = { contractVersion: ERP_CONTRACT_VERSION, idempotencyKey: `pallet-scan:${order.externalId}:PAL-CONTRACT:1`,
+      const scan: PalletScanReport = { contractVersion: 1, idempotencyKey: `pallet-scan:${order.externalId}:PAL-CONTRACT:1`,
         scanIdempotencyKey: `pallet-scan:${order.externalId}:PAL-CONTRACT:1`, action: "scan", orderExternalId: order.externalId,
         palletCode: "PAL-CONTRACT", productExternalId: line.productExternalId, lotExternalId: lot.externalId, quantity: 1, uom: line.uom, at };
       return { dispatch, stock, scan };
@@ -113,6 +113,31 @@ export function runErpClientContract(name: string, makeClient: () => ErpClient, 
       const first = await send(); const second = await send();
       assert.equal(first.duplicate, false); assert.equal(second.duplicate, true);
       assert.ok(first.erpReference); assert.equal(second.erpReference, first.erpReference);
+    });
+    // TRZ-111 (contrato v2): pallet mixto con dos lotes del mismo producto.
+    const mixedInputs = async (client: ErpClient) => {
+      const { dispatch } = await inputs(client);
+      const [line] = dispatch.lines;
+      const lots = (await client.pullMasterData()).lots.filter(lot => lot.productExternalId === line.productExternalId);
+      assert.ok(lots.length >= 2, "el caso mixto necesita dos lotes del mismo producto");
+      const items = lots.slice(0, 2).map(lot => ({ productExternalId: line.productExternalId, lotExternalId: lot.externalId, quantity: 1, uom: line.uom }));
+      const key = `pallet-scan:${dispatch.orderExternalId}:PAL-MIXTO:1`;
+      const mixedDispatch: DispatchReport = { ...dispatch, contractVersion: 2,
+        lines: items.map(item => ({ orderLineExternalId: line.orderLineExternalId, palletCode: "PAL-MIXTO", ...item })) };
+      const mixedScan: PalletScanReport = { contractVersion: 2, idempotencyKey: key, scanIdempotencyKey: key, action: "scan",
+        orderExternalId: dispatch.orderExternalId, palletCode: "PAL-MIXTO", items, at: dispatch.dispatchedAt };
+      return { mixedDispatch, mixedScan };
+    };
+    capabilityTest("dispatch", "pallet mixto v2: el pallet se repite en el despacho y el reintento, con las filas en otro orden, es duplicate", async () => {
+      const client = makeClient(); const { mixedDispatch } = await mixedInputs(client);
+      const first = await client.reportDispatch(mixedDispatch);
+      const retry = await client.reportDispatch({ ...mixedDispatch, lines: [...mixedDispatch.lines].reverse() });
+      assert.equal(first.duplicate, false); assert.equal(retry.duplicate, true); assert.equal(retry.erpReference, first.erpReference);
+    });
+    capabilityTest("palletScan", "pallet mixto v2: el scan con todos los ítems y su reintento es duplicate", async () => {
+      const client = makeClient(); const { mixedScan } = await mixedInputs(client);
+      const first = await client.reportPalletScan(mixedScan); const retry = await client.reportPalletScan(mixedScan);
+      assert.equal(first.duplicate, false); assert.equal(retry.duplicate, true); assert.equal(retry.erpReference, first.erpReference);
     });
     capabilityTest("deliveryNotReady", "entrega anterior al despacho devuelve not_ready reintentable", async () => {
       const client = makeClient(); const { dispatch } = await inputs(client);

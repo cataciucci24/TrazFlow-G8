@@ -2,7 +2,7 @@ import "server-only";
 
 import type { ErpClient } from "../erp/client.ts";
 import { checkErpDispatchDocuments } from "../erp-outbox/dispatch-documents.ts";
-import { ERP_CONTRACT_VERSION, ErpError, isErpError } from "../erp/types.ts";
+import { ERP_CONTRACT_VERSIONS, ErpError, isErpError, isSupportedContractVersion } from "../erp/types.ts";
 import { toErpSyncRunSummary, type ErpSyncRunSummary } from "./types.ts";
 import { mapErpUnit } from "./units.ts";
 
@@ -178,8 +178,8 @@ async function fromErp<T>(what: string, call: () => Promise<T>): Promise<T> {
 }
 
 function assertContract(version: unknown) {
-  if (version !== ERP_CONTRACT_VERSION) {
-    throw new ErpError("invalid_response", `El ERP respondió con la versión de contrato ${String(version)}; TrazFlow espera ${ERP_CONTRACT_VERSION}.`);
+  if (!isSupportedContractVersion(version)) {
+    throw new ErpError("invalid_response", `El ERP respondió con la versión de contrato ${String(version)}; TrazFlow acepta ${ERP_CONTRACT_VERSIONS.join(", ")}.`);
   }
 }
 
