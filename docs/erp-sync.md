@@ -139,7 +139,7 @@ corre el mismo flujo de arriba para cada empresa con ERP, sin usuario. Durante e
   del ERP en los registros importados (SKU, nombre, unidad, lote, vencimiento, cantidad, cliente, fecha) ni borrar
   esos registros. El estado operativo (`status`, ubicación) sigue el flujo normal.
 
-## Depósitos (TRZ-101)
+## Depósitos (TRZ-101 y TRZ-116)
 
 Los depósitos de TrazFlow están en la tabla `warehouses`: `code` (el que usan ubicaciones, pallets y saldos; no
 cambia nunca), `name`, `external_id` (null si se cargó en TrazFlow), `source_system`, `active` y `synced_at`. Únicos
@@ -150,10 +150,22 @@ por `(company_id, code)` y `(company_id, external_id)`. `warehouse_locations`, `
 - **Empresas que ya existían:** la migración les crea `DEP-01` ("Depósito principal"). Sus ubicaciones, QR,
   historial y pallets no cambian.
 - **Empresas nuevas:** las que se dan de alta desde la app (TRZ-112) reciben `DEP-01` "Depósito principal",
-  transitorio hasta el alta de depósitos de TRZ-116. Las que se cargan a mano no reciben ninguno (ver
+  incluso con el alta de depósitos de TRZ-116. Las que se cargan a mano no reciben ninguno (ver
   `supabase/seeds/001_demo.sql`). Con ERP, la primera sincronización trae los suyos.
-- **RLS:** logística y depósito de la empresa leen. Nadie escribe por la API: los del ERP los escribe
-  `erp_sync_apply_warehouses`.
+- **Administración (TRZ-116):** desde Ubicaciones → **Administrar depósitos**, logística ve código, nombre,
+  origen, estado y cantidad de ubicaciones. Puede crear depósitos manuales, editarles el nombre y activarlos
+  o desactivarlos. El código no se edita. Antes de desactivar se pide confirmación y la base rechaza la operación
+  si hay pallets `in_warehouse` o `assigned`. El control se coordina con ingresos y reingresos de pallets.
+- **Permisos y ERP:** logística y depósito leen los depósitos de su empresa; solo logística administra los
+  manuales mediante RPC con autorización por empresa. Los campos administrados por ERP son de solo lectura en
+  esta pantalla y los actualiza `erp_sync_apply_warehouses`. Si la empresa tiene proveedor ERP guardado, se
+  oculta el alta manual y la RPC también la rechaza (`TF116`). Onboarding conserva su creación de `DEP-01`.
+- **Limitación transitoria:** si el ERP se configura únicamente con `ERP_ENV_COMPANY_ID` y `ERP_PROVIDER`, la
+  interfaz y la Server Action ocultan o rechazan el alta, pero PostgreSQL no puede leer esas variables. Una llamada
+  directa a la RPC todavía puede crear depósitos hasta registrar el proveedor en la configuración por empresa;
+  su resolución requiere coordinación con la persona responsable de TRZ-112.
+- **Distribución:** el permiso de edición de `layout` de TRZ-115 es independiente de estos campos: la política
+  actual permite a logística editarlo también en depósitos ERP. Ese comportamiento sigue pendiente de confirmación.
 - **Al crear una ubicación o un pallet** se puede indicar el depósito (la app muestra el selector solo si hay más
   de uno activo). Sin indicarlo, la base usa el único depósito activo (`default_warehouse_code`). Errores:
   `TF110` sin depósitos, `TF111` hay varios y no se eligió, `TF112` depósito inactivo, `23503` no existe. El

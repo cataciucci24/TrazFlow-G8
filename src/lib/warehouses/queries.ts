@@ -15,3 +15,14 @@ export async function getWarehouses(companyId: string): Promise<Warehouse[]> {
   if (error) throw new Error(`No se pudieron leer los depósitos (${error.code}).`, { cause: error });
   return (data ?? []).map(toWarehouse);
 }
+
+export async function getWarehouseLocationCounts(companyId: string, warehouses: Warehouse[]): Promise<Record<string, number>> {
+  const supabase = await createClient();
+  const entries = await Promise.all(warehouses.map(async ({ code }) => {
+    const { count, error } = await supabase.from("warehouse_locations").select("id", { count: "exact", head: true })
+      .eq("company_id", companyId).eq("warehouse_code", code);
+    if (error) throw new Error(`No se pudieron contar las ubicaciones (${error.code}).`, { cause: error });
+    return [code, count ?? 0] as const;
+  }));
+  return Object.fromEntries(entries);
+}
