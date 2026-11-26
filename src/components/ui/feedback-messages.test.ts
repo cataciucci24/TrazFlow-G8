@@ -27,4 +27,7 @@ test("presenta errores de registro comprensibles sin mostrar diagnósticos inter
   assert.match(registrationErrorMessage("User already registered"), /Ya existe una cuenta/);
   assert.match(registrationErrorMessage("Email rate limit exceeded"), /Esperá unos minutos/);
   assert.equal(registrationErrorMessage("Database error saving new user"), "No se pudo crear la cuenta. Revisá los datos e intentá nuevamente.");
+  // TRZ-112: errores del alta de empresa, solo por clave conocida.
+  assert.match(registrationErrorMessage("invalid-cuit"), /CUIT no es válido/);
+  assert.match(registrationErrorMessage("invalid-company-name"), /nombre de la empresa/);
 });

@@ -14,8 +14,10 @@ y chofer conservan su navegación y no acceden al catálogo comercial.
 - `subscription_plans`: catálogo ordenado, precios enteros en centavos de USD,
   límites de operadores y pallets por mes, impresoras y equipamiento.
 - `company_plans`: una asignación por empresa, enlazada por su `company_id`.
-  La ausencia de fila significa «Sin plan asignado». No se asigna un plan al
-  crear empresas o usuarios.
+  La ausencia de fila significa «Sin plan asignado». Desde TRZ-112, una empresa
+  que se da de alta desde la app elige su plan en el alta (solo Starter o Growth:
+  los de precio publicado) y `create_company_with_manager` lo asigna. Las empresas
+  cargadas a mano (como TrazFlow Demo) siguen sin plan hasta que se les asigne uno.
 - `NULL` en límites significa ilimitado; en precios, cotización a medida.
   La cantidad de impresoras nula se muestra como «No especificado»; cero en
   precios se conserva como cero. La moneda se toma del catálogo (actualmente USD).

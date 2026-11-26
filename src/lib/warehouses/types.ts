@@ -1,7 +1,8 @@
 /**
  * Depósitos de TrazFlow (TRZ-101, tabla warehouses). Sin entorno ni red: seguro para componentes cliente.
  *
- * Una empresa sin ERP tiene los depósitos que se cargaron en el onboarding (las que ya existían, DEP-01). Con ERP,
+ * Una empresa sin ERP tiene los depósitos que se cargaron en el onboarding (las que ya existían y las dadas de alta
+ * desde la app, DEP-01). Con ERP,
  * la sincronización trae los suyos. `code` es lo que guardan ubicaciones, pallets y saldos, y no cambia nunca.
  */
 export type Warehouse = {

@@ -2,7 +2,7 @@
 
 Cada empresa configura su propio ERP desde la app. La sincronización, el outbox y los cron usan el ERP de la empresa
 que corresponde: dos empresas con ERPs distintos no se cruzan datos ni envíos. La parte 2 (alta de empresa desde
-la app) va en otro PR.
+la app) está en [onboarding](onboarding.md#1-dar-de-alta-la-empresa-trz-112): una empresa nueva arranca sin ERP.
 
 Migración: `supabase/migrations/20261124100000_trz112_company_erp.sql`. Prueba con dos empresas:
 `supabase/tests/trz112_company_erp_isolation.sql`.

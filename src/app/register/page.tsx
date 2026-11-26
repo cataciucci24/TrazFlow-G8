@@ -20,7 +20,7 @@ export default async function RegisterPage({
         <div className="text-center">
           <div className="mb-5 flex justify-center"><BrandLogo /></div>
           <h1 className="text-3xl font-bold tracking-tight text-slate-950">Crear cuenta</h1>
-          <p className="mt-2 text-sm text-stone-500">Registrate para solicitar acceso a TrazFlow</p>
+          <p className="mt-2 text-sm text-stone-500">Sumate a tu empresa o dala de alta en TrazFlow</p>
         </div>
 
         <div className="surface p-6 sm:p-8">

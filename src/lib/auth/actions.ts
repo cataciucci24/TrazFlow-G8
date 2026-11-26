@@ -7,6 +7,8 @@ import { createClient } from "@/lib/supabase/server";
 import { isRequestedRole } from "@/lib/registration/options";
 import { getRegistrationCompanies } from "@/lib/registration/queries";
 import { normalizeName } from "@/lib/registration/name";
+import { normalizeCompanyName } from "@/lib/registration/company";
+import { normalizeCuit } from "@/lib/registration/cuit";
 
 /**
  * Login con email + contraseña.
@@ -50,34 +52,45 @@ export async function signUp(formData: FormData) {
   // Acción pública: no lleva requireUserProfile(), el usuario todavía no existe.
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
-  const companyId = String(formData.get("companyId") ?? "");
-  const role = String(formData.get("role") ?? "");
+  const mode = formData.get("mode") === "new" ? "new" : "join";
 
   // Validar todo en el server: lo que manda el cliente no es confiable
-  if (
-    !name || !email ||
-    password.length < 8 ||
-    !companyId ||
-    !isRequestedRole(role)
-  ) {
+  if (!name || !email || password.length < 8) {
     redirect("/register?error=" + encodeURIComponent("Datos inválidos"));
   }
 
-  let companies;
-  try {
-    companies = await getRegistrationCompanies();
-  } catch (error) {
-    console.error("No se pudieron validar las empresas del registro", error);
-    redirect("/register?error=" + encodeURIComponent("No pudimos validar la empresa. Intentá nuevamente."));
-  }
-  if (!companies.some((company) => company.id === companyId)) {
-    redirect("/register?error=" + encodeURIComponent("Elegí una empresa disponible."));
+  let metadata: Record<string, string>;
+  if (mode === "new") {
+    // TRZ-112: la empresa se crea recién en /complete-registration, con el email confirmado y el plan elegido.
+    const companyName = normalizeCompanyName(formData.get("companyName"));
+    const taxId = normalizeCuit(formData.get("taxId"));
+    if (!companyName) redirect("/register?error=invalid-company-name");
+    if (!taxId) redirect("/register?error=invalid-cuit");
+    metadata = { name, registration_mode: "new", company_name: companyName, company_tax_id: taxId };
+  } else {
+    const companyId = String(formData.get("companyId") ?? "");
+    const role = String(formData.get("role") ?? "");
+    if (!companyId || !isRequestedRole(role)) {
+      redirect("/register?error=" + encodeURIComponent("Datos inválidos"));
+    }
+
+    let companies;
+    try {
+      companies = await getRegistrationCompanies();
+    } catch (error) {
+      console.error("No se pudieron validar las empresas del registro", error);
+      redirect("/register?error=" + encodeURIComponent("No pudimos validar la empresa. Intentá nuevamente."));
+    }
+    if (!companies.some((company) => company.id === companyId)) {
+      redirect("/register?error=" + encodeURIComponent("Elegí una empresa disponible."));
+    }
+    metadata = { name, registration_mode: "join", company_id: companyId, requested_role: role };
   }
 
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signUp({
     email, password,
-    options: { data: { name, company_id: companyId, requested_role: role } },
+    options: { data: metadata },
   });
   if (error || !data.user) {
     console.error("Error creando cuenta", { code: error?.code, status: error?.status });

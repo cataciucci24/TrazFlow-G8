@@ -149,8 +149,9 @@ por `(company_id, code)` y `(company_id, external_id)`. `warehouse_locations`, `
 
 - **Empresas que ya existían:** la migración les crea `DEP-01` ("Depósito principal"). Sus ubicaciones, QR,
   historial y pallets no cambian.
-- **Empresas nuevas:** no reciben un depósito automático. Sin ERP, se cargan en el onboarding (hoy, como las
-  empresas, con un `insert` a mano; ver `supabase/seeds/001_demo.sql`). Con ERP, los trae la primera sincronización.
+- **Empresas nuevas:** las que se dan de alta desde la app (TRZ-112) reciben `DEP-01` "Depósito principal",
+  transitorio hasta el alta de depósitos de TRZ-116. Las que se cargan a mano no reciben ninguno (ver
+  `supabase/seeds/001_demo.sql`). Con ERP, la primera sincronización trae los suyos.
 - **RLS:** logística y depósito de la empresa leen. Nadie escribe por la API: los del ERP los escribe
   `erp_sync_apply_warehouses`.
 - **Al crear una ubicación o un pallet** se puede indicar el depósito (la app muestra el selector solo si hay más
