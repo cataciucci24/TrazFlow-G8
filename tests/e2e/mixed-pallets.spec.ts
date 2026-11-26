@@ -21,7 +21,11 @@ async function login(page: Page, email: string) {
   await page.getByLabel('Email').fill(`${email}@trazflow.test`);
   await page.getByLabel('Contraseña').fill('test1234');
   await page.getByRole('button', { name: 'Ingresar', exact: true }).click();
-  await expect(page).not.toHaveURL(/\/login/, { timeout: 60_000 });
+  // Login pasa por complete-registration y dashboard; el chofer tiene otra redirección.
+  // Esperar su destino final evita que el siguiente goto compita con esa navegación.
+  await expect(page).toHaveURL(email === 'chofer' ? /\/dashboard\/deliveries$/ : /\/dashboard$/, { timeout: 60_000 });
+  await expect(page.getByRole('main')).toBeVisible();
+  if (email === 'chofer') await expect(page.getByRole('heading', { name: 'Mis entregas', exact: true })).toBeVisible();
 }
 async function createOrder(page: Page) {
   await page.goto('/dashboard/orders/new');
