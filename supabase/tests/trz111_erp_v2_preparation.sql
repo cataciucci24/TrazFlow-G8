@@ -61,24 +61,25 @@ select pg_temp.check_v2(public.erp_pallet_items_v2('11200000-0000-0000-0000-0000
 select pg_temp.expect_v2_error($q$select public.erp_outbox_dispatch_payload_v2('11200000-0000-0000-0000-000000000061','11200000-0000-0000-0000-000000000011',now())$q$,'23514');
 select pg_temp.expect_v2_error($q$select public.erp_outbox_dispatch_payload_v2('11200000-0000-0000-0000-000000000061','11200000-0000-0000-0000-000000000012',now())$q$,'42501');
 
--- La preparación no modifica los triggers: el scan heredado sigue siendo v1.
+-- La migración siguiente conecta los productores: ahora el scan activo es v2.
 update public.order_pallets op set validated_at=now(),dispatch_items=expected_items,
  detected_at_dispatch=true,validated_by=(select o.created_by from public.dispatch_orders o where o.id=op.order_id)
  where order_id in ('11200000-0000-0000-0000-000000000061','11200000-0000-0000-0000-000000000062');
-select pg_temp.check_v2((select count(*)=2 and bool_and(payload->>'contractVersion'='1') from public.erp_outbox_events
- where company_id in ('11200000-0000-0000-0000-000000000001','11200000-0000-0000-0000-000000000002')),'productores activos siguen en v1');
+select pg_temp.check_v2((select count(*)=2 and bool_and(payload->>'contractVersion'='2') from public.erp_outbox_events
+ where company_id in ('11200000-0000-0000-0000-000000000001','11200000-0000-0000-0000-000000000002')),'productores activos conectados a v2');
 select set_config('test.dispatch_v2',public.erp_outbox_dispatch_payload_v2('11200000-0000-0000-0000-000000000061','11200000-0000-0000-0000-000000000011','2026-11-24T12:00:00Z')::text,true);
 select pg_temp.check_v2((current_setting('test.dispatch_v2')::jsonb->>'contractVersion')='2'
  and jsonb_array_length(current_setting('test.dispatch_v2')::jsonb->'lines')=2,'despacho v2 por ítem');
 select pg_temp.check_v2((select count(distinct x->>'palletCode')=1 from jsonb_array_elements(current_setting('test.dispatch_v2')::jsonb->'lines') x),'un QR repetido entre dos líneas');
 
--- Puede revertir un scan v1 sin reescribirlo ni perder su clave original.
+-- Puede revertir el scan activo completo sin perder su clave original.
 select public.erp_pallet_scan_event_v2('11200000-0000-0000-0000-000000000061','11200000-0000-0000-0000-000000000041','unscan',now(),null);
-select pg_temp.check_v2((select payload->>'contractVersion'='2' and jsonb_array_length(payload->'items')=1
- from public.erp_outbox_events where company_id='11200000-0000-0000-0000-000000000001' and event_type='pallet_unscanned'),'unscan de v1 normalizado a un ítem');
+select pg_temp.check_v2((select payload->>'contractVersion'='2' and jsonb_array_length(payload->'items')=2
+ from public.erp_outbox_events where company_id='11200000-0000-0000-0000-000000000001' and event_type='pallet_unscanned'),'unscan con todos los ítems');
 select public.erp_pallet_scan_event_v2('11200000-0000-0000-0000-000000000061','11200000-0000-0000-0000-000000000041','scan',now(),current_setting('test.snapshot_v2')::jsonb);
 select set_config('test.scan_v2',payload::text,true) from public.erp_outbox_events
- where company_id='11200000-0000-0000-0000-000000000001' and event_type='pallet_scanned' and payload->>'contractVersion'='2';
+ where company_id='11200000-0000-0000-0000-000000000001' and event_type='pallet_scanned' and payload->>'contractVersion'='2'
+ order by idempotency_key desc limit 1;
 select pg_temp.check_v2(jsonb_array_length(current_setting('test.scan_v2')::jsonb->'items')=2,'scan atómico con ambos ítems');
 update public.products set external_uom='Changed',external_id='CHANGED' where id='11200000-0000-0000-0000-000000000021';
 update public.batches set external_id='CHANGED-LOT' where id='11200000-0000-0000-0000-000000000031';
@@ -97,6 +98,16 @@ insert into public.erp_outbox_events(company_id,event_type,aggregate_id,idempote
 select company_id,'dispatch_confirmed',id,'dispatch:SO-SHARED',public.erp_outbox_dispatch_payload_v2(id,created_by,now())
  from public.dispatch_orders where id in ('11200000-0000-0000-0000-000000000061','11200000-0000-0000-0000-000000000062');
 select pg_temp.check_v2((select count(*)=2 from public.erp_outbox_events where idempotency_key='dispatch:SO-SHARED'),'idempotencia por empresa conserva ambos eventos');
+-- Simula un scan v1 persistido antes del despliegue: se revierte desde su payload.
+insert into public.erp_outbox_events(company_id,event_type,aggregate_id,idempotency_key,payload)
+ select '11200000-0000-0000-0000-000000000002','pallet_scanned',gen_random_uuid(),'pallet-scan:SO-SHARED:'||qr_code||':99',
+ jsonb_build_object('contractVersion',1,'idempotencyKey','pallet-scan:SO-SHARED:'||qr_code||':99',
+ 'scanIdempotencyKey','pallet-scan:SO-SHARED:'||qr_code||':99','action','scan','orderExternalId','SO-SHARED','palletCode',qr_code,
+ 'productExternalId','OLD-ITEM','lotExternalId','OLD-LOT','quantity',4,'uom','Old Box','at','2026-11-24T12:00:00Z')
+ from public.pallets where id='11200000-0000-0000-0000-000000000042';
+select public.erp_pallet_scan_event_v2('11200000-0000-0000-0000-000000000062','11200000-0000-0000-0000-000000000042','unscan',now(),null);
+select pg_temp.check_v2((select payload->'items'='[{"productExternalId":"OLD-ITEM","lotExternalId":"OLD-LOT","quantity":4,"uom":"Old Box"}]'::jsonb
+ from public.erp_outbox_events where company_id='11200000-0000-0000-0000-000000000002' and event_type='pallet_unscanned'),'unscan de v1 conserva el contenido original');
 select pg_temp.check_v2(not has_function_privilege('authenticated','public.erp_pallet_items_v2(uuid,jsonb)','execute')
  and not has_function_privilege('authenticated','public.erp_outbox_dispatch_payload_v2(uuid,uuid,timestamptz)','execute')
  and not has_function_privilege('authenticated','public.erp_pallet_scan_event_v2(uuid,uuid,text,timestamptz,jsonb)','execute'),'helpers internos no expuestos a la API');

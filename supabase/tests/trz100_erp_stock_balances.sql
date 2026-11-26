@@ -664,6 +664,10 @@ values ('a3000000-0000-0000-0000-000000000011', 'a1000000-0000-0000-0000-0000000
 insert into order_pallets (order_id, pallet_id, expected)
 values ((select id from dispatch_orders where external_id = 'SO-2'), 'a3000000-0000-0000-0000-000000000011', true),
        ((select id from dispatch_orders where external_id = 'SO-2'), 'a3000000-0000-0000-0000-000000000012', true);
+-- El productor v2 consume el contenido validado de la orden, no el encabezado vigente.
+update order_pallets set detected_at_dispatch=true,validated_at=now(),
+  validated_by='a1000000-0000-0000-0000-000000000002',dispatch_items=expected_items
+where order_id in (select id from dispatch_orders where external_id in ('SO-1','SO-2'));
 select pg_temp.assert_true(
   (public.erp_outbox_dispatch_payload((select id from dispatch_orders where external_id = 'SO-1'), 'a1000000-0000-0000-0000-000000000002', now()))->'lines'
   = '[{"orderLineExternalId":"SO-1-1","palletCode":"PAL-TRZ100-2","productExternalId":"ACE","lotExternalId":"L-2","quantity":10,"uom":"Caja"}]',
