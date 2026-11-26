@@ -188,9 +188,10 @@ export type ObservedItem = {
   lotExternalId: string | null;
   observedSku: string | null;
   observedLot: string | null;
-  /** > 0 */
-  quantity: number;
-  uom: string;
+  /** > 0 cuando se conoce; null conserva una cantidad no informada. Cero conocido = detected: null. */
+  quantity: number | null;
+  /** null si no se pudo identificar la unidad, sin inferirla del ítem esperado. */
+  uom: string | null;
 };
 
 /** Una diferencia de contenido (v2): `expected` null = sobrante, `detected` null = faltante. Nunca los dos null. */

@@ -5,7 +5,26 @@
 - Ola 0: vista `pallet_contents`, interfaz compartida y adaptación de las lecturas existentes.
 - TRZ-111, ola 1: tabla de ítems, migración de los pallets existentes, armado atómico, stock ERP por ítem, validación de despacho y recepción por ítem, inventario, consultas por lote y un QR por pallet.
 - TRZ-24: reingreso completo por logística, escaneando o ingresando el QR, con motivo obligatorio y auditoría. Un reenvío usa otra orden.
-- Ola 2 implementada en la rama `codex/persona3-erp-v2`, pendiente de liberación: TRZ-112 de persona 5 está integrado (PR #94); hay productores v2 de despacho, scan/unscan, entrega y remito firmado, probados con SQL y el mock de persona 2 para los casos representables. Falta que persona 2 resuelva cantidades/unidades desconocidas y se integre su contrato, repetir ese caso y retirar TM111. Las migraciones nuevas no se aplicaron al remoto. No se modificaron `src/lib/erp`, configuración por empresa ni el contrato publicado.
+- Ola 2 integrada el 26/11/2026: contrato/adaptadores v2 de persona 2 y productores pendientes de `codex/persona3-erp-v2`, sobre TRZ-112. Incluye despacho por ítem, scan/unscan, recepción del último pallet y remito firmado. El contrato preserva observaciones con cantidad/unidad desconocida. La migración `20261126150000_trz111_enable_mixed_erp.sql` retira TM111 manteniendo los controles de contenido. Los apartados fechados anteriores documentan el estado histórico.
+
+## Cierre de integración del 26/11/2026
+
+Se integraron las ramas pendientes de persona 3, el contrato ERP v2, TRZ-116 y la documentación C4 del ERP en `codex/persona3-integracion-final`, desde `develop`. El conflicto de documentación de la rama inicial se resolvió conservando el estado más reciente.
+
+TRZ-116 incluye la solución de locks acordada: `return_pallet_to_warehouse` bloquea pallet → depósito → saldos ERP ordenados por lote. La comprobación del depósito conserva el resultado `warehouse_inactive` y el reingreso sigue siendo completo, idempotente y auditable. No se modificaron las migraciones históricas de reingreso.
+
+La prueba SQL de remitos esperaba que ningún chofer pudiera leerlos. TRZ-52 ahora autoriza al chofer asignado; se actualizó esa expectativa sin cambiar las políticas de permisos.
+
+Se corrigió un replay tardío: una ronda de scan ya revertida no vuelve a cargar el pallet al reintentarse, tanto en mock como en ERPNext. Los eventos v1 conservan sus identidades y payloads.
+
+Pruebas adicionales optativas, exclusivamente contra el contenedor Supabase local:
+
+```powershell
+$env:TRAZFLOW_SQL_INTEGRATION='1'
+npx vitest run src/lib/pallets/erp-v2-integration.test.ts src/lib/pallets/return-concurrency.test.ts
+```
+
+La primera usa payloads de los productores SQL reales, el procesador real del outbox y un adaptador mock aislado por empresa; prueba replay v1/v2 y observaciones incompletas. ERPNext se verifica con HTTP simulado. La segunda usa dos sesiones PostgreSQL independientes y demuestra que un reingreso esperando el depósito todavía no tomó los saldos ERP; el armado concurrente y el reingreso terminan correctamente. Sus fixtures se limpian exclusivamente en la base local. Esto no afirma una prueba contra un ERPNext/Odoo real; las escrituras Odoo conservan las limitaciones del adaptador existente.
 
 ## Interfaz para el equipo
 
@@ -53,7 +72,7 @@ Se aceptan `delivered` y `delivery_discrepancy`, y `received` histórico. Se reg
 
 El pallet vuelve a `in_warehouse`, al depósito original activo y sin posición física asignada. Se ubica después por el flujo existente de ubicaciones. Aparece nuevamente entre los disponibles para asociar a otra orden. Con lotes ERP se conserva el tope por saldo: el ERP debe reflejar el stock devuelto antes de admitirlo en depósito; la RPC no inventa saldo ERP ni realiza transferencias entre depósitos.
 
-## Dependencia de ola 2
+## Dependencia de ola 2 (histórico, resuelta el 26/11)
 
 Mientras el contrato y los adaptadores no soporten varias líneas con el mismo `palletCode`, se rechaza asociar/confirmar mixtos en órdenes con `external_id` ERP (`TM111`). Esto impide publicar únicamente el primer ítem. Se pueden armar mixtos contra saldos ERP, pero su despacho mediante una orden ERP queda pendiente de la integración acordada. Las órdenes manuales usan el flujo completo de mixtos; las órdenes ERP monolote siguen funcionando.
 

@@ -1,5 +1,5 @@
 -- Productores reales v2 con snapshots y entrega del último pallet.
--- La retirada de TM111 se ensaya SOLO dentro de esta transacción con rollback.
+-- Verifica la activación instalada, sin reemplazar triggers durante la prueba.
 -- Preparación interna v2. Solo contra una base LOCAL migrada; rollback completo.
 begin;
 create function pg_temp.check_v2(ok boolean, message text) returns void language plpgsql as $$
@@ -76,18 +76,13 @@ select pg_temp.check_v2((select outcome='content_mismatch' from public.validate_
 select pg_temp.check_v2((select outcome='validated' from public.validate_order_pallet_items('11200000-0000-0000-0000-000000000061',current_setting('test.qr_mix'),
  '[{"productSku":"ARZ","batchNumber":"LOT-1","quantity":10},{"productSku":"QSO","batchNumber":"LOT-2","quantity":2.5}]')),'segunda ronda de scan');
 select pg_temp.check_v2((select outcome='validated' from public.validate_order_pallet('11200000-0000-0000-0000-000000000061',current_setting('test.qr_mono'))),'mono conserva el flujo');
-select pg_temp.expect_v2_error($q$select * from public.confirm_dispatch_order('11200000-0000-0000-0000-000000000061')$q$,'TM111');
 reset role;
--- Ensayo de activación: se conservan todos los controles de contenido.
-drop trigger trg_guard_mixed_erp_order on public.order_pallets;
-create or replace function public.guard_dispatch_content() returns trigger language plpgsql security definer set search_path='' as $$
-begin
- if new.status='confirmed' and old.status<>'confirmed' and exists(select 1 from public.order_pallets op where op.order_id=new.id and op.expected
-   and ((jsonb_array_length(op.expected_items)>1 and op.dispatch_items is distinct from op.expected_items)
-     or public.pallet_content_snapshot(op.pallet_id)<>op.expected_items)) then
-   raise exception 'Contenido sin validar' using errcode='23514';
- end if; return new;
-end $$;
+update public.order_pallets set dispatch_items='[]' where order_id='11200000-0000-0000-0000-000000000061'
+  and pallet_id='11200000-0000-0000-0000-000000000041';
+select pg_temp.expect_v2_error($q$update public.dispatch_orders set status='confirmed' where id='11200000-0000-0000-0000-000000000061'$q$,'23514');
+update public.order_pallets set dispatch_items=expected_items where order_id='11200000-0000-0000-0000-000000000061'
+  and pallet_id='11200000-0000-0000-0000-000000000041';
+select pg_temp.check_v2(not exists(select 1 from pg_trigger where tgname='trg_guard_mixed_erp_order' and not tgisinternal),'activación v2 instalada');
 set local role authenticated;
 select set_config('request.jwt.claim.sub','11200000-0000-0000-0000-000000000013',true);
 select pg_temp.check_v2((select outcome='confirmed' from public.confirm_dispatch_order('11200000-0000-0000-0000-000000000061')),'despacho mixto por productor real');
@@ -153,7 +148,16 @@ select pg_temp.check_v2(public.erp_content_differences_v2('11200000-0000-0000-00
 select pg_temp.check_v2(public.erp_content_differences_v2('11200000-0000-0000-0000-000000000063','11200000-0000-0000-0000-000000000041') @>
  '[{"expected":null,"detected":{"observedSku":"UNKNOWN-POSITIVE","quantity":3,"uom":null}}]'::jsonb,'cantidad positiva desconocida tampoco tiene unidad inventada');
 select jsonb_set(current_setting('test.delivery_v2')::jsonb,'{discrepancies,0,contentDifferences}',
- public.erp_content_differences_v2('11200000-0000-0000-0000-000000000063','11200000-0000-0000-0000-000000000041')) as contract_payload,true as contract_rejected;
+ public.erp_content_differences_v2('11200000-0000-0000-0000-000000000063','11200000-0000-0000-0000-000000000041')) as contract_payload;
 select pg_temp.check_v2((select payload=current_setting('test.delivery_v2')::jsonb from public.erp_outbox_events
  where company_id='11200000-0000-0000-0000-000000000001' and event_type='delivery_confirmed'),'consulta nueva no reescribe el evento persistido');
+-- Exportación para la prueba conjunta con el procesador real y adaptadores.
+select 'TRZ111_EVENTS=' || jsonb_agg(jsonb_build_object('id',id,'company_id',company_id,
+  'idempotency_key',idempotency_key,'payload',payload,'attempts',1)
+  order by case event_type when 'pallet_scanned' then 1 when 'pallet_unscanned' then 2
+    when 'dispatch_confirmed' then 3 when 'delivery_confirmed' then 4 else 5 end,idempotency_key)::text
+from public.erp_outbox_events where company_id in
+ ('11200000-0000-0000-0000-000000000001','11200000-0000-0000-0000-000000000002');
+select 'TRZ111_INCOMPLETE=' || jsonb_set(current_setting('test.delivery_v2')::jsonb,'{discrepancies,0,contentDifferences}',
+ public.erp_content_differences_v2('11200000-0000-0000-0000-000000000063','11200000-0000-0000-0000-000000000041'))::text;
 rollback;

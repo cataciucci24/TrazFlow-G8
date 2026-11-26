@@ -322,8 +322,8 @@ function contentDifferenceProblems(difference: ContentDifference | null | undefi
     if (detected.productExternalId === null && !text(detected.observedSku)) {
       problems.push(`${at}.detected: sin productExternalId hace falta observedSku`);
     }
-    if (!text(detected.uom)) problems.push(`${at}.detected.uom es obligatoria`);
-    if (!positiveQuantity(detected.quantity)) problems.push(`${at}.detected.quantity debe ser mayor a 0`);
+    if (detected.uom !== null && !text(detected.uom)) problems.push(`${at}.detected.uom debe ser texto o null`);
+    if (detected.quantity !== null && !positiveQuantity(detected.quantity)) problems.push(`${at}.detected.quantity debe ser mayor a 0 o null`);
   }
   return problems;
 }

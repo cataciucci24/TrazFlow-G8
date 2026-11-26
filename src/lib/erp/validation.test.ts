@@ -89,3 +89,29 @@ test("payloads mal formados: los validadores devuelven problemas y nunca lanzan"
     "discrepancies[0].contentDifferences[1] no es un objeto",
   ]);
 });
+
+test("recepción v2: distingue observación incompleta de faltante y mantiene estrictos los ítems esperados", () => {
+  const detected = { productExternalId: null, lotExternalId: null, observedSku: "DESCONOCIDO", observedLot: "LOTE-X", quantity: null, uom: null };
+  const report: DeliveryReport = {
+    contractVersion: 2, idempotencyKey: "delivery:SO-0042", orderExternalId: "SO-0042", dispatchIdempotencyKey: "dispatch:SO-0042",
+    deliveredAt: "2026-11-24T16:20:00Z", driver: { id: "u-31", name: null }, needsReview: true,
+    lines: [{ palletCode: "P-0007", outcome: "delivered" }],
+    discrepancies: [{ palletCode: "P-0007", type: "content_mismatch", contentDifferences: [{ expected: null, detected }] }],
+  };
+  const difference = report.discrepancies[0].contentDifferences![0];
+  assert.deepEqual(deliveryReportProblems(report), []);
+  difference.detected = { ...detected, quantity: 3 };
+  assert.deepEqual(deliveryReportProblems(report), []);
+  for (const quantity of [0, -1, NaN, Infinity, undefined, "3"]) {
+    difference.detected = { ...detected, quantity } as unknown as typeof difference.detected;
+    assert.match(deliveryReportProblems(report).join(), /detected.quantity/);
+  }
+  for (const uom of ["", " ", undefined, 3]) {
+    difference.detected = { ...detected, uom } as unknown as typeof difference.detected;
+    assert.match(deliveryReportProblems(report).join(), /detected.uom/);
+  }
+  difference.detected = detected;
+  difference.expected = { productExternalId: "ITEM", lotExternalId: "LOT", quantity: null, uom: null } as unknown as NonNullable<typeof difference.expected>;
+  assert.match(deliveryReportProblems(report).join(), /expected.quantity/);
+  assert.match(deliveryReportProblems(report).join(), /expected.uom/);
+});

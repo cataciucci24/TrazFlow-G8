@@ -134,6 +134,16 @@ test("evento v1 sin cambios: una fila con la clave del scan, como antes", async 
   assert.equal((await client.reportPalletScan(v1)).duplicate, true);
 });
 
+test("replay de un scan después del unscan no vuelve a cargar el pallet", async () => {
+  const { client, rows, writes } = fakeErpNext([]);
+  await client.reportPalletScan(scanV2);
+  await client.reportPalletScan(unscanV2);
+  const before = writes.length;
+  assert.equal((await client.reportPalletScan(scanV2)).duplicate, true);
+  assert.deepEqual(rows(), []);
+  assert.equal(writes.length, before);
+});
+
 test("content_mismatch en el comentario: lo esperado, lo detectado y lo desconocido como texto", () => {
   const report: DeliveryReport = {
     contractVersion: 2, idempotencyKey: "delivery:SO-0042", orderExternalId: "SO-0042", dispatchIdempotencyKey: "dispatch:SO-0042",
@@ -142,10 +152,12 @@ test("content_mismatch en el comentario: lo esperado, lo detectado y lo desconoc
     discrepancies: [{ palletCode: "P-0007", type: "content_mismatch", contentDifferences: [
       { expected: ITEMS[1], detected: { ...ITEMS[1], observedSku: null, observedLot: null, quantity: 15 } },
       { expected: null, detected: { productExternalId: null, lotExternalId: null, observedSku: "GASEOSA-<X>", observedLot: "SIN-LOTE", quantity: 3, uom: "Unit" } },
+      { expected: null, detected: { productExternalId: null, lotExternalId: null, observedSku: "SIN-DATOS", observedLot: null, quantity: null, uom: null } },
     ] }],
   };
   const comment = buildDeliveryComment(report);
   assert.match(comment, /P-0007: Contenido distinto al esperado/);
   assert.match(comment, /Esperado: ITEM-JUGO lote L-JU-03, 20 Unit · Detectado: ITEM-JUGO lote L-JU-03, 15 Unit/);
   assert.match(comment, /Esperado: nada \(sobrante\) · Detectado: sin identificar en el ERP: &quot;GASEOSA-&lt;X&gt;&quot; lote &quot;SIN-LOTE&quot; \(sin identificar\), 3 Unit/);
+  assert.match(comment, /SIN-DATOS.*cantidad desconocida unidad desconocida/);
 });

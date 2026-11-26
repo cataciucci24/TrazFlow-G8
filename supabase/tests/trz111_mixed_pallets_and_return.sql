@@ -105,7 +105,7 @@ insert into public.dispatch_orders(id,company_id,distributor_id,created_by,estim
  ('11100000-0000-0000-0000-000000000063','11100000-0000-0000-0000-000000000001','11100000-0000-0000-0000-000000000051','11100000-0000-0000-0000-000000000011',current_date,'erp','MIX-ERP-ORDER');
 set local role authenticated;
 select set_config('request.jwt.claim.sub','11100000-0000-0000-0000-000000000011',true);
-select pg_temp.expect_error(format('insert into public.order_pallets(order_id,pallet_id,expected) values (%L,%L,true)', '11100000-0000-0000-0000-000000000063',current_setting('test.mixed_id')),'TM111');
+select pg_temp.check_pallet(not exists(select 1 from pg_trigger where tgname='trg_guard_mixed_erp_order' and not tgisinternal),'ERP mixto habilitado con contrato v2');
 select * from public.create_pallet_with_items('[{"batch_id":"11100000-0000-0000-0000-000000000031","quantity":1},{"batch_id":"11100000-0000-0000-0000-000000000033","quantity":7}]','DEP-01');
 select pg_temp.check_pallet((select built=7 and available=3 from public.erp_stock_overview() where batch_id='11100000-0000-0000-0000-000000000033'),'stock ERP cuenta el lote secundario del mixto');
 select set_config('test.before_failed_build',(select count(*)::text from public.pallets),true);
@@ -128,7 +128,8 @@ set local role authenticated;
 select set_config('request.jwt.claim.sub','11100000-0000-0000-0000-000000000014',true);
 select pg_temp.check_pallet((select count(*)=0 from public.dispatch_notes), 'otra empresa no lee el remito');
 select set_config('request.jwt.claim.sub','11100000-0000-0000-0000-000000000013',true);
-select pg_temp.check_pallet((select count(*)=0 from public.dispatch_notes), 'el chofer no amplía permisos de lectura de remitos');
+select pg_temp.check_pallet((select count(*)=1 from public.dispatch_notes
+  where order_id='11100000-0000-0000-0000-000000000061'), 'TRZ-52: el chofer asignado lee el remito de su entrega');
 select set_config('request.jwt.claim.sub','11100000-0000-0000-0000-000000000011',true);
 select pg_temp.check_pallet((select count(*)=1 from public.dispatch_notes
   where order_id='11100000-0000-0000-0000-000000000061'), 'logística de la empresa lee el remito');

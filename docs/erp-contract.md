@@ -1,6 +1,8 @@
 # Contrato ERP — TrazFlow ↔ ERP (US-ERP-02 / TRZ-92)
 
-> Versión del contrato: **1** (`ERP_CONTRACT_VERSION` en `src/lib/erp/types.ts`). TRZ-100 le sumó la operación
+> Versión del contrato: **2**, con lectura y replay de eventos **1 y 2** (`ERP_CONTRACT_VERSION` en `src/lib/erp/types.ts`).
+> TRZ-111 publica despacho por ítem, scan/unscan completo y diferencias de contenido; ver [`erp-contract-mixtos.md`](erp-contract-mixtos.md).
+> Historia de v1: TRZ-100 le sumó la operación
 > `getDispatchStatus` (§5.2) como **extensión aditiva**: no cambia ningún payload existente, así que la versión
 > sigue en 1. `contractVersion` versiona la forma de los payloads, y esta operación no agrega campos a ninguno.
 > TRZ-101 le sumó `warehouses` a `pullMasterData` (§4.1). Es un campo nuevo, obligatorio en la respuesta; quedó
@@ -140,7 +142,7 @@ informa en el reporte.
 
 ## 5. TrazFlow → ERP: `reportDispatch`
 
-Un reporte **por orden despachada**, con una línea por pallet que salió físicamente.
+Un reporte **por orden despachada**, con una línea por ítem del pallet que salió físicamente. Un pallet monolote conserva una sola línea.
 
 > **Contrato v2 (TRZ-111, pallets mixtos):** una línea por ítem del pallet, scan/unscan con `items` y
 > `content_mismatch` en la entrega. Ver [`erp-contract-mixtos.md`](erp-contract-mixtos.md). Los adaptadores aceptan v1 y v2.

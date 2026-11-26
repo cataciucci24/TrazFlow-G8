@@ -111,7 +111,7 @@ select pg_temp.check_v2((select payload->'items'='[{"productExternalId":"OLD-ITE
 select pg_temp.check_v2(not has_function_privilege('authenticated','public.erp_pallet_items_v2(uuid,jsonb)','execute')
  and not has_function_privilege('authenticated','public.erp_outbox_dispatch_payload_v2(uuid,uuid,timestamptz)','execute')
  and not has_function_privilege('authenticated','public.erp_pallet_scan_event_v2(uuid,uuid,text,timestamptz,jsonb)','execute'),'helpers internos no expuestos a la API');
-select pg_temp.check_v2(exists(select 1 from pg_trigger where tgname='trg_guard_mixed_erp_order' and not tgisinternal),'TM111 sigue activa');
+select pg_temp.check_v2(not exists(select 1 from pg_trigger where tgname='trg_guard_mixed_erp_order' and not tgisinternal),'TM111 retirada tras integrar v2');
 -- Payloads reales para contrastar también con el validador v2 de persona 2.
 select current_setting('test.dispatch_v2')::jsonb as contract_payload;
 select payload as contract_payload from public.erp_outbox_events

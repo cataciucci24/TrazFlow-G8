@@ -216,7 +216,9 @@ function contentDifferenceText(difference: ContentDifference): string {
 function observedItemText(item: ObservedItem): string {
   const product = item.productExternalId ?? `sin identificar en el ERP: "${item.observedSku ?? ""}"`;
   const lot = item.lotExternalId ?? (item.observedLot ? `"${item.observedLot}" (sin identificar)` : "sin lote");
-  return `${escapeHtml(product)} lote ${escapeHtml(lot)}, ${item.quantity} ${escapeHtml(item.uom)}`;
+  const quantity = item.quantity === null ? "cantidad desconocida" : String(item.quantity);
+  const uom = item.uom === null ? "unidad desconocida" : item.uom;
+  return `${escapeHtml(product)} lote ${escapeHtml(lot)}, ${quantity} ${escapeHtml(uom)}`;
 }
 
 const RECEIPT_EXTENSIONS: Record<string, string> = {
@@ -827,6 +829,13 @@ export class ErpNextClient implements ErpClient {
 
     if (scan.action === "scan") {
       if (scanned) return duplicateResult(ref);
+      // Un replay tardío no puede resucitar una ronda que ya se revirtió.
+      const reversedKey = scan.scanIdempotencyKey.replace(/^pallet-scan:/, "pallet-unscan:");
+      const reversed = (await this.#list<{ name: string }>("Comment", ["name"], [
+        ["reference_doctype", "=", "Pick List"], ["reference_name", "=", ref.name],
+        ["content", "like", `%[trazflow:${reversedKey}]%`],
+      ], 1)).length > 0;
+      if (reversed) return duplicateResult(ref);
       if (doc.docstatus !== 0) throw validation(`El Pick List ${ref.name} ya está confirmado: no admite más pallets.`);
       const order = await this.#salesOrderFor(scan.orderExternalId);
       await this.#request("PUT", path, { locations: [...doc.locations, ...buildPickListLines(scan, order)] });

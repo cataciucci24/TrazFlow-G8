@@ -83,6 +83,7 @@ export class MockErpClient implements ErpClient {
   readonly #deliveries = new Map<string, StoredReport>();
   /** Pick List simulado (TRZ-63/TRZ-111): filas por clave de scan, y las claves de unscan ya aplicadas. */
   readonly #pickRows = new Map<string, PalletItem[]>();
+  readonly #scanned = new Set<string>();
   readonly #unscanned = new Set<string>();
   readonly #dispatchStatus: MockDispatchStatus;
   readonly #batchPickingPolicy: BatchPickingPolicy;
@@ -225,8 +226,9 @@ export class MockErpClient implements ErpClient {
     const erpReference = `MOCK-PICK-${scan.orderExternalId}`;
     const result = (duplicate: boolean): DeliveryReportResult => ({ erpReference, duplicate, acceptedAt: this.#now().toISOString() });
     if (scan.action === "scan") {
-      if (this.#pickRows.has(scan.scanIdempotencyKey)) return result(true);
+      if (this.#scanned.has(scan.scanIdempotencyKey)) return result(true);
       this.#pickRows.set(scan.scanIdempotencyKey, structuredClone(palletScanItems(scan)));
+      this.#scanned.add(scan.scanIdempotencyKey);
       return result(false);
     }
     if (this.#unscanned.has(scan.idempotencyKey)) return result(true);

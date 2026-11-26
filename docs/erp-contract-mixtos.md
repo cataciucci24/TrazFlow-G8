@@ -48,8 +48,8 @@ type ObservedItem = {
   lotExternalId: string | null;
   observedSku: string | null;       // texto tal cual se cargó, cuando no hay ID (nunca se inventa un ID)
   observedLot: string | null;
-  quantity: number;                 // > 0
-  uom: string;
+  quantity: number | null;          // > 0 si se conoce; null = cantidad no informada
+  uom: string | null;               // null = unidad desconocida; nunca se inventa
 };
 type ContentDifference = {
   expected: PalletItem | null;      // null = sobrante (llegó algo que no estaba)
@@ -120,3 +120,11 @@ type DeliveryDiscrepancy = {
 - Entrega: `content_mismatch` con una `ContentDifference` por diferencia; lo no identificado va con IDs en `null` y el texto en `observed*`.
 - Los formatos de clave de idempotencia no cambian.
 - La TM111 se retira solo después de la prueba conjunta: productores + adaptadores + outbox por empresa.
+
+## Integración del 26/11/2026
+
+Las observaciones de recepción admiten explícitamente `quantity: null` y `uom: null`. Una cantidad desconocida conserva el objeto `detected` y sus textos observados; no se informa como faltante. Un cero conocido se representa como `detected: null`, manteniendo el valor original en la auditoría. No se admiten cero, negativos, valores no finitos ni campos omitidos en una observación. Las cantidades/unidades esperadas, de despacho y de scan siguen siendo obligatorias y estrictas.
+
+El comentario de ERPNext muestra «cantidad desconocida» y «unidad desconocida» cuando corresponde. Un replay de un scan cuya ronda ya se revirtió se considera duplicado y no vuelve a agregar sus filas. Una nueva ronda conserva una clave diferente.
+
+La migración `20261126150000_trz111_enable_mixed_erp.sql` retira las dos restricciones TM111 conservando la comparación de contenido actual/esperado/validado. Requiere desplegar conjuntamente esta versión de los validadores/adaptadores y los productores v2. Los eventos v1 no se reescriben.
