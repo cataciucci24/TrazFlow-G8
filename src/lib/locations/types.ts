@@ -4,9 +4,9 @@
   warehouse_code: string;
   code: string;
   aisle: string;
-  rack: string;
-  level: string;
-  position: string;
+  rack: string | null;
+  level: string | null;
+  position: string | null;
 };
 export type LocationEvent = {
   id: string;

@@ -409,7 +409,9 @@ Stock. Lo hace la función `update_assigned_pallet_quantity` (migración
   depósito manual sin vínculo (no se adivina); FKs; selección de depósito al crear ubicaciones y pallets; tope por
   depósito; ubicación de otro depósito; RLS por empresa y rol; escrituras directas denegadas.
 - `supabase/tests/trz101_cloud_state_checks.sql`: las migraciones de TRZ-101 y una primera sincronización sobre la
-  réplica de la nube (pasos en su encabezado).
+  réplica de la nube (pasos en su encabezado). Requiere el fixture histórico de TRZ-100 cargado antes de las
+  migraciones correspondientes; no es una prueba autocontenida y falla en una base común sin ese fixture.
+  El procedimiento histórico incluye un reset destructivo: no ejecutarlo sobre una base con datos a preservar.
 - Correr cada uno con `psql -v ON_ERROR_STOP=1 -f …` sobre una base local migrada.
 - `src/lib/erp-sync/*.test.ts` (`npm test`): orden de las llamadas (los remitos antes de `pullMasterData`), líneas
   de orden, traducción de unidades, fallas del ERP (timeout, 401, configuración, contrato, consulta de remitos que

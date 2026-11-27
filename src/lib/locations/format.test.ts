@@ -2,12 +2,17 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import {
   comparePalletLocations,
+  formatLocationCoordinates,
   formatPalletLocation,
   NO_LOCATION_LABEL,
   sortByLocation,
   toPalletLocation,
   type PalletLocation,
 } from "./format.ts";
+
+test("muestra solo los niveles configurados con sus etiquetas", () => {
+  assert.equal(formatLocationCoordinates({ aisle: "A", rack: "01", level: null, position: null }, [{ label: "Sector" }, { label: "Fila" }]), "Sector A / Fila 01");
+});
 
 function loc(warehouseCode: string, code: string, aisle = "1", rack = "1", level = "1", position = "1"): PalletLocation {
   return { warehouseCode, code, aisle, rack, level, position };

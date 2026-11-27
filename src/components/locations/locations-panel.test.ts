@@ -53,6 +53,10 @@ function harness() {
     if (name.endsWith("/actions")) return { createLocation: async () => nextResult, assignLocation: async (_state: unknown, form: FormData) => { calls.push(form); return nextResult; } };
     if (name.endsWith("design-system")) return { InlineAlert: "alert", SectionHeader: "heading", TableShell: "table-shell" };
     if (name.endsWith("location-qr")) return { LocationQr: "qr" };
+    if (name.endsWith("location-generator")) return { LocationGenerator: "generator" };
+    if (name === "@/lib/locations/coordinates") return require("../../lib/locations/coordinates.ts");
+    if (name === "@/lib/locations/format") return require("../../lib/locations/format.ts");
+    if (name === "@/lib/warehouses/layout") return require("../../lib/warehouses/layout.ts");
     if (name.endsWith("qr-scanner")) return { QrScanner: "scanner" };
     if (name.endsWith("pallet-scan-details")) return { PalletScanDetails: "pallet-scan-details" };
     if (name.endsWith("warehouse-field")) return { WarehouseField: "warehouse-field" };
@@ -131,10 +135,10 @@ test("TRZ-101: solo se ofrecen ubicaciones del depósito del pallet", () => {
   assert.deepEqual(options(h.render()), ["n"]);
 });
 
-test("TRZ-101: con un solo depósito, el alta de ubicación lo nombra e incluye el selector (que se oculta solo)", () => {
+test("TRZ-101: con un solo depósito, el alta de ubicación lo nombra y lo envía", () => {
   const h = harness();
   h.props.warehouses = [{ code: "DEP-01", name: "Depósito Central", externalId: null, sourceSystem: "trazflow", active: true, syncedAt: null }];
   const tree = h.render();
   assert.ok(tree.some((n) => n.type === "heading" && String(n.props.description).startsWith("Depósito DEP-01 · Depósito Central")));
-  assert.ok(tree.some((n) => n.type === "warehouse-field"));
+  assert.ok(tree.some((n) => n.type === "input" && n.props.name === "warehouseCode" && n.props.value === "DEP-01"));
 });

@@ -7,19 +7,22 @@ import { PalletScanDetails } from "@/components/pallets/pallet-scan-details";
 import { InlineAlert, SectionHeader, TableShell } from "@/components/ui/design-system";
 import { createLocation, assignLocation } from "@/lib/locations/actions";
 import { canLocatePallet, findScannedLocation } from "@/lib/locations/rules";
+import { LOCATION_COORDINATES } from "@/lib/locations/coordinates";
+import { formatLocationCoordinates } from "@/lib/locations/format";
+import { DEFAULT_LAYOUT, type WarehouseLayout } from "@/lib/warehouses/layout";
 import type { LocationActionState, WarehouseLocation } from "@/lib/locations/types";
 import type { Pallet } from "@/lib/types";
 import { activeWarehouses, warehouseLabel, type Warehouse } from "@/lib/warehouses/types";
-import { WarehouseField } from "@/components/warehouses/warehouse-field";
 import { LocationQr } from "./location-qr";
+import { LocationGenerator } from "./location-generator";
 import { useLocationFeedback } from "./use-location-feedback";
 
 const initial: LocationActionState = { error: null, success: null };
 function Result({ state }: { state: LocationActionState }) {
   return <>{state.error && <InlineAlert variant="danger">{state.error}</InlineAlert>}{state.success && <InlineAlert variant="success">{state.success}</InlineAlert>}</>;
 }
-export function LocationsPanel({ locations, pallets, warehouses = [], locationIds, canMove, initialPalletId = "" }: {
-  locations: WarehouseLocation[]; pallets: Pallet[]; warehouses?: Warehouse[]; locationIds: Record<string, string | null>; canMove: boolean; initialPalletId?: string;
+export function LocationsPanel({ locations, pallets, warehouses = [], layouts = {}, locationIds, canMove, canGenerate = false, initialPalletId = "" }: {
+  locations: WarehouseLocation[]; pallets: Pallet[]; warehouses?: Warehouse[]; layouts?: Record<string, WarehouseLayout>; locationIds: Record<string, string | null>; canMove: boolean; canGenerate?: boolean; initialPalletId?: string;
 }) {
   const router = useRouter();
   const created = useLocationFeedback();
@@ -32,11 +35,15 @@ export function LocationsPanel({ locations, pallets, warehouses = [], locationId
   const [scanError, setScanError] = useState<string | null>(null);
   const [scanVersion, setScanVersion] = useState(0);
   const [filter, setFilter] = useState("");
+  const [creationWarehouse, setCreationWarehouse] = useState("");
   const pallet = pallets.find((p) => p.id === palletId);
   // TRZ-101: un pallet solo se ubica en su depósito (mover entre depósitos es una transferencia, fuera de alcance).
   const destinations = pallet?.warehouseCode ? locations.filter((l) => l.warehouse_code === pallet.warehouseCode) : locations;
   const destination = destinations.find((l) => l.id === locationId);
   const active = activeWarehouses(warehouses);
+  const selectedWarehouse = creationWarehouse || (active.length === 1 ? active[0].code : "");
+  const selectedLayout = selectedWarehouse ? layouts[selectedWarehouse] ?? DEFAULT_LAYOUT : null;
+  const locationDescription = (location: WarehouseLocation) => formatLocationCoordinates(location, layouts[location.warehouse_code] ?? DEFAULT_LAYOUT);
   const sameLocation = Boolean(pallet && destination && locationIds[palletId] === locationId);
   const clearMoveError = moved.clearError;
 
@@ -91,12 +98,14 @@ export function LocationsPanel({ locations, pallets, warehouses = [], locationId
     <section className="surface space-y-4 p-6">
       <SectionHeader title="Crear ubicación" description={`${active.length === 1 ? `Depósito ${warehouseLabel(active[0])} · ` : ""}Los códigos y coordenadas permanecen estables.`} />
       <form onSubmit={submitCreate} onChange={created.clearError} aria-busy={creating} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {([['code', 'Código único'], ['aisle', 'Pasillo o fila'], ['rack', 'Estantería'], ['level', 'Nivel'], ['position', 'Posición']] as const).map(([name, label]) => <label key={name} className="form-label">{label}<input name={name} disabled={creating} required maxLength={40} pattern={name === 'code' ? '[A-Za-z0-9][A-Za-z0-9_-]{0,39}' : undefined} className="form-control mt-2" /></label>)}
-        <WarehouseField warehouses={warehouses} disabled={creating} />
-        <button disabled={creating} className="button-primary self-end">{creating ? "Creando…" : "Crear ubicación"}</button>
+        <label className="form-label">Código único<input name="code" disabled={creating} required maxLength={40} pattern="[A-Za-z0-9][A-Za-z0-9_-]{0,39}" className="form-control mt-2" /></label>
+        {active.length > 1 ? <label className="form-label">Depósito<select name="warehouseCode" value={selectedWarehouse} required disabled={creating} className="form-control mt-2" onChange={(event) => setCreationWarehouse(event.target.value)}><option value="">Seleccioná el depósito</option>{active.map((warehouse) => <option key={warehouse.code} value={warehouse.code}>{warehouseLabel(warehouse)}</option>)}</select></label> : <input type="hidden" name="warehouseCode" value={selectedWarehouse} />}
+        {selectedLayout?.map((level, index) => <label key={`${selectedWarehouse}-${index}`} className="form-label">{level.label}<input name={LOCATION_COORDINATES[index]} disabled={creating} required maxLength={40} className="form-control mt-2" /></label>)}
+        <button disabled={creating || !selectedLayout} className="button-primary self-end">{creating ? "Creando…" : "Crear ubicación"}</button>
         <div className="sm:col-span-2"><Result state={created.state} /></div>
       </form>
     </section>
+    {canGenerate && <LocationGenerator warehouses={warehouses} layouts={layouts} />}
     <section className="surface space-y-4 p-6">
       <SectionHeader title={canMove ? "Asignar o cambiar ubicación" : "Consultar ubicación de un pallet"} />
       <form onSubmit={submitMove} aria-busy={moving} className="space-y-4">
@@ -105,7 +114,7 @@ export function LocationsPanel({ locations, pallets, warehouses = [], locationId
         {pallet && <div className="space-y-2 text-sm"><p>Ubicación actual: <strong>{pallet.currentLocation ?? "Sin asignar"}</strong></p><Link className="table-action" href={`/dashboard/traceability?qr=${encodeURIComponent(pallet.qrCode)}`}>Ver ficha e historial</Link></div>}
         {pallet && <PalletScanDetails key={`${pallet.id}:${pallet.currentLocation}:${moved.state.success}:${scanVersion}`} qrCode={pallet.qrCode} />}
         {canMove && <>
-          <label className="form-label">Ubicación de destino<select name="locationId" required value={locationId} onChange={(e) => { setLocationId(e.target.value); clearMoveError(); setScanError(null); }} disabled={moving} className="form-control mt-2"><option value="">Seleccionar ubicación</option>{destinations.map((l) => <option key={l.id} value={l.id}>{l.warehouse_code} / {l.code} · {l.aisle} / {l.rack} / {l.level} / {l.position}</option>)}</select></label>
+          <label className="form-label">Ubicación de destino<select name="locationId" required value={locationId} onChange={(e) => { setLocationId(e.target.value); clearMoveError(); setScanError(null); }} disabled={moving} className="form-control mt-2"><option value="">Seleccionar ubicación</option>{destinations.map((l) => <option key={l.id} value={l.id}>{l.warehouse_code} / {l.code} · {locationDescription(l)}</option>)}</select></label>
           <button type="button" className="button-secondary" disabled={moving} onClick={() => { setScanError(null); clearMoveError(); setScan("location"); }}>Escanear ubicación</button>
           <input type="hidden" name="expectedLocationId" value={palletId ? locationIds[palletId] ?? "" : ""} />
           {pallet && !canLocatePallet(pallet.status) && <InlineAlert variant="danger">El pallet ya no está en depósito.</InlineAlert>}
@@ -120,8 +129,8 @@ export function LocationsPanel({ locations, pallets, warehouses = [], locationId
     <section className="space-y-4">
       <SectionHeader title="Ubicaciones disponibles" description="Una ubicación puede contener varios pallets; no se administra capacidad." />
       <label className="form-label">Buscar por código<input type="search" value={filter} onChange={(e) => setFilter(e.target.value)} className="form-control mt-2" /></label>
-      <TableShell label="Catálogo de ubicaciones"><table className="data-table"><thead><tr><th>Depósito / Código</th><th>Pasillo</th><th>Estantería</th><th>Nivel</th><th>Posición</th><th>Pallets</th><th>Etiqueta</th></tr></thead><tbody>
-        {locations.filter((l) => l.code.includes(filter.trim().toUpperCase())).map((l) => <tr key={l.id}><td className="font-mono">{l.warehouse_code} / {l.code}</td><td>{l.aisle}</td><td>{l.rack}</td><td>{l.level}</td><td>{l.position}</td><td>{Object.values(locationIds).filter((id) => id === l.id).length}</td><td><LocationQr location={l} /></td></tr>)}
+      <TableShell label="Catálogo de ubicaciones"><table className="data-table"><thead><tr><th>Depósito / Código</th><th>Coordenadas</th><th>Pallets</th><th>Etiqueta</th></tr></thead><tbody>
+        {locations.filter((l) => l.code.includes(filter.trim().toUpperCase())).map((l) => <tr key={l.id}><td className="font-mono">{l.warehouse_code} / {l.code}</td><td>{locationDescription(l)}</td><td>{Object.values(locationIds).filter((id) => id === l.id).length}</td><td><LocationQr location={l} layout={layouts[l.warehouse_code] ?? DEFAULT_LAYOUT} /></td></tr>)}
       </tbody></table></TableShell>
       {locations.length === 0 && <p className="text-sm text-stone-500">Todavía no hay ubicaciones. Creá la primera para comenzar.</p>}
     </section>

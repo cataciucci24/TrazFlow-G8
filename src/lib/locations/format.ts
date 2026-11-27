@@ -6,21 +6,27 @@ export type PalletLocation = {
   warehouseCode: string;
   code: string;
   aisle: string;
-  rack: string;
-  level: string;
-  position: string;
+  rack: string | null;
+  level: string | null;
+  position: string | null;
 };
 
 export type RawPalletLocation = {
   warehouse_code: string;
   code: string;
   aisle: string;
-  rack: string;
-  level: string;
-  position: string;
+  rack: string | null;
+  level: string | null;
+  position: string | null;
 };
 
 export const NO_LOCATION_LABEL = "Sin ubicación";
+
+/** Labels follow the warehouse layout; unused coordinates are never rendered. */
+export function formatLocationCoordinates(location: Pick<PalletLocation, "aisle" | "rack" | "level" | "position">, layout: readonly { label: string }[]): string {
+  const values = [location.aisle, location.rack, location.level, location.position];
+  return layout.flatMap((item, index) => values[index] == null ? [] : [`${item.label} ${values[index]}`]).join(" / ");
+}
 
 /**
  * Embed de Postgrest para leer la ubicación desde `pallets`. Va con el nombre del FK porque hay dos relaciones
@@ -56,7 +62,7 @@ const collator = new Intl.Collator("es-AR", { numeric: true, sensitivity: "base"
 export function comparePalletLocations(a: PalletLocation | null | undefined, b: PalletLocation | null | undefined): number {
   if (!a || !b) return a ? -1 : b ? 1 : 0;
   for (const key of ["warehouseCode", "aisle", "rack", "level", "position", "code"] as const) {
-    const result = collator.compare(a[key], b[key]);
+    const result = collator.compare(a[key] ?? "", b[key] ?? "");
     if (result !== 0) return result;
   }
   return 0;

@@ -3,8 +3,10 @@ import { useEffect, useRef, useState } from "react";
 import { Modal } from "@/components/ui/modal";
 import { locationQr } from "@/lib/locations/rules";
 import type { WarehouseLocation } from "@/lib/locations/types";
+import { formatLocationCoordinates } from "@/lib/locations/format";
+import type { WarehouseLayout } from "@/lib/warehouses/layout";
 
-export function LocationQr({ location }: { location: WarehouseLocation }) {
+export function LocationQr({ location, layout }: { location: WarehouseLocation; layout: WarehouseLayout }) {
   const [open, setOpen] = useState(false);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState(false);
@@ -35,7 +37,7 @@ export function LocationQr({ location }: { location: WarehouseLocation }) {
     }
     doc.body.append(doc.importNode(svg, true));
     const text = doc.createElement("p");
-    text.textContent = `Pasillo ${location.aisle} / Estantería ${location.rack} / Nivel ${location.level} / Posición ${location.position}`;
+    text.textContent = formatLocationCoordinates(location, layout);
     doc.body.append(text);
     popup.focus(); popup.print();
   }
@@ -44,6 +46,6 @@ export function LocationQr({ location }: { location: WarehouseLocation }) {
       actions={<button className="button-primary" disabled={!ready || error} onClick={print}>Imprimir etiqueta</button>}>
       {error && <p role="alert">No se pudo generar o imprimir el QR. Permití ventanas emergentes e intentá nuevamente.</p>}
       <div ref={ref} className="mx-auto w-fit bg-white" />
-      <p className="mt-3 text-sm">Pasillo {location.aisle} / Estantería {location.rack} / Nivel {location.level} / Posición {location.position}</p>
+      <p className="mt-3 text-sm">{formatLocationCoordinates(location, layout)}</p>
     </Modal></>;
 }
