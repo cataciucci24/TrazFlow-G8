@@ -55,7 +55,8 @@ export function createPalletsScenario() {
     const pallet = state.pallets[0];
     if (table === 'products') { respond(catalog); return true; }
     if (table === 'batches') { respond(lots); return true; }
-    if (table === 'warehouses') { respond([{ company_id: company, code: 'CENTRAL', name: 'Depósito central', source_system: 'trazflow', active: true }]); return true; }
+    if (table === 'warehouses') { respond([{ company_id: company, code: 'CENTRAL', name: 'Depósito central', source_system: 'trazflow', active: true,
+      layout: [{ label: 'Pasillo' }, { label: 'Estantería' }, { label: 'Nivel' }, { label: 'Posición' }] }]); return true; }
     if (table === 'pallet_contents') { respond(state.contents); return true; }
     if (table === 'pallets') {
       if (req.method === 'PATCH') {

@@ -97,7 +97,8 @@ createServer(async (req, res) => {
   } : null);
   if (url.pathname === '/rest/v1/products') return send([product]);
   if (url.pathname === '/rest/v1/batches') return send([batch]);
-  if (url.pathname === '/rest/v1/warehouses') return send([{ code: 'CENTRAL', name: 'Depósito central', source_system: 'erp', active: true, external_id: 'CENTRAL', synced_at: null }]);
+  if (url.pathname === '/rest/v1/warehouses') return send([{ code: 'CENTRAL', name: 'Depósito central', source_system: 'erp', active: true, external_id: 'CENTRAL', synced_at: null,
+    layout: [{ label: 'Pasillo' }, { label: 'Estantería' }, { label: 'Nivel' }, { label: 'Posición' }] }]);
   if (url.pathname === '/rest/v1/order_pallets') return send([{ order_id: orderId, pallet_id: palletId, pallets: pallet,
     expected_items: [{ productId: product.id, batchId: batch.id, quantity: pallet.quantity }],
     validated_at: validated ? '2026-10-25T12:00:00Z' : null, validated_by: validated ? driverId : null }]);
