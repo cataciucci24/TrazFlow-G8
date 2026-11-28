@@ -104,11 +104,16 @@ createServer(async (req, res) => {
     validated_at: validated ? '2026-10-25T12:00:00Z' : null, validated_by: validated ? driverId : null }]);
   if (url.pathname === '/rest/v1/order_notifications') return send([{ id: 'notice-demo', event_type: 'dispatch_wrong_pallet', description: 'Un pallet escaneado no corresponde a esta orden.', pallet_id: palletId, created_at: '2026-10-25T12:00:00Z' }]);
   if (['movements', 'order_delivery_receipts', 'traceability_events', 'distributor_batch_stocks', 'distributor_product_stocks', 'dispatch_order_lines'].some(table => url.pathname === `/rest/v1/${table}`)) return send([]);
-  if (url.pathname === '/rest/v1/erp_sync_runs' || url.pathname === '/rest/v1/erp_company_settings') return send(null);
+  if (url.pathname === '/rest/v1/erp_sync_runs') return send(null);
+  if (url.pathname === '/rest/v1/erp_company_settings') return send(palletsScenario ? null : {
+    company_id: 'company-demo', erp_provider: 'mock', erp_base_url: null, erp_odoo_database: null, erp_odoo_username: null,
+    erp_item_group: null, erp_timeout_ms: 10000, erp_mock_scenario: 'ok', erp_mock_dispatch_status: 'confirmed',
+    erp_api_key_hint: null, erp_api_secret_hint: null, erp_configured_at: '2026-10-25T12:00:00Z',
+  });
   if (url.pathname === '/rest/v1/rpc/get_expiration_thresholds') return send([{ critical_days: 30, caution_days: 60, upcoming_days: 90 }]);
   if (url.pathname === '/rest/v1/rpc/erp_stock_overview') return send([]);
-  // TRZ-112: sin proveedor guardado; cada suite decide el fallback ERP por su entorno.
-  if (url.pathname === '/rest/v1/rpc/erp_company_provider') return send(null);
+  // TRZ-112: la demo tradicional tiene mock propio; el recorrido de pallets manuales no tiene ERP.
+  if (url.pathname === '/rest/v1/rpc/erp_company_provider') return send(palletsScenario ? null : 'mock');
   if (url.pathname === '/rest/v1/rpc/erp_outbox_driver_claim') return send([]);
   if (url.pathname === '/rest/v1/rpc/erp_integration_summary') return send([{ pending_count: 1, unreported_count: 1 }]);
   if (url.pathname === '/rest/v1/rpc/erp_dispatched_unreported') return send([{ order_id: orderId, order_external_id: 'ERP-ORDEN-DEMO-001', order_status: 'confirmed', confirmed_at: '2026-10-25T12:00:00Z', distributor_name: 'Destinatario Demo', event_id: '40000000-0000-4000-8000-000000000001', event_status: 'failed', attempts: 1, last_error_code: 'timeout', next_attempt_at: null, total_count: 1 }]);

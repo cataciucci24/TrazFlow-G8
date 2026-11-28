@@ -51,6 +51,10 @@ for (const width of [320, 390, 768, 1280]) {
       ["integrations", "Actividad de la integración ERP"],
     ]) {
       await page.goto(`/dashboard/${path}`);
+      if (path === "integrations") {
+        await page.getByRole("navigation", { name: "Secciones de la integración con el ERP" })
+          .getByRole("link", { name: /^Actividad/ }).click();
+      }
       const table = page.getByRole("table", { name: tableName, exact: true });
       await expect(table).toBeVisible();
       const row = table.locator("tbody tr").first();
