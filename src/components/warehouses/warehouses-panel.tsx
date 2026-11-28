@@ -4,9 +4,11 @@ import { useState, useTransition, type FormEvent } from "react";
 import { InlineAlert, SectionHeader, TableShell } from "@/components/ui/design-system";
 import { createWarehouse, deactivateWarehouse, reactivateWarehouse, renameWarehouse, type WarehouseActionState } from "@/lib/warehouses/actions";
 import type { Warehouse } from "@/lib/warehouses/types";
+import type { WarehouseLayout } from "@/lib/warehouses/layout";
+import { LayoutEditor } from "./layout-editor";
 
 const initial: WarehouseActionState = { error: null, success: null };
-export function WarehousesPanel({ warehouses, counts, erpEnabled }: { warehouses: Warehouse[]; counts: Record<string, number>; erpEnabled: boolean }) {
+export function WarehousesPanel({ warehouses, counts, layouts, erpEnabled }: { warehouses: Warehouse[]; counts: Record<string, number>; layouts: Record<string, WarehouseLayout>; erpEnabled: boolean }) {
   const [state, setState] = useState(initial);
   const [pending, startTransition] = useTransition();
   const [editing, setEditing] = useState<string | null>(null);
@@ -38,6 +40,7 @@ export function WarehousesPanel({ warehouses, counts, erpEnabled }: { warehouses
     <TableShell label="Depósitos"><table className="data-table"><thead><tr><th>Código</th><th>Nombre</th><th>Origen</th><th>Estado</th><th>Ubicaciones</th><th>Acciones</th></tr></thead><tbody>
       {warehouses.map((w) => <tr key={w.code}><td className="font-mono">{w.code}</td><td>{editing === w.code ? <form onSubmit={(e) => submit(e, renameWarehouse)} className="flex flex-wrap gap-2"><input type="hidden" name="code" value={w.code} /><label className="sr-only" htmlFor={`name-${w.code}`}>Nombre de {w.code}</label><input id={`name-${w.code}`} className="form-control" name="name" defaultValue={w.name} required maxLength={140} disabled={pending} /><button className="button-primary" disabled={pending}>Guardar</button><button type="button" className="button-secondary" disabled={pending} onClick={() => setEditing(null)}>Cancelar</button></form> : w.name}</td><td>{w.sourceSystem === "erp" ? "ERP · solo lectura" : "TrazFlow"}</td><td>{w.active ? "Activo" : "Inactivo"}</td><td>{counts[w.code] ?? 0}</td><td>{w.sourceSystem === "trazflow" && <div className="flex flex-wrap gap-2"><button type="button" className="button-secondary" disabled={pending} onClick={() => { setEditing(w.code); setState(initial); }}>Editar nombre</button>{w.active ? confirming === w.code ? <form onSubmit={(e) => submit(e, deactivateWarehouse)}><input type="hidden" name="code" value={w.code} /><span>¿Desactivar {w.code}? </span><button className="button-secondary" disabled={pending}>Confirmar</button><button type="button" className="button-secondary" disabled={pending} onClick={() => setConfirming(null)}>Cancelar</button></form> : <button type="button" className="button-secondary" disabled={pending} onClick={() => { setConfirming(w.code); setState(initial); }}>Desactivar</button> : <form onSubmit={(e) => submit(e, reactivateWarehouse)}><input type="hidden" name="code" value={w.code} /><button className="button-secondary" disabled={pending}>Activar</button></form>}</div>}</td></tr>)}
     </tbody></table></TableShell>
+    {warehouses.map((warehouse) => <section key={warehouse.code} className="surface space-y-3 p-6"><SectionHeader title={`Distribución · ${warehouse.code}`} description={warehouse.sourceSystem === "erp" ? "La distribución física se configura aquí; los datos del depósito se administran en el ERP." : undefined} /><LayoutEditor key={`${warehouse.code}:${JSON.stringify(layouts[warehouse.code])}`} code={warehouse.code} layout={layouts[warehouse.code]} locationCount={counts[warehouse.code] ?? 0} /></section>)}
     {warehouses.length === 0 && <p className="text-sm text-stone-500">Todavía no hay depósitos.</p>}
   </div>;
 }

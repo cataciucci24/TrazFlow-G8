@@ -24,6 +24,7 @@ import {
 } from "@/lib/pallet-validation/queries";
 import { getOrderScanHistory } from "@/lib/scans/queries";
 import { getOrderNotifications } from "@/lib/order-notifications/queries";
+import { getWarehouseLayouts } from "@/lib/warehouses/queries";
 import { ErpOriginCell } from "@/components/erp/erp-origin";
 import { DispatchNoteLink } from "@/components/dispatch-notes/dispatch-note-view";
 import { isDispatched } from "@/lib/dispatch-notes/types";
@@ -79,6 +80,7 @@ export default async function DispatchOrderDetailPage({
     dispatchScanHistory,
     orderNotifications,
     linesComparison,
+    warehouseLayouts,
   ] = await Promise.all([
     getPalletsForOrder(id),
     canAssociate ? getAvailablePallets(profile.companyId) : Promise.resolve([]),
@@ -89,6 +91,7 @@ export default async function DispatchOrderDetailPage({
     isWarehouseOperator ? getOrderScanHistory(id, "dispatch") : Promise.resolve([]),
     canSeeNotifications ? getOrderNotifications(id) : Promise.resolve([]),
     showLines ? getOrderLinesComparison(id) : Promise.resolve(null),
+    isWarehouseOperator ? getWarehouseLayouts(profile.companyId) : Promise.resolve({}),
   ]);
 
   const validatedAtByPalletId = new Map(
@@ -111,6 +114,7 @@ export default async function DispatchOrderDetailPage({
         <PageHeader title="Confirmar despacho" description="Validá los pallets asignados antes de confirmar la salida." action={<Link href="/dashboard" className="button-secondary">Volver</Link>} />
         <PalletValidationPanel
           orderId={order.id}
+          layouts={warehouseLayouts}
           pallets={palletValidations}
           dispatchDiscrepancies={dispatchDiscrepancies}
           initialScanHistory={dispatchScanHistory}
@@ -171,6 +175,7 @@ export default async function DispatchOrderDetailPage({
         <div className="surface p-6">
           <PalletValidationPanel
             orderId={order.id}
+            layouts={warehouseLayouts}
             pallets={palletValidations}
             dispatchDiscrepancies={dispatchDiscrepancies}
             initialScanHistory={dispatchScanHistory}

@@ -2,6 +2,7 @@ import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
 import { toWarehouse, type Warehouse } from "@/lib/warehouses/types";
+import { parseWarehouseLayout, type WarehouseLayout } from "@/lib/warehouses/layout";
 
 /** Depósitos de la empresa (logística y depósito; para otros roles la RLS devuelve vacío), activos primero. */
 export async function getWarehouses(companyId: string): Promise<Warehouse[]> {
@@ -25,4 +26,15 @@ export async function getWarehouseLocationCounts(companyId: string, warehouses: 
     return [code, count ?? 0] as const;
   }));
   return Object.fromEntries(entries);
+}
+
+export async function getWarehouseLayouts(companyId: string): Promise<Record<string, WarehouseLayout>> {
+  const db = await createClient();
+  const { data, error } = await db.from("warehouses").select("code, layout").eq("company_id", companyId);
+  if (error) throw new Error(`No se pudieron leer las distribuciones (${error.code}).`, { cause: error });
+  return Object.fromEntries((data ?? []).map((row) => {
+    const layout = parseWarehouseLayout(row.layout);
+    if (!layout) throw new Error(`La distribución del depósito ${row.code} no es válida.`);
+    return [row.code, layout];
+  }));
 }

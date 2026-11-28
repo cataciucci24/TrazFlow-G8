@@ -14,7 +14,9 @@ import { QrScanner } from "@/components/pallet-validation/qr-scanner";
 import { PalletScanDetails } from "@/components/pallets/pallet-scan-details";
 import { validatePallet } from "@/lib/pallet-validation/actions";
 import { latestScans } from "@/lib/pallet-validation/scan-history";
-import { formatPalletLocation, sortByLocation } from "@/lib/locations/format";
+import { sortByLocation } from "@/lib/locations/format";
+import { ValidationLocation } from "@/components/locations/validation-location";
+import type { WarehouseLayout } from "@/lib/warehouses/layout";
 import type {
   OrderDispatchDiscrepancy,
   OrderPalletValidation,
@@ -25,7 +27,7 @@ import type { ScanHistoryItem } from "@/lib/scans/queries";
 type PendingOrder = "location" | "original";
 
 /** Fila de un pallet de la orden: código, producto y dónde buscarlo (TRZ-105). */
-function PalletRow({ pallet }: { pallet: OrderPalletValidation }) {
+function PalletRow({ pallet, layouts }: { pallet: OrderPalletValidation; layouts: Record<string, WarehouseLayout> }) {
   return (
     <li className="flex gap-3 py-3 text-sm">
       <span aria-hidden="true" className={`mt-1 size-2.5 shrink-0 rounded-full ${pallet.validatedAt ? "bg-emerald-600" : "border border-slate-300 bg-white"}`} />
@@ -35,9 +37,7 @@ function PalletRow({ pallet }: { pallet: OrderPalletValidation }) {
         <p className="text-stone-500">
           {pallet.productName} ({pallet.productSku}) · Lote {pallet.batchNumber}
         </p>
-        <p className={`mt-0.5 break-all font-mono text-xs ${pallet.location ? "font-semibold text-slate-700" : "text-stone-400"}`}>
-          <span className="sr-only">Ubicación: </span>{formatPalletLocation(pallet.location)}
-        </p>
+        <ValidationLocation location={pallet.location} layouts={layouts} />
       </div>
       <span className="shrink-0 text-xs text-slate-500">
         {pallet.validatedAt ? "Validado" : "Pendiente"}
@@ -48,6 +48,7 @@ function PalletRow({ pallet }: { pallet: OrderPalletValidation }) {
 
 type PalletValidationPanelProps = {
   orderId: string;
+  layouts: Record<string, WarehouseLayout>;
   pallets: OrderPalletValidation[];
   dispatchDiscrepancies: OrderDispatchDiscrepancy[];
   initialScanHistory: ScanHistoryItem[];
@@ -55,6 +56,7 @@ type PalletValidationPanelProps = {
 
 export function PalletValidationPanel({
   orderId,
+  layouts,
   pallets,
   dispatchDiscrepancies,
   initialScanHistory,
@@ -223,7 +225,7 @@ export function PalletValidationPanel({
                 </div>
               </div>
               <ul className="operation-list">
-                {sortedMissingPallets.map((pallet) => <PalletRow key={pallet.id} pallet={pallet} />)}
+                {sortedMissingPallets.map((pallet) => <PalletRow key={pallet.id} pallet={pallet} layouts={layouts} />)}
               </ul>
             </section>
           )}
@@ -231,7 +233,7 @@ export function PalletValidationPanel({
             <section aria-labelledby="validated-pallets-title" className="space-y-3">
               <h3 id="validated-pallets-title" className="text-xs font-bold tracking-[0.1em] text-stone-500">VALIDADOS ({validatedPallets.length})</h3>
               <ul className="operation-list">
-                {validatedPallets.map((pallet) => <PalletRow key={pallet.id} pallet={pallet} />)}
+              {validatedPallets.map((pallet) => <PalletRow key={pallet.id} pallet={pallet} layouts={layouts} />)}
               </ul>
             </section>
           )}

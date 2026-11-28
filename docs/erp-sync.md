@@ -164,8 +164,8 @@ por `(company_id, code)` y `(company_id, external_id)`. `warehouse_locations`, `
   interfaz y la Server Action ocultan o rechazan el alta, pero PostgreSQL no puede leer esas variables. Una llamada
   directa a la RPC todavía puede crear depósitos hasta registrar el proveedor en la configuración por empresa;
   su resolución requiere coordinación con la persona responsable de TRZ-112.
-- **Distribución:** el permiso de edición de `layout` de TRZ-115 es independiente de estos campos: la política
-  actual permite a logística editarlo también en depósitos ERP. Ese comportamiento sigue pendiente de confirmación.
+- **Distribución:** logística puede configurar el `layout` físico tanto de depósitos manuales como de depósitos
+  ERP. Los nombres, códigos y estados administrados por el ERP conservan sus restricciones.
 - **Al crear una ubicación o un pallet** se puede indicar el depósito (la app muestra el selector solo si hay más
   de uno activo). Sin indicarlo, la base usa el único depósito activo (`default_warehouse_code`). Errores:
   `TF110` sin depósitos, `TF111` hay varios y no se eligió, `TF112` depósito inactivo, `23503` no existe. El
@@ -409,7 +409,9 @@ Stock. Lo hace la función `update_assigned_pallet_quantity` (migración
   depósito manual sin vínculo (no se adivina); FKs; selección de depósito al crear ubicaciones y pallets; tope por
   depósito; ubicación de otro depósito; RLS por empresa y rol; escrituras directas denegadas.
 - `supabase/tests/trz101_cloud_state_checks.sql`: las migraciones de TRZ-101 y una primera sincronización sobre la
-  réplica de la nube (pasos en su encabezado).
+  réplica de la nube (pasos en su encabezado). Requiere el fixture histórico de TRZ-100 cargado antes de las
+  migraciones correspondientes; no es una prueba autocontenida y falla en una base común sin ese fixture.
+  El procedimiento histórico incluye un reset destructivo: no ejecutarlo sobre una base con datos a preservar.
 - Correr cada uno con `psql -v ON_ERROR_STOP=1 -f …` sobre una base local migrada.
 - `src/lib/erp-sync/*.test.ts` (`npm test`): orden de las llamadas (los remitos antes de `pullMasterData`), líneas
   de orden, traducción de unidades, fallas del ERP (timeout, 401, configuración, contrato, consulta de remitos que

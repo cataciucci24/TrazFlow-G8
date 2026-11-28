@@ -10,7 +10,40 @@ migrada. Todos los tests unitarios ahora usan Vitest.
 
 > **TRZ-101:** ya no hay un único `DEP-01` fijo: los depósitos están en la tabla `warehouses` y cada ubicación pertenece a uno (FK compuesta). Los UUID, QR e historial no cambiaron. Ver la sección "Depósitos" de [`erp-sync.md`](erp-sync.md).
 
-Una empresa puede tener varios depósitos en `warehouses`; cada ubicación guarda empresa, código de depósito, código propio y coordenadas. La relación con el depósito se valida por empresa. `DEP-01` es el código inicial de empresas existentes, no una restricción del modelo. El alta de depósitos desde pantalla (TRZ-116) y la distribución configurable (TRZ-115) siguen pendientes de su merge; no forman parte de este flujo actual.
+Una empresa puede tener varios depósitos en `warehouses`; cada ubicación guarda empresa, código de depósito, código propio y coordenadas. La relación con el depósito se valida por empresa. `DEP-01` es el código inicial de empresas existentes, no una restricción del modelo. TRZ-116 incorpora la administración de depósitos; TRZ-115 agrega la distribución configurable descrita a continuación.
+
+## Distribución configurable y generación (TRZ-115)
+
+Cada depósito tiene su propia plantilla `warehouses.layout`: un array JSONB ordenado de uno a cuatro objetos con `label` no vacío. Los niveles se guardan, en orden, en las columnas existentes `aisle`, `rack`, `level` y `position`; `aisle` es obligatorio y los niveles que no se usan son NULL. Se reutilizaron estas columnas para conservar los UUID, códigos, referencias de pallets, QR `TRZLOC:<uuid>` e historial existentes. Este documento describe la implementación; no registra una aprobación arquitectónica del equipo ni reemplaza un ADR.
+
+La distribución inicial es Pasillo → Estantería → Nivel → Posición. En **Depósitos → Configurar distribución** Logística puede editar las etiquetas o aplicar los presets **Estanterías** y **Almacenamiento en piso** (Sector → Hilera → Posición). Si ya existen ubicaciones, se permite cambiar etiquetas pero no la cantidad de niveles; la base también protege esta regla frente a operaciones concurrentes. Los depósitos de origen ERP permiten configurar su distribución física; sus datos administrados por ERP conservan las restricciones de TRZ-116.
+
+En **Ubicaciones**, el alta individual presenta solo los niveles del depósito elegido y comprueba coordenadas obligatorias y sobrantes. `logistics_manager` y `warehouse_operator` activos pueden crear individualmente; solo Logística puede generar en masa y configurar layouts. El operador conserva consulta, asignación y movimiento de pallets. Los permisos y las referencias se limitan a la empresa; no se admiten altas en depósitos inactivos. La creación individual y la desactivación se serializan con un bloqueo del depósito.
+
+La generación masiva acepta rangos de una letra A–Z o números ascendentes, conserva ceros iniciales, muestra cantidad y ejemplos y solicita confirmación. La acción y la RPC limitan cada operación a 2.000 combinaciones. La RPC transaccional bloquea el depósito y valida su estado y layout; cuenta por separado ubicaciones creadas, coordenadas existentes omitidas y códigos en conflicto rechazados. Los errores inesperados revierten la operación. Los códigos son únicos por empresa y las coordenadas por empresa y depósito, con NULL tratados como iguales.
+
+El catálogo, el selector de destino y la etiqueta QR muestran las coordenadas con los nombres configurados y sin niveles inexistentes. La barra fija permite navegar por las secciones disponibles según el rol; los selectores buscan sin distinguir mayúsculas ni acentos por depósito, pallet o ubicación. El rendimiento de esos selectores con miles de coincidencias todavía no fue medido. La validación de carga conserva la referencia `depósito / código` y muestra debajo las coordenadas con las etiquetas del depósito; si falta el layout conserva la referencia sin inventar etiquetas, y si no hay ubicación indica «Sin ubicación». Inventario conserva la referencia estable sin mostrar etiquetas personalizadas.
+
+**Consultas de Ubicaciones:** la configuración local de Supabase fija `max_rows = 1000`. Para evitar el truncamiento, esta pantalla consulta ubicaciones y pallets por páginas de 500 filas, con orden por código o QR y UUID como desempate. Si falla una página, se informa el error sin presentar una lista incompleta como resultado completo. En una base local aislada se verificaron 1.000, 1.001 y 2.000 ubicaciones sin omisiones ni duplicados en datos estables. La consulta compartida de pallets usada por otras pantallas no se modificó y conserva su límite; corresponde coordinar cualquier cambio con su responsable. Las páginas no forman una instantánea única: cambios simultáneos durante la lectura pueden alterar el conjunto obtenido. Además, la pantalla carga todas las filas y aún no se midió su rendimiento con miles de coincidencias.
+
+Verificaciones locales registradas: los bloques A, B y B.2 pasaron las pruebas manuales informadas por el equipo; Vitest, typecheck y ESLint pasaron en la revisión del último commit. Las suites SQL `trz115_warehouse_layout.sql`, `trz115_layout_erp.sql` y `trz115_generate_locations.sql`, junto con TRZ-96 y TRZ-101, se ejecutaron contra PostgreSQL local. La prueba de concurrencia `trz115_location_active_concurrency.ps1` cubrió ambos órdenes en una base aislada. La lectura física con cámara y una medición de rendimiento no están acreditadas por estas pruebas. `trz101_cloud_state_checks.sql` necesita el fixture histórico de TRZ-100 previo a las migraciones y no se considera aprobado sin ese entorno; su procedimiento histórico incluye reset destructivo y no debe ejecutarse sobre datos a preservar.
+
+La adaptación de validación de carga se probó manualmente con dos pallets en depósitos de distinta distribución. La integración ERP utilizada en las pruebas fue simulada; no acredita una integración con un ERP real.
+
+### Seed local de demostración TRZ-115
+
+`supabase/seeds/trz115_warehouse_demo.sql` crea la empresa independiente **Demo distribuciones TRZ-115** y dos cuentas exclusivamente de prueba local, ambas con contraseña `test1234`:
+
+- Logística: `logistica.trz115@trazflow.test`.
+- Depósito: `deposito.trz115@trazflow.test`.
+
+El depósito `EST-01` tiene cuatro niveles y la ubicación `EST-A-01-01-01` (A / 01 / 01 / 01); `PISO-01` tiene Sector, Hilera y Posición y la ubicación `PISO-B-02-03` (B / 02 / 03). Cada uno tiene un pallet ubicado. Sus QR de pallet se generan al crear los registros; la asignación utiliza `assign_pallet_location` y registra movimiento y evento de trazabilidad. El seed no crea una orden para validación de carga.
+
+La configuración existente incluye `./seeds/*.sql`: en un entorno local aislado, con todas las migraciones aplicadas, el orden es `001_demo.sql`, `trz115_warehouse_demo.sql` y `trz71_driver_vehicles.sql`. Para ejecutarlo individualmente en una base local aislada ya migrada, usar `psql -v ON_ERROR_STOP=1 -f supabase/seeds/trz115_warehouse_demo.sql` con una conexión explícita a esa base. No ejecutar reset sobre bases con datos ni aplicar el seed en remoto. El script verifica colisiones y aborta toda la transacción si ya existen sus identificadores o cuentas; no sobrescribe registros y no está diseñado para reejecutarse sobre la misma demo.
+
+Para mostrar la demo, iniciar sesión con la cuenta de Logística, abrir **Depósitos** y consultar las distribuciones de `EST-01` y `PISO-01`; en **Ubicaciones**, buscar sus códigos y consultar los pallets. Con la cuenta de Depósito se pueden consultar y mover los pallets según los permisos vigentes.
+
+La compatibilidad y el orden de los tres seeds se probaron en una base aislada creada a partir de un esquema local, excluyendo cron, realtime y privilegios; además se verificaron permisos en otra base aislada con políticas existentes. Esto no reemplaza una instalación completa desde cero con todas las migraciones ni prueba lectura física de QR.
 
 - Depósito y Logística pueden crear y consultar ubicaciones. Solo `warehouse_operator` activo registra movimientos; Logística consulta el historial. Choferes no acceden al catálogo.
 - Se reutilizan `movements` y `traceability_events`: no se crea `pallet_location_events`.
