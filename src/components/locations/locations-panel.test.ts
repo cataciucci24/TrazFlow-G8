@@ -54,6 +54,8 @@ function harness() {
     if (name.endsWith("design-system")) return { InlineAlert: "alert", SectionHeader: "heading", TableShell: "table-shell" };
     if (name.endsWith("location-qr")) return { LocationQr: "qr" };
     if (name.endsWith("location-generator")) return { LocationGenerator: "generator" };
+    if (name.endsWith("searchable-select")) return { SearchableSelect: "searchable-select" };
+    if (name.endsWith("locations-navigation")) return { LocationsNavigation: "locations-navigation" };
     if (name === "@/lib/locations/coordinates") return require("../../lib/locations/coordinates.ts");
     if (name === "@/lib/locations/format") return require("../../lib/locations/format.ts");
     if (name === "@/lib/warehouses/layout") return require("../../lib/warehouses/layout.ts");
@@ -69,13 +71,13 @@ function harness() {
     locationIds: { pallet: null }, canMove: true, initialPalletId: "pallet",
   };
   const render = () => { cursor = 0; return nodes(compiled.exports.LocationsPanel(props)); };
-  const select = (tree: Element[], name: string) => tree.find((n) => n.type === "select" && n.props.name === name)!;
+  const select = (tree: Element[], name: string) => tree.find((n) => n.type === "searchable-select" && n.props.name === name)!;
   const change = (tree: Element[], name: string, value: string) => {
-    (select(tree, name).props.onChange as (e: { target: { value: string } }) => void)({ target: { value } });
+    (select(tree, name).props.onChange as (value: string) => void)(value);
   };
   const submit = async (tree: Element[]) => {
     const previousFormData = globalThis.FormData;
-    const values = tree.filter((n) => n.type === "select" || n.props.type === "hidden").map((n) => [n.props.name, n.props.value] as [string, string]);
+    const values = tree.filter((n) => n.type === "searchable-select" || n.props.type === "hidden").map((n) => [n.props.name, n.props.value] as [string, string]);
     // Browser FormData reads the selected DOM values; supply those values in Node.
     globalThis.FormData = class extends previousFormData {
       constructor() { super(); for (const [name, value] of values) this.set(name, value); }
@@ -128,8 +130,7 @@ test("un error de movimiento conserva la selección y se limpia al corregirla", 
 test("TRZ-101: solo se ofrecen ubicaciones del depósito del pallet", () => {
   const h = harness();
   h.props.locations.push({ id: "n", company_id: "company", warehouse_code: "DEPOSITO-NORTE", code: "N1", aisle: "1", rack: "1", level: "1", position: "n" });
-  const options = (tree: Element[]) => nodes(h.select(tree, "locationId").props.children)
-    .filter((n) => n.type === "option" && n.props.value).map((n) => n.props.value);
+  const options = (tree: Element[]) => (h.select(tree, "locationId").props.options as { value: string }[]).map((option) => option.value);
   assert.deepEqual(options(h.render()), ["a", "b"]);
   h.props.pallets[0] = { ...h.props.pallets[0], warehouseCode: "DEPOSITO-NORTE" };
   assert.deepEqual(options(h.render()), ["n"]);

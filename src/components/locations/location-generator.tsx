@@ -6,6 +6,7 @@ import { generateLocations, type GenerateLocationsState } from "@/lib/locations/
 import { expandLocationRange, generatedLocationCode, locationCombinations } from "@/lib/locations/generation";
 import { activeWarehouses, warehouseLabel, type Warehouse } from "@/lib/warehouses/types";
 import type { WarehouseLayout } from "@/lib/warehouses/layout";
+import { SearchableSelect } from "./searchable-select";
 
 const initial: GenerateLocationsState = { error: null, success: null };
 export function LocationGenerator({ warehouses, layouts }: { warehouses: Warehouse[]; layouts: Record<string, WarehouseLayout> }) {
@@ -36,10 +37,10 @@ export function LocationGenerator({ warehouses, layouts }: { warehouses: Warehou
       setConfirming(false);
     });
   }
-  return <section className="surface space-y-4 p-6">
+  return <section id="generar-ubicaciones" className="surface scroll-mt-40 space-y-4 p-6 lg:scroll-mt-24">
     <SectionHeader title="Generar ubicaciones" description="Combiná rangos de letras o números. Máximo 2.000 ubicaciones por operación." />
     <form onSubmit={submit} className="space-y-4" aria-busy={pending}>
-      <label className="form-label">Depósito<select value={code} disabled={pending} className="form-control mt-2" onChange={(event) => { setCode(event.target.value); setStarts(["", "", "", ""]); setEnds(["", "", "", ""]); setConfirming(false); setState(initial); }}><option value="">Seleccioná el depósito</option>{active.map((warehouse) => <option key={warehouse.code} value={warehouse.code}>{warehouseLabel(warehouse)}</option>)}</select></label>
+      <SearchableSelect label="Depósito" placeholder="Seleccioná el depósito" value={code} disabled={pending} options={active.map((warehouse) => ({ value: warehouse.code, label: warehouseLabel(warehouse) }))} onChange={(value) => { setCode(value); setStarts(["", "", "", ""]); setEnds(["", "", "", ""]); setConfirming(false); setState(initial); }} />
       {layout?.map((level, index) => <fieldset key={`${code}-${index}`} className="grid gap-3 sm:grid-cols-2"><legend className="form-label">{level.label}</legend><label className="form-label">Desde<input className="form-control mt-2" value={starts[index]} maxLength={40} disabled={pending} onChange={(event) => change(setStarts, index, event.target.value)} /></label><label className="form-label">Hasta<input className="form-control mt-2" value={ends[index]} maxLength={40} disabled={pending} onChange={(event) => change(setEnds, index, event.target.value)} /></label></fieldset>)}
       {layout && !combinations && <p className="text-sm">Ingresá rangos ascendentes de una letra (A–C) o números (01–10), hasta 2.000 combinaciones.</p>}
       {combinations && <div className="space-y-2"><p>Vista previa: <strong>{combinations.length}</strong> ubicaciones.</p><p className="text-sm">Ejemplos: {sample.join(", ")}</p></div>}

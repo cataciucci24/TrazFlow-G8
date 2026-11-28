@@ -16,6 +16,8 @@ import { activeWarehouses, warehouseLabel, type Warehouse } from "@/lib/warehous
 import { LocationQr } from "./location-qr";
 import { LocationGenerator } from "./location-generator";
 import { useLocationFeedback } from "./use-location-feedback";
+import { SearchableSelect } from "./searchable-select";
+import { LocationsNavigation } from "./locations-navigation";
 
 const initial: LocationActionState = { error: null, success: null };
 function Result({ state }: { state: LocationActionState }) {
@@ -95,26 +97,27 @@ export function LocationsPanel({ locations, pallets, warehouses = [], layouts = 
     }
   }, [scan, pallets, locations, pallet, clearMoveError]);
   return <div className="space-y-8">
-    <section className="surface space-y-4 p-6">
+    <LocationsNavigation canGenerate={canGenerate} canMove={canMove} />
+    <section id="crear-ubicacion" className="surface scroll-mt-40 space-y-4 p-6 lg:scroll-mt-24">
       <SectionHeader title="Crear ubicación" description={`${active.length === 1 ? `Depósito ${warehouseLabel(active[0])} · ` : ""}Los códigos y coordenadas permanecen estables.`} />
       <form onSubmit={submitCreate} onChange={created.clearError} aria-busy={creating} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <label className="form-label">Código único<input name="code" disabled={creating} required maxLength={40} pattern="[A-Za-z0-9][A-Za-z0-9_-]{0,39}" className="form-control mt-2" /></label>
-        {active.length > 1 ? <label className="form-label">Depósito<select name="warehouseCode" value={selectedWarehouse} required disabled={creating} className="form-control mt-2" onChange={(event) => setCreationWarehouse(event.target.value)}><option value="">Seleccioná el depósito</option>{active.map((warehouse) => <option key={warehouse.code} value={warehouse.code}>{warehouseLabel(warehouse)}</option>)}</select></label> : <input type="hidden" name="warehouseCode" value={selectedWarehouse} />}
+        {active.length > 1 ? <SearchableSelect label="Depósito" placeholder="Seleccioná el depósito" name="warehouseCode" value={selectedWarehouse} required disabled={creating} options={active.map((warehouse) => ({ value: warehouse.code, label: warehouseLabel(warehouse) }))} onChange={(value) => { setCreationWarehouse(value); created.clearError(); }} /> : <input type="hidden" name="warehouseCode" value={selectedWarehouse} />}
         {selectedLayout?.map((level, index) => <label key={`${selectedWarehouse}-${index}`} className="form-label">{level.label}<input name={LOCATION_COORDINATES[index]} disabled={creating} required maxLength={40} className="form-control mt-2" /></label>)}
         <button disabled={creating || !selectedLayout} className="button-primary self-end">{creating ? "Creando…" : "Crear ubicación"}</button>
         <div className="sm:col-span-2"><Result state={created.state} /></div>
       </form>
     </section>
     {canGenerate && <LocationGenerator warehouses={warehouses} layouts={layouts} />}
-    <section className="surface space-y-4 p-6">
+    <section id="consultar-pallet" className="surface scroll-mt-40 space-y-4 p-6 lg:scroll-mt-24">
       <SectionHeader title={canMove ? "Asignar o cambiar ubicación" : "Consultar ubicación de un pallet"} />
       <form onSubmit={submitMove} aria-busy={moving} className="space-y-4">
-        <label className="form-label">Pallet<select name="palletId" value={palletId} required onChange={(e) => { setPalletId(e.target.value); clearMoveError(); setScanError(null); }} disabled={moving} className="form-control mt-2"><option value="">Seleccionar pallet</option>{pallets.map((p) => <option key={p.id} value={p.id}>{p.qrCode} · {p.productName}</option>)}</select></label>
+        <SearchableSelect label="Pallet" placeholder="Seleccionar pallet" name="palletId" value={palletId} required disabled={moving} options={pallets.map((p) => ({ value: p.id, label: `${p.qrCode} · ${p.productName}`, search: p.productSku }))} onChange={(value) => { setPalletId(value); clearMoveError(); setScanError(null); }} />
         <button type="button" className="button-secondary" disabled={moving} onClick={() => { setScanError(null); clearMoveError(); setScan("pallet"); }}>Escanear pallet</button>
         {pallet && <div className="space-y-2 text-sm"><p>Ubicación actual: <strong>{pallet.currentLocation ?? "Sin asignar"}</strong></p><Link className="table-action" href={`/dashboard/traceability?qr=${encodeURIComponent(pallet.qrCode)}`}>Ver ficha e historial</Link></div>}
         {pallet && <PalletScanDetails key={`${pallet.id}:${pallet.currentLocation}:${moved.state.success}:${scanVersion}`} qrCode={pallet.qrCode} />}
         {canMove && <>
-          <label className="form-label">Ubicación de destino<select name="locationId" required value={locationId} onChange={(e) => { setLocationId(e.target.value); clearMoveError(); setScanError(null); }} disabled={moving} className="form-control mt-2"><option value="">Seleccionar ubicación</option>{destinations.map((l) => <option key={l.id} value={l.id}>{l.warehouse_code} / {l.code} · {locationDescription(l)}</option>)}</select></label>
+          <SearchableSelect label="Ubicación de destino" placeholder="Seleccionar ubicación" name="locationId" value={locationId} required disabled={moving} options={destinations.map((l) => ({ value: l.id, label: `${l.warehouse_code} / ${l.code} · ${locationDescription(l)}` }))} onChange={(value) => { setLocationId(value); clearMoveError(); setScanError(null); }} />
           <button type="button" className="button-secondary" disabled={moving} onClick={() => { setScanError(null); clearMoveError(); setScan("location"); }}>Escanear ubicación</button>
           <input type="hidden" name="expectedLocationId" value={palletId ? locationIds[palletId] ?? "" : ""} />
           {pallet && !canLocatePallet(pallet.status) && <InlineAlert variant="danger">El pallet ya no está en depósito.</InlineAlert>}
@@ -126,7 +129,7 @@ export function LocationsPanel({ locations, pallets, warehouses = [], layouts = 
         {scanError && <InlineAlert variant="danger">{scanError}</InlineAlert>}
       </form>
     </section>
-    <section className="space-y-4">
+    <section id="ubicaciones-disponibles" className="scroll-mt-40 space-y-4 lg:scroll-mt-24">
       <SectionHeader title="Ubicaciones disponibles" description="Una ubicación puede contener varios pallets; no se administra capacidad." />
       <label className="form-label">Buscar por código<input type="search" value={filter} onChange={(e) => setFilter(e.target.value)} className="form-control mt-2" /></label>
       <TableShell label="Catálogo de ubicaciones"><table className="data-table"><thead><tr><th>Depósito / Código</th><th>Coordenadas</th><th>Pallets</th><th>Etiqueta</th></tr></thead><tbody>
